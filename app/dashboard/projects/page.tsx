@@ -581,12 +581,12 @@ function ProjectsPageContent() {
       debug.log('FETCH_TEAM', 'Raw data from query:', { projectId, count: data?.length })
       console.log('Fetched team data:', data)
       const members = (data || []).map((assignment: any) => assignment.user as User).filter(Boolean)
-      const rolesMap: Record<string, string> = {}
-        (data || []).forEach((assignment: any) => {
-          if (assignment.user_id) {
-            rolesMap[assignment.user_id] = assignment.role || ""
-          }
-        })
+      const rolesMap: Record<string, string> = {};
+      (data || []).forEach((assignment: any) => {
+        if (assignment.user_id) {
+          rolesMap[assignment.user_id] = assignment.role || ""
+        }
+      })
       debug.success('FETCH_TEAM', 'Members processed', { projectId, members: members.map(m => ({ id: m.id, email: m.email })) })
       console.log('Processed team members:', members)
       setProjectTeam(prev => ({ ...prev, [projectId]: members }))
