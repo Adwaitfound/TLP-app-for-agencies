@@ -36,15 +36,18 @@ interface FileManagerProps {
     projectId: string
     driveFolderUrl?: string
     onDriveFolderUpdate?: (url: string) => void
+    readOnly?: boolean
 }
 
-export function FileManager({ projectId, driveFolderUrl, onDriveFolderUpdate }: FileManagerProps) {
+export function FileManager({ projectId, driveFolderUrl, onDriveFolderUpdate, readOnly }: FileManagerProps) {
     const { user } = useAuth()
     const [files, setFiles] = useState<ProjectFile[]>([])
     const [loading, setLoading] = useState(false)
     const [uploading, setUploading] = useState(false)
     const [linkSubmitting, setLinkSubmitting] = useState(false)
     const [savingDrive, setSavingDrive] = useState(false)
+    const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null)
+    const toastTimerRef = useRef<number | null>(null)
     const [isUploadDialogOpen, setIsUploadDialogOpen] = useState(false)
     const [isLinkDialogOpen, setIsLinkDialogOpen] = useState(false)
     const [isDriveFolderDialogOpen, setIsDriveFolderDialogOpen] = useState(false)
@@ -69,6 +72,19 @@ export function FileManager({ projectId, driveFolderUrl, onDriveFolderUpdate }: 
     const [linkName, setLinkName] = useState("")
     const [linkCategory, setLinkCategory] = useState<FileCategory>("other")
     const [linkDescription, setLinkDescription] = useState("")
+
+    function showToast(message: string, type: "success" | "error" = "success", duration = 3000) {
+        if (toastTimerRef.current) {
+            clearTimeout(toastTimerRef.current)
+            toastTimerRef.current = null
+        }
+        setToast({ message, type })
+        const t = window.setTimeout(() => {
+            setToast(null)
+            toastTimerRef.current = null
+        }, duration)
+        toastTimerRef.current = t
+    }
 
     // Cleanup on unmount
     useEffect(() => {
@@ -158,12 +174,9 @@ export function FileManager({ projectId, driveFolderUrl, onDriveFolderUpdate }: 
                 code: (error as any)?.code,
             })
         } finally {
-            if (componentMountedRef.current) {
-                setLoading(false)
-            }
+            setLoading(false)
         }
     }
-
     async function handleFileUpload() {
         // Prevent overlapping uploads
         if (isUploadingRef.current) {
@@ -175,13 +188,13 @@ export function FileManager({ projectId, driveFolderUrl, onDriveFolderUpdate }: 
 
         const validation = validateFileSize(selectedFile)
         if (!validation.valid) {
-            alert(validation.error)
+            showToast(validation.error, "error")
             return
         }
 
         // Check file limit
         if (files.length >= 20) {
-            alert('Maximum 20 files/links per project. Please delete some files before adding more.')
+            showToast('Maximum 20 files/links per project. Please delete some files before adding more.', "error")
             return
         }
 
@@ -262,6 +275,7 @@ export function FileManager({ projectId, driveFolderUrl, onDriveFolderUpdate }: 
             setUploading(false)
 
             debug.success('FILE_MANAGER', 'Upload saved, added to list, dialog closed')
+            showToast('File uploaded successfully', 'success')
         } catch (error: any) {
             console.error('Error uploading file:', error)
 
@@ -284,7 +298,7 @@ export function FileManager({ projectId, driveFolderUrl, onDriveFolderUpdate }: 
                 details: error?.details,
                 hint: error?.hint,
             })
-            alert(error.message || 'Failed to upload file')
+            showToast(error.message || 'Failed to upload file', 'error', 4000)
         } finally {
             setUploading(false)
             isUploadingRef.current = false
@@ -305,12 +319,12 @@ export function FileManager({ projectId, driveFolderUrl, onDriveFolderUpdate }: 
         const trimmedName = linkName.trim()
 
         if (!trimmedUrl || !trimmedName) {
-            alert('Please provide both URL and file name')
+            showToast('Please provide both URL and file name', "error")
             return
         }
 
         if (files.length >= 20) {
-            alert('Maximum 20 files/links per project. Please delete some files before adding more.')
+            showToast('Maximum 20 files/links per project. Please delete some files before adding more.', "error")
             return
         }
 
@@ -361,16 +375,15 @@ export function FileManager({ projectId, driveFolderUrl, onDriveFolderUpdate }: 
                     if (prev.some(f => f.id === data.id)) return prev
                     return [data, ...prev]
                 })
-
-                // Close dialog and reset form
-                setIsLinkDialogOpen(false)
-                setLinkUrl("")
-                setLinkName("")
-                setLinkDescription("")
-                setLinkCategory("other")
             }
 
             debug.success('FILE_MANAGER', 'Link added successfully')
+            showToast('Drive link added', 'success')
+
+            // Close dialog on success
+            if (componentMountedRef.current) {
+                setIsLinkDialogOpen(false)
+            }
         } catch (error: any) {
             // ========== ERROR HANDLING ==========
             console.error('[handleAddLink] ❌ Error:', error.message)
@@ -381,7 +394,7 @@ export function FileManager({ projectId, driveFolderUrl, onDriveFolderUpdate }: 
 
             // Only alert if component still mounted
             if (componentMountedRef.current) {
-                alert(msg)
+                showToast(msg, 'error', 4000)
             }
 
             debug.error('FILE_MANAGER', 'Add link failed', { message: error?.message })
@@ -397,23 +410,27 @@ export function FileManager({ projectId, driveFolderUrl, onDriveFolderUpdate }: 
 
     async function handleUpdateDriveFolder() {
         // Prevent overlapping saves
-        if (isSavingDriveRef.current) {
+        if (isSavingDriveRef.current || savingDrive) {
             debug.log('FILE_MANAGER', 'Drive folder save already in progress, ignoring')
             return
         }
 
         const trimmed = newDriveFolderUrl.trim()
-        if (!trimmed) return
+        if (!trimmed) {
+            showToast('Please provide a folder URL', 'error')
+            return
+        }
 
         // Validate it's a Google Drive URL
         if (!trimmed.includes('drive.google.com')) {
-            alert('Please provide a valid Google Drive URL')
+            showToast('Please provide a valid Google Drive URL', 'error', 4000)
             return
         }
 
         isSavingDriveRef.current = true
-        const supabase = createClient()
         setSavingDrive(true)
+
+        const supabase = createClient()
 
         try {
             debug.log('FILE_MANAGER', 'Saving drive folder', { projectId, url: trimmed })
@@ -427,23 +444,29 @@ export function FileManager({ projectId, driveFolderUrl, onDriveFolderUpdate }: 
 
             debug.success('FILE_MANAGER', 'Drive folder saved successfully')
 
-            // Reset form first
-            setNewDriveFolderUrl(trimmed)
+            // Notify parent component first
+            if (onDriveFolderUpdate) {
+                onDriveFolderUpdate(trimmed)
+            }
 
-            // Then close dialog
-            setIsDriveFolderDialogOpen(false)
+            // Show success message
+            showToast('Drive folder saved', 'success')
 
-            // Then notify parent
-            onDriveFolderUpdate?.(trimmed)
+            // Close dialog on success
+            if (componentMountedRef.current) {
+                setIsDriveFolderDialogOpen(false)
+            }
         } catch (error: any) {
             console.error('Error updating drive folder:', error)
             debug.error('FILE_MANAGER', 'Drive folder save error', {
                 message: error?.message,
                 code: error?.code,
             })
-            alert(error.message || 'Failed to update drive folder')
+            showToast(error.message || 'Failed to update drive folder', 'error', 4000)
         } finally {
-            setSavingDrive(false)
+            if (componentMountedRef.current) {
+                setSavingDrive(false)
+            }
             isSavingDriveRef.current = false
             debug.log('FILE_MANAGER', 'Drive folder save end - flags reset')
         }
@@ -482,6 +505,7 @@ export function FileManager({ projectId, driveFolderUrl, onDriveFolderUpdate }: 
             }).catch(e => console.warn('Failed to log audit event:', e))
 
             fetchFiles()
+            showToast('File deleted', 'success')
         } catch (error: any) {
             console.error('Error deleting file:', error)
 
@@ -498,7 +522,7 @@ export function FileManager({ projectId, driveFolderUrl, onDriveFolderUpdate }: 
                 },
             }).catch(e => console.warn('Failed to log audit event:', e))
 
-            alert(error.message || 'Failed to delete file')
+            showToast(error.message || 'Failed to delete file', 'error', 4000)
         }
     }
 
@@ -626,7 +650,19 @@ export function FileManager({ projectId, driveFolderUrl, onDriveFolderUpdate }: 
     }, {} as Record<FileCategory, ProjectFile[]>)
 
     return (
-        <div className="space-y-4">
+        <div className="space-y-4 relative">
+            {toast && (
+                <div
+                    className={`fixed bottom-4 right-4 z-50 px-3 py-2 rounded shadow-md text-sm ${toast.type === 'success'
+                        ? 'bg-green-600 text-white'
+                        : 'bg-red-600 text-white'
+                        }`}
+                    role="status"
+                    aria-live="polite"
+                >
+                    {toast.message}
+                </div>
+            )}
             {/* Drive Folder Link */}
             <Card>
                 <CardHeader>
@@ -635,7 +671,7 @@ export function FileManager({ projectId, driveFolderUrl, onDriveFolderUpdate }: 
                             <CardTitle className="text-lg">Google Drive Folder</CardTitle>
                             <CardDescription>Main project folder for large files</CardDescription>
                         </div>
-                        <Button variant="outline" size="sm" onClick={() => setIsDriveFolderDialogOpen(true)}>
+                        <Button variant="outline" size="sm" onClick={() => setIsDriveFolderDialogOpen(true)} disabled={!!readOnly}>
                             {driveFolderUrl ? 'Update' : 'Add'} Folder
                         </Button>
                     </div>
@@ -661,7 +697,7 @@ export function FileManager({ projectId, driveFolderUrl, onDriveFolderUpdate }: 
                     <div className="flex gap-2">
                         <Button
                             onClick={() => { debug.log('FILE_MANAGER', 'Open upload dialog'); setIsUploadDialogOpen(true) }}
-                            disabled={files.length >= 20}
+                            disabled={files.length >= 20 || !!readOnly}
                         >
                             <Upload className="h-4 w-4 mr-2" />
                             Upload File
@@ -672,7 +708,7 @@ export function FileManager({ projectId, driveFolderUrl, onDriveFolderUpdate }: 
                                 debug.log('FILE_MANAGER', 'Open add link dialog');
                                 setIsLinkDialogOpen(true)
                             }}
-                            disabled={files.length >= 20 || linkSubmitting || uploading}
+                            disabled={files.length >= 20 || linkSubmitting || uploading || !!readOnly}
                         >
                             <LinkIcon className="h-4 w-4 mr-2" />
                             Add Drive Link
@@ -733,6 +769,7 @@ export function FileManager({ projectId, driveFolderUrl, onDriveFolderUpdate }: 
                                                 variant="ghost"
                                                 size="sm"
                                                 onClick={() => handleDeleteFile(file.id, file.file_url, file.storage_type)}
+                                                disabled={!!readOnly}
                                             >
                                                 <Trash2 className="h-4 w-4 text-destructive" />
                                             </Button>
@@ -821,12 +858,10 @@ export function FileManager({ projectId, driveFolderUrl, onDriveFolderUpdate }: 
             <Dialog
                 open={isLinkDialogOpen}
                 onOpenChange={(open) => {
-                    // ========== GUARD: Prevent closing while submitting ==========
-                    if (!open && isSubmittingRef.current) {
-                        console.log('[Dialog] BLOCKED: Cannot close while submitting')
-                        return
+                    // Only allow closing if not currently submitting
+                    if (!linkSubmitting) {
+                        setIsLinkDialogOpen(open)
                     }
-                    setIsLinkDialogOpen(open)
                 }}
             >
                 <DialogContent>
@@ -848,6 +883,7 @@ export function FileManager({ projectId, driveFolderUrl, onDriveFolderUpdate }: 
                                     onChange={(e) => setLinkName(e.target.value)}
                                     className="mt-1"
                                     placeholder="Final_Edit_v3.mp4"
+                                    disabled={linkSubmitting}
                                     required
                                 />
                             </div>
@@ -858,12 +894,13 @@ export function FileManager({ projectId, driveFolderUrl, onDriveFolderUpdate }: 
                                     onChange={(e) => setLinkUrl(e.target.value)}
                                     className="mt-1"
                                     placeholder="https://drive.google.com/file/d/..."
+                                    disabled={linkSubmitting}
                                     required
                                 />
                             </div>
                             <div>
                                 <Label>Category</Label>
-                                <Select value={linkCategory} onValueChange={(v) => setLinkCategory(v as FileCategory)}>
+                                <Select value={linkCategory} onValueChange={(v) => setLinkCategory(v as FileCategory)} disabled={linkSubmitting}>
                                     <SelectTrigger className="mt-1">
                                         <SelectValue />
                                     </SelectTrigger>
@@ -883,6 +920,7 @@ export function FileManager({ projectId, driveFolderUrl, onDriveFolderUpdate }: 
                                     onChange={(e) => setLinkDescription(e.target.value)}
                                     className="mt-1"
                                     placeholder="Brief description"
+                                    disabled={linkSubmitting}
                                 />
                             </div>
                         </div>
@@ -900,7 +938,12 @@ export function FileManager({ projectId, driveFolderUrl, onDriveFolderUpdate }: 
             </Dialog>
 
             {/* Update Drive Folder Dialog */}
-            <Dialog open={isDriveFolderDialogOpen} onOpenChange={setIsDriveFolderDialogOpen}>
+            <Dialog open={isDriveFolderDialogOpen} onOpenChange={(open) => {
+                // Only allow closing if not currently saving
+                if (!savingDrive) {
+                    setIsDriveFolderDialogOpen(open)
+                }
+            }}>
                 <DialogContent>
                     <form onSubmit={(e) => { e.preventDefault(); handleUpdateDriveFolder(); }}>
                         <DialogHeader>
@@ -916,6 +959,7 @@ export function FileManager({ projectId, driveFolderUrl, onDriveFolderUpdate }: 
                                 onChange={(e) => setNewDriveFolderUrl(e.target.value)}
                                 className="mt-1"
                                 placeholder="https://drive.google.com/drive/folders/..."
+                                disabled={savingDrive}
                                 required
                             />
                         </div>

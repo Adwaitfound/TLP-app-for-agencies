@@ -1,9 +1,10 @@
 "use client"
 
 import Link from "next/link"
-import { Bell, Search, Moon, Sun, User, LogOut, Video } from "lucide-react"
+import { Bell, Search, Moon, Sun, User, LogOut, Video, Menu } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { Sheet, SheetContent, SheetTrigger, SheetTitle, SheetDescription } from "@/components/ui/sheet"
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -26,6 +27,39 @@ export function ClientHeader() {
 
     return (
         <header className="flex h-14 items-center gap-4 border-b bg-muted/40 px-4 lg:h-[60px] lg:px-6">
+            {/* Mobile Menu */}
+            <Sheet>
+                <SheetTrigger asChild>
+                    <Button variant="ghost" size="icon" className="md:hidden">
+                        <Menu className="h-5 w-5" />
+                        <span className="sr-only">Toggle navigation menu</span>
+                    </Button>
+                </SheetTrigger>
+                <SheetContent side="left" className="w-[240px] sm:w-[280px]">
+                    <SheetTitle className="sr-only">Navigation Menu</SheetTitle>
+                    <SheetDescription className="sr-only">
+                        Navigate between dashboard sections
+                    </SheetDescription>
+                    <nav className="grid gap-4 py-6">
+                        <Link href="/dashboard/client" className="flex items-center gap-2 text-lg font-semibold">
+                            <div className="h-8 w-8 rounded-lg bg-primary flex items-center justify-center">
+                                <Video className="h-5 w-5 text-primary-foreground" />
+                            </div>
+                            <span>VideoProduction</span>
+                        </Link>
+                        <Link href="/dashboard/client?tab=dashboard" className="text-muted-foreground hover:text-foreground transition-colors px-2 py-1">
+                            Dashboard
+                        </Link>
+                        <Link href="/dashboard/client?tab=projects" className="text-muted-foreground hover:text-foreground transition-colors px-2 py-1">
+                            Projects
+                        </Link>
+                        <Link href="/dashboard/client?tab=invoices" className="text-muted-foreground hover:text-foreground transition-colors px-2 py-1">
+                            Invoices
+                        </Link>
+                    </nav>
+                </SheetContent>
+            </Sheet>
+
             {/* Logo/Brand */}
             <Link href="/dashboard/client" className="flex items-center gap-2 font-semibold">
                 <div className="h-8 w-8 rounded-lg bg-primary flex items-center justify-center">
@@ -36,13 +70,13 @@ export function ClientHeader() {
 
             {/* Navigation Links */}
             <nav className="hidden md:flex items-center gap-6 text-sm font-medium flex-1">
-                <Link href="/dashboard/client" className="text-muted-foreground hover:text-foreground transition-colors">
+                <Link href="/dashboard/client?tab=dashboard" className="text-muted-foreground hover:text-foreground transition-colors">
                     Dashboard
                 </Link>
-                <Link href="/dashboard/client/projects" className="text-muted-foreground hover:text-foreground transition-colors">
+                <Link href="/dashboard/client?tab=projects" className="text-muted-foreground hover:text-foreground transition-colors">
                     Projects
                 </Link>
-                <Link href="/dashboard/client/invoices" className="text-muted-foreground hover:text-foreground transition-colors">
+                <Link href="/dashboard/client?tab=invoices" className="text-muted-foreground hover:text-foreground transition-colors">
                     Invoices
                 </Link>
             </nav>

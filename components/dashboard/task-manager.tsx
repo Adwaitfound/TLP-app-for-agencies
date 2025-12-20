@@ -33,6 +33,8 @@ export function TaskManager() {
     const [overdueTasks, setOverdueTasks] = useState<any[]>([])
     const [loading, setLoading] = useState(true)
     const [isDialogOpen, setIsDialogOpen] = useState(false)
+    const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null)
+    const [toastTimer, setToastTimer] = useState<number | null>(null)
     const [projectOptions, setProjectOptions] = useState<{ id: string, name: string }[]>([])
     const [projectLoading, setProjectLoading] = useState(false)
     const [deletingTaskId, setDeletingTaskId] = useState<string | null>(null)
@@ -134,11 +136,18 @@ export function TaskManager() {
 
         const result = await createTask(payload)
         if (result.error) {
-            alert(result.error)
+            if (toastTimer) clearTimeout(toastTimer)
+            setToast({ message: result.error, type: "error" })
+            const t = setTimeout(() => setToast(null), 3000)
+            setToastTimer(t)
         } else {
             setIsDialogOpen(false)
             setFormData({ title: "", description: "", priority: "medium", due_date: "", project_id: "", proposed_project_name: "", proposed_project_vertical: "" })
             setProposeNewProject(false)
+            if (toastTimer) clearTimeout(toastTimer)
+            setToast({ message: "Task created successfully", type: "success" })
+            const t = setTimeout(() => setToast(null), 3000)
+            setToastTimer(t)
             await loadTasks()
         }
     }
@@ -403,6 +412,13 @@ export function TaskManager() {
                         })}
                     </div>
                 )}
+                {toast ? (
+                    <div
+                        className={`fixed bottom-4 right-4 z-50 rounded-md px-4 py-3 shadow-lg text-sm text-white ${toast.type === "success" ? "bg-green-600" : "bg-red-600"}`}
+                    >
+                        {toast.message}
+                    </div>
+                ) : null}
             </CardContent>
         </Card>
     )

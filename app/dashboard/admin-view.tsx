@@ -7,7 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog"
 import { Progress } from "@/components/ui/progress"
-import { DollarSign, FolderKanban, FileText, Plus, Calendar, Users, TrendingUp, AlertCircle, CheckCircle2, Receipt, Bell, Clock } from "lucide-react"
+import { IndianRupee, FolderKanban, FileText, Plus, Calendar, Users, TrendingUp, AlertCircle, CheckCircle2, Receipt, Bell, Clock } from "lucide-react"
 import { StatusBadge } from "@/components/shared/status-badge"
 import { createClient } from "@/lib/supabase/client"
 import { useAuth } from "@/contexts/auth-context"
@@ -559,7 +559,7 @@ export default function AdminDashboard() {
                     value={`₹${filteredStats.totalRevenue.toLocaleString()}`}
                     change="From paid invoices"
                     trend="up"
-                    icon={DollarSign}
+                    icon={IndianRupee}
                 />
                 <StatCard
                     title="Active Projects"
@@ -1114,7 +1114,7 @@ export default function AdminDashboard() {
                                         {selectedProject.budget && (
                                             <div className="p-3 rounded-lg border">
                                                 <div className="flex items-center gap-2 text-xs text-muted-foreground mb-1">
-                                                    <DollarSign className="h-3 w-3" />
+                                                    <IndianRupee className="h-3 w-3" />
                                                     Budget
                                                 </div>
                                                 <p className="font-semibold">₹{selectedProject.budget.toLocaleString()}</p>

@@ -41,7 +41,7 @@ export async function logAuditEvent(data: AuditLogData) {
         // Get current user
         const { data: { user }, error: authError } = await supabase.auth.getUser()
         if (authError || !user) {
-            console.error('[logAuditEvent] No user authenticated')
+            // Silently skip audit logging for unauthenticated requests (e.g., public pages)
             return { success: false, error: 'Not authenticated' }
         }
 

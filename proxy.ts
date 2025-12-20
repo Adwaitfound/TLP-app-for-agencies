@@ -64,16 +64,18 @@ export async function proxy(request: NextRequest) {
     try {
         const { data, error } = await supabase.auth.getUser()
         if (error) {
-            console.error('[proxy] getUser failed', error.message)
+            // Only log errors for protected routes, not public pages
             if (request.nextUrl.pathname.startsWith('/dashboard')) {
+                console.error('[proxy] Auth required for dashboard', error.message)
                 return redirectToLogin('auth')
             }
         } else {
             user = data.user
         }
     } catch (err: any) {
-        console.error('[proxy] Unexpected getUser error', err?.message)
+        // Only log unexpected errors for protected routes
         if (request.nextUrl.pathname.startsWith('/dashboard')) {
+            console.error('[proxy] Unexpected getUser error', err?.message)
             return redirectToLogin('auth')
         }
     }

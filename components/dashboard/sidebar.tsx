@@ -12,7 +12,8 @@ import {
   Settings,
   UserCheck,
   MessageSquare,
-  Bell
+  Bell,
+  Wallet
 } from "lucide-react"
 import { useAuth } from "@/contexts/auth-context"
 
@@ -46,6 +47,11 @@ const adminRoutes = [
     label: "Team Members",
     icon: UserCheck,
     href: "/dashboard/team",
+  },
+  {
+    label: "Payments & Vendors",
+    icon: Wallet,
+    href: "/dashboard/payments",
   },
   {
     label: "Invoices",

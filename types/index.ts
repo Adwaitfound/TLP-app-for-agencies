@@ -232,3 +232,112 @@ export interface SubProjectUpdate {
   // Joined data
   users?: User
 }
+
+// Vendor and Payment Types
+export type VendorType =
+  | 'videographer'
+  | 'photographer'
+  | 'editor'
+  | 'animator'
+  | 'graphic_designer'
+  | 'sound_engineer'
+  | 'voice_artist'
+  | 'equipment_rental'
+  | 'studio_rental'
+  | 'drone_operator'
+  | 'makeup_artist'
+  | 'talent'
+  | 'location_scout'
+  | 'production_assistant'
+  | 'other'
+
+export type PaymentFrequency = 'one_time' | 'weekly' | 'monthly' | 'per_project' | 'recurring'
+
+export type PaymentStatus = 'pending' | 'scheduled' | 'processing' | 'completed' | 'failed' | 'cancelled'
+
+export const VENDOR_TYPES = {
+  videographer: { label: 'Videographer', icon: '🎥' },
+  photographer: { label: 'Photographer', icon: '📷' },
+  editor: { label: 'Video Editor', icon: '✂️' },
+  animator: { label: 'Animator', icon: '🎞️' },
+  graphic_designer: { label: 'Graphic Designer', icon: '🎨' },
+  sound_engineer: { label: 'Sound Engineer', icon: '🎧' },
+  voice_artist: { label: 'Voice Artist', icon: '🎤' },
+  equipment_rental: { label: 'Equipment Rental', icon: '📹' },
+  studio_rental: { label: 'Studio Rental', icon: '🏢' },
+  drone_operator: { label: 'Drone Operator', icon: '🚁' },
+  makeup_artist: { label: 'Makeup Artist', icon: '💄' },
+  talent: { label: 'Talent/Actor', icon: '🎭' },
+  location_scout: { label: 'Location Scout', icon: '🗺️' },
+  production_assistant: { label: 'Production Assistant', icon: '📋' },
+  other: { label: 'Other', icon: '⚙️' },
+} as const
+
+export interface Vendor {
+  id: string
+  name: string
+  vendor_type: VendorType
+  phone?: string
+  email?: string
+  upi_id?: string
+  bank_account_number?: string
+  bank_ifsc_code?: string
+  bank_account_name?: string
+  address?: string
+  total_projects_worked: number
+  total_amount_paid: number
+  average_rating?: number
+  work_frequency?: PaymentFrequency
+  last_worked_date?: string
+  notes?: string
+  skills?: string[]
+  is_active: boolean
+  preferred_vendor: boolean
+  created_by?: string
+  created_at: string
+  updated_at: string
+}
+
+export interface VendorPayment {
+  id: string
+  vendor_id: string
+  project_id?: string
+  amount: number
+  payment_date?: string
+  scheduled_date?: string
+  status: PaymentStatus
+  payment_method?: string
+  transaction_id?: string
+  description: string
+  payment_reason?: string
+  invoice_number?: string
+  receipt_url?: string
+  paid_by?: string
+  approved_by?: string
+  created_at: string
+  updated_at: string
+  // Joined data
+  vendors?: Vendor
+  projects?: Project
+}
+
+export interface VendorProjectAssignment {
+  id: string
+  vendor_id: string
+  project_id: string
+  role?: string
+  rate?: number
+  estimated_hours?: number
+  actual_hours?: number
+  status: string
+  rating?: number
+  feedback?: string
+  start_date?: string
+  end_date?: string
+  assigned_by?: string
+  created_at: string
+  updated_at: string
+  // Joined data
+  vendors?: Vendor
+  projects?: Project
+}

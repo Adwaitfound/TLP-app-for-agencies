@@ -2,7 +2,7 @@
 /* eslint-disable @typescript-eslint/no-unused-vars, react-hooks/exhaustive-deps, jsx-a11y/alt-text, @next/next/no-img-element */
 
 import React from "react"
-import { useState, useEffect, useMemo, useDeferredValue, Suspense } from "react"
+import { useState, useEffect, useMemo, useDeferredValue, Suspense, useCallback } from "react"
 import { useSearchParams } from "next/navigation"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -23,7 +23,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog"
 import { StatusBadge } from "@/components/shared/status-badge"
-import { Plus, Search, Calendar, DollarSign, Loader2, FolderKanban, Video, Eye, Edit, Trash2, Users, FileText, CheckSquare, TrendingUp, Clock, Image, File as FileIcon, UserCheck, ListTodo } from "lucide-react"
+import { Plus, Search, Calendar, IndianRupee, Loader2, FolderKanban, Video, Eye, Edit, Trash2, Users, FileText, CheckSquare, TrendingUp, Clock, Image, File as FileIcon, UserCheck, ListTodo } from "lucide-react"
 import { createClient } from "@/lib/supabase/client"
 import type { Project, Client, ProjectStatus, ServiceType, ProjectFile, Milestone, User, SubProject, SubProjectComment, SubProjectUpdate, MilestoneStatus } from "@/types"
 import { SERVICE_TYPES, SERVICE_TYPE_OPTIONS } from "@/types"
@@ -36,6 +36,7 @@ import { createMilestone, updateMilestoneStatus, deleteMilestone } from "@/app/a
 function ProjectsPageContent() {
   const { user } = useAuth()
   const searchParams = useSearchParams()
+  const supabase = useMemo(() => createClient(), [])
   const [projects, setProjects] = useState<Project[]>([])
   const [clients, setClients] = useState<Client[]>([])
   const [projectFiles, setProjectFiles] = useState<Record<string, ProjectFile[]>>({})
@@ -54,9 +55,13 @@ function ProjectsPageContent() {
   const [isTeamDialogOpen, setIsTeamDialogOpen] = useState(false)
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
   const [projectTeam, setProjectTeam] = useState<Record<string, User[]>>({})
+  const [projectTeamRoles, setProjectTeamRoles] = useState<Record<string, Record<string, string>>>({})
   const [availableUsers, setAvailableUsers] = useState<User[]>([])
   const [selectedUserId, setSelectedUserId] = useState("")
   const [teamRole, setTeamRole] = useState("")
+  const [viewerOnly, setViewerOnly] = useState(false)
+  const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null)
+  const [toastTimer, setToastTimer] = useState<number | null>(null)
   const [milestoneFormData, setMilestoneFormData] = useState({
     title: "",
     description: "",
@@ -106,6 +111,10 @@ function ProjectsPageContent() {
   const [newComment, setNewComment] = useState("")
   const [newUpdate, setNewUpdate] = useState("")
   const [isSubProjectDetailOpen, setIsSubProjectDetailOpen] = useState(false)
+  const [projectComments, setProjectComments] = useState<Record<string, any[]>>({})
+  const [replyInputs, setReplyInputs] = useState<Record<string, string>>({})
+  const [newProjectComment, setNewProjectComment] = useState("")
+  const [commentSubmitting, setCommentSubmitting] = useState(false)
 
   // Form state
   const [formData, setFormData] = useState({
@@ -141,7 +150,6 @@ function ProjectsPageContent() {
 
   async function fetchData() {
     debug.log('FETCH_DATA', 'Starting data fetch...')
-    const supabase = createClient()
     setLoading(true)
 
     try {
@@ -348,7 +356,7 @@ function ProjectsPageContent() {
 
     setSubmitting(true)
 
-    const supabase = createClient()
+
 
     try {
       const { data, error } = await supabase
@@ -477,7 +485,7 @@ function ProjectsPageContent() {
     }
 
     setSubmitting(true)
-    const supabase = createClient()
+
 
     try {
       const { error } = await supabase
@@ -485,7 +493,7 @@ function ProjectsPageContent() {
         .insert({
           project_id: selectedProject.id,
           user_id: selectedUserId,
-          role: teamRole || null,
+          role: viewerOnly ? 'viewer' : (teamRole || null),
           assigned_by: user?.id,
         })
 
@@ -503,6 +511,7 @@ function ProjectsPageContent() {
       // Reset form first
       setSelectedUserId("")
       setTeamRole("")
+      setViewerOnly(false)
 
       // Refresh team members for this project and wait for it
       debug.log('ASSIGN_TEAM', 'Fetching updated team members...')
@@ -532,7 +541,7 @@ function ProjectsPageContent() {
     if (!selectedProject) return
     if (!confirm('Remove this team member from the project?')) return
 
-    const supabase = createClient()
+
 
     try {
       const { error } = await supabase
@@ -555,7 +564,7 @@ function ProjectsPageContent() {
   }
 
   async function fetchProjectTeamMembers(projectId: string) {
-    const supabase = createClient()
+
 
     try {
       const { data, error } = await supabase
@@ -572,9 +581,16 @@ function ProjectsPageContent() {
       debug.log('FETCH_TEAM', 'Raw data from query:', { projectId, count: data?.length })
       console.log('Fetched team data:', data)
       const members = (data || []).map((assignment: any) => assignment.user as User).filter(Boolean)
+      const rolesMap: Record<string, string> = {}
+        (data || []).forEach((assignment: any) => {
+          if (assignment.user_id) {
+            rolesMap[assignment.user_id] = assignment.role || ""
+          }
+        })
       debug.success('FETCH_TEAM', 'Members processed', { projectId, members: members.map(m => ({ id: m.id, email: m.email })) })
       console.log('Processed team members:', members)
       setProjectTeam(prev => ({ ...prev, [projectId]: members }))
+      setProjectTeamRoles(prev => ({ ...prev, [projectId]: rolesMap }))
       return members
     } catch (error) {
       debug.error('FETCH_TEAM', 'Exception:', error)
@@ -583,8 +599,108 @@ function ProjectsPageContent() {
     }
   }
 
+  async function fetchProjectComments(projectId: string) {
+
+    try {
+      const { data, error } = await supabase
+        .from('project_comments')
+        .select('*, user:users!user_id(id, full_name, email, role)')
+        .eq('project_id', projectId)
+        .order('created_at', { ascending: false })
+      if (error) throw error
+      setProjectComments(prev => ({ ...prev, [projectId]: data || [] }))
+    } catch (error) {
+      console.error('Error fetching project comments:', error)
+    }
+  }
+
+  async function handleAddProjectComment(e: React.FormEvent) {
+    e.preventDefault()
+    if (!selectedProject || !newProjectComment.trim() || commentSubmitting) return
+    setCommentSubmitting(true)
+
+    try {
+      const trimmedComment = newProjectComment.trim()
+      if (!trimmedComment) {
+        throw new Error('Comment cannot be empty')
+      }
+      const { error } = await supabase
+        .from('project_comments')
+        .insert({
+          project_id: selectedProject.id,
+          user_id: user?.id,
+          comment_text: trimmedComment,
+          parent_id: null,
+          status: 'pending',
+        })
+      if (error) throw error
+      // refresh comments
+      await fetchProjectComments(selectedProject.id)
+      // Success toast
+      if (toastTimer) clearTimeout(toastTimer)
+      setToast({ message: 'Comment added', type: 'success' })
+      const t = setTimeout(() => setToast(null), 3000)
+      setToastTimer(t)
+      setNewProjectComment("")
+    } catch (error: any) {
+      const msg = error?.message?.includes('row-level security')
+        ? 'You do not have permissions to comment.'
+        : error?.message || 'Failed to add comment'
+      if (toastTimer) clearTimeout(toastTimer)
+      setToast({ message: msg, type: 'error' })
+      const t = setTimeout(() => setToast(null), 4000)
+      setToastTimer(t)
+    } finally {
+      setCommentSubmitting(false)
+    }
+  }
+
+  async function handleAddReply(parentCommentId: string) {
+    if (!selectedProject) return
+    const text = (replyInputs[parentCommentId] || "").trim()
+    if (!text || commentSubmitting) return
+    setCommentSubmitting(true)
+
+    try {
+      const { error } = await supabase
+        .from('project_comments')
+        .insert({
+          project_id: selectedProject.id,
+          user_id: user?.id,
+          comment_text: text,
+          parent_id: parentCommentId,
+          status: 'pending',
+        })
+      if (error) throw error
+      await fetchProjectComments(selectedProject.id)
+      if (toastTimer) clearTimeout(toastTimer)
+      setToast({ message: 'Reply posted', type: 'success' })
+      const t = setTimeout(() => setToast(null), 3000)
+      setToastTimer(t)
+      setReplyInputs(prev => ({ ...prev, [parentCommentId]: "" }))
+    } catch (error: any) {
+      const msg = error?.message || 'Failed to post reply'
+      if (toastTimer) clearTimeout(toastTimer)
+      setToast({ message: msg, type: 'error' })
+      const t = setTimeout(() => setToast(null), 4000)
+      setToastTimer(t)
+    } finally {
+      setCommentSubmitting(false)
+    }
+  }
+
+  function buildThread(comments: any[]) {
+    const byParent: Record<string, any[]> = {}
+    comments.forEach(c => {
+      const key = c.parent_id || 'root'
+      if (!byParent[key]) byParent[key] = []
+      byParent[key].push(c)
+    })
+    return byParent
+  }
+
   async function fetchSubProjects(projectId: string) {
-    const supabase = createClient()
+
 
     try {
       const { data: subProjectsData, error } = await supabase
@@ -609,7 +725,7 @@ function ProjectsPageContent() {
     if (!selectedProject || submitting) return
 
     setSubmitting(true)
-    const supabase = createClient()
+
 
     try {
       // Validate form data
@@ -661,11 +777,22 @@ function ProjectsPageContent() {
 
       // Then fetch updated data
       await fetchSubProjects(selectedProject.id)
+
+      // Success toast
+      if (toastTimer) clearTimeout(toastTimer)
+      setToast({ message: "Task created successfully", type: "success" })
+      const t = setTimeout(() => setToast(null), 3000)
+      setToastTimer(t)
     } catch (error: any) {
       console.error('Error adding sub-project:', error)
       const errorMsg = error?.message || error?.error_description || 'Failed to add task'
-      alert(errorMsg.includes('sub_projects') || errorMsg.includes('migration') ?
-        'Task feature not available. Please run migration 009 or contact support.' : errorMsg)
+      const displayMsg = (errorMsg.includes('sub_projects') || errorMsg.includes('migration'))
+        ? 'Task feature not available. Please run migration 009 or contact support.'
+        : errorMsg
+      if (toastTimer) clearTimeout(toastTimer)
+      setToast({ message: displayMsg, type: "error" })
+      const t = setTimeout(() => setToast(null), 4000)
+      setToastTimer(t)
     } finally {
       setSubmitting(false)
     }
@@ -676,7 +803,7 @@ function ProjectsPageContent() {
     if (!selectedSubProject || submitting) return
 
     setSubmitting(true)
-    const supabase = createClient()
+
 
     try {
       const assignedUserId = editSubProjectFormData.assigned_to === "unassigned" ? null : editSubProjectFormData.assigned_to
@@ -727,16 +854,25 @@ function ProjectsPageContent() {
       if (selectedProject) {
         await fetchSubProjects(selectedProject.id)
       }
+
+      // Success toast
+      if (toastTimer) clearTimeout(toastTimer)
+      setToast({ message: "Task updated successfully", type: "success" })
+      const t = setTimeout(() => setToast(null), 3000)
+      setToastTimer(t)
     } catch (error: any) {
       console.error('Error updating sub-project:', error)
-      alert('Failed to update task')
+      if (toastTimer) clearTimeout(toastTimer)
+      setToast({ message: 'Failed to update task', type: "error" })
+      const t = setTimeout(() => setToast(null), 4000)
+      setToastTimer(t)
     } finally {
       setSubmitting(false)
     }
   }
 
   async function handleUpdateSubProjectProgress(subProjectId: string, progress: number) {
-    const supabase = createClient()
+
 
     try {
       const { error } = await supabase
@@ -755,7 +891,7 @@ function ProjectsPageContent() {
   }
 
   async function handleUpdateSubProjectStatus(subProjectId: string, status: ProjectStatus) {
-    const supabase = createClient()
+
 
     try {
       const { error } = await supabase
@@ -802,6 +938,7 @@ function ProjectsPageContent() {
     setSelectedProject(project)
     setIsDetailModalOpen(true)
     fetchSubProjects(project.id)
+    fetchProjectComments(project.id)
   }
 
   function openEditDialog(project: Project) {
@@ -837,7 +974,7 @@ function ProjectsPageContent() {
 
     setSubmitting(true)
     try {
-      const supabase = createClient()
+
       const { data, error } = await supabase
         .from('projects')
         .update({
@@ -948,7 +1085,7 @@ function ProjectsPageContent() {
   }
 
   // Simple Notion-like monthly calendar view
-  function CalendarView({
+  const CalendarView = React.memo(({
     events,
     onCreate,
     onUpdate,
@@ -960,7 +1097,7 @@ function ProjectsPageContent() {
     onUpdate: (event: CalendarEvent) => void
     onDelete: (eventId: string) => void
     onOpenDate: (date: Date, events: CalendarEvent[]) => void
-  }) {
+  }) => {
     const [current, setCurrent] = useState(new Date())
     const startOfMonth = new Date(current.getFullYear(), current.getMonth(), 1)
     const endOfMonth = new Date(current.getFullYear(), current.getMonth() + 1, 0)
@@ -1094,7 +1231,7 @@ function ProjectsPageContent() {
         </div>
       </div>
     )
-  }
+  })
 
   const getServiceBadgeVariant = (serviceType: ServiceType): "default" | "secondary" | "destructive" | "outline" => {
     switch (serviceType) {
@@ -1110,11 +1247,11 @@ function ProjectsPageContent() {
   }
 
   // Quick Add Form component
-  function DateQuickAddForm({
+  const DateQuickAddForm = React.memo(({
     onAdd,
   }: {
     onAdd: (payload: { title: string; copy?: string; platform?: CalendarEvent['platform']; type?: CalendarEvent['type']; status?: CalendarEvent['status']; attachments?: CalendarEvent['attachments'] }) => void
-  }) {
+  }) => {
     const [title, setTitle] = useState('')
     const [copy, setCopy] = useState('')
     const [platform, setPlatform] = useState<CalendarEvent['platform']>('instagram')
@@ -1124,7 +1261,7 @@ function ProjectsPageContent() {
     const [uploading, setUploading] = useState(false)
     const [uploadedAttachments, setUploadedAttachments] = useState<CalendarEvent['attachments']>([])
 
-    function addAttachmentFromUrl(url: string): CalendarEvent['attachments'] | undefined {
+    const addAttachmentFromUrl = useCallback((url: string): CalendarEvent['attachments'] | undefined => {
       if (!url) return undefined
       const kind: 'image' | 'video' | 'pdf' | 'document' = url.match(/\.(png|jpg|jpeg|gif|webp)$/i)
         ? 'image'
@@ -1134,9 +1271,9 @@ function ProjectsPageContent() {
             ? 'pdf'
             : 'document'
       return [{ id: Math.random().toString(36).slice(2), url, kind }]
-    }
+    }, [])
 
-    async function handleFileUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const handleFileUpload = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
       const file = e.target.files?.[0]
       if (!file) return
       setUploading(true)
@@ -1148,15 +1285,13 @@ function ProjectsPageContent() {
           return
         }
         const fileType = getFileType(file.name) as 'image' | 'video' | 'pdf' | 'document' | 'other'
-        const { createClient } = await import('@/lib/supabase/client')
-        const sb = createClient()
         const path = `content/${Date.now()}_${file.name}`
-        const { error } = await sb.storage.from('project-files').upload(path, file, {
+        const { error } = await supabase.storage.from('project-files').upload(path, file, {
           cacheControl: '3600',
           upsert: false,
         })
         if (error) throw new Error(error.message)
-        const { data: pub } = sb.storage.from('project-files').getPublicUrl(path)
+        const { data: pub } = supabase.storage.from('project-files').getPublicUrl(path)
         const att = { id: Math.random().toString(36).slice(2), url: pub.publicUrl, kind: fileType === 'other' ? 'document' : fileType }
         setUploadedAttachments(prev => [...(prev || []), att])
       } catch (err: any) {
@@ -1166,7 +1301,7 @@ function ProjectsPageContent() {
         setUploading(false)
         e.target.value = ''
       }
-    }
+    }, [supabase])
 
     return (
       <Card>
@@ -1265,7 +1400,7 @@ function ProjectsPageContent() {
         </CardContent>
       </Card>
     )
-  }
+  })
 
   const getFileIcon = (fileType: string) => {
     switch (fileType) {
@@ -1283,6 +1418,13 @@ function ProjectsPageContent() {
 
   return (
     <div className="flex flex-col gap-4 md:gap-6">
+      {toast ? (
+        <div
+          className={`fixed bottom-4 right-4 z-50 rounded-md px-4 py-3 shadow-lg text-sm text-white ${toast.type === "success" ? "bg-green-600" : "bg-red-600"}`}
+        >
+          {toast.message}
+        </div>
+      ) : null}
       <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
         <div>
           <h1 className="text-2xl md:text-3xl font-bold tracking-tight">
@@ -1724,7 +1866,7 @@ function ProjectsPageContent() {
                       {project.budget && (
                         <div>
                           <div className="flex items-center gap-2 text-xs text-muted-foreground mb-1">
-                            <DollarSign className="h-3 w-3" />
+                            <IndianRupee className="h-3 w-3" />
                             Budget
                           </div>
                           <p className="font-medium">₹{project.budget.toLocaleString()}</p>
@@ -1794,7 +1936,10 @@ function ProjectsPageContent() {
       }
 
       {/* Project Detail Modal */}
-      <Dialog open={isDetailModalOpen} onOpenChange={setIsDetailModalOpen}>
+      <Dialog open={isDetailModalOpen} onOpenChange={(open) => {
+        if (!open && commentSubmitting) return
+        setIsDetailModalOpen(open)
+      }}>
         <DialogContent className="max-w-4xl max-h-[85vh] overflow-y-auto rounded-2xl bg-white/10 dark:bg-white/5 border-white/20 ring-1 ring-white/10 supports-[backdrop-filter]:backdrop-blur-xl">
           <div aria-hidden className="pointer-events-none absolute inset-x-0 top-0 h-1/3 bg-gradient-to-b from-white/20 to-transparent dark:from-white/10 dark:to-transparent rounded-t-2xl" />
           {selectedProject && (
@@ -1825,7 +1970,7 @@ function ProjectsPageContent() {
                     {selectedProject.budget && (
                       <div className="p-3 rounded-lg border">
                         <div className="flex items-center gap-2 text-xs text-muted-foreground mb-1">
-                          <DollarSign className="h-3 w-3" />
+                          <IndianRupee className="h-3 w-3" />
                           Budget
                         </div>
                         <p className="font-semibold">₹{selectedProject.budget.toLocaleString()}</p>
@@ -2126,21 +2271,99 @@ function ProjectsPageContent() {
                 {/* Files & Documents */}
                 <div>
                   <h3 className="font-semibold mb-3">Files & Documents</h3>
-                  <FileManager
-                    projectId={selectedProject.id}
-                    driveFolderUrl={selectedProject.drive_folder_url}
-                    onDriveFolderUpdate={(url) => {
-                      setSelectedProject({ ...selectedProject, drive_folder_url: url })
-                      // Update in the projects list
-                      setProjects(prevProjects =>
-                        prevProjects.map(p =>
-                          p.id === selectedProject.id
-                            ? { ...p, drive_folder_url: url }
-                            : p
+                  {(() => {
+                    const rolesForProject = projectTeamRoles[selectedProject.id] || {}
+                    const isViewer = user?.role === 'employee' && rolesForProject[user?.id || ''] === 'viewer'
+                    return (
+                      <FileManager
+                        projectId={selectedProject.id}
+                        driveFolderUrl={selectedProject.drive_folder_url}
+                        readOnly={isViewer}
+                        onDriveFolderUpdate={(url) => {
+                          setSelectedProject({ ...selectedProject, drive_folder_url: url })
+                          // Update in the projects list
+                          setProjects(prevProjects =>
+                            prevProjects.map(p =>
+                              p.id === selectedProject.id
+                                ? { ...p, drive_folder_url: url }
+                                : p
+                            )
+                          )
+                        }}
+                      />
+                    )
+                  })()}
+                </div>
+
+                {/* Project Comments */}
+                <div>
+                  <h3 className="font-semibold mb-3">Project Comments</h3>
+                  <div className="space-y-3">
+                    {(() => {
+                      const all = projectComments[selectedProject.id] || []
+                      const grouped = buildThread(all)
+                      const roots = grouped['root'] || []
+
+                      function renderThread(comment: any, depth = 0) {
+                        const children = grouped[comment.id] || []
+                        return (
+                          <div key={comment.id} className="space-y-2">
+                            <div className={`p-3 rounded border ${depth > 0 ? 'ml-4 border-muted' : ''}`}>
+                              <div className="flex items-center justify-between text-xs text-muted-foreground mb-1">
+                                <span>{comment.user?.full_name || comment.user?.email || 'User'}</span>
+                                <span>{new Date(comment.created_at).toLocaleString()}</span>
+                              </div>
+                              <p className="text-sm">{comment.comment_text}</p>
+                              {(user?.role === 'client' || user?.role === 'admin') && (
+                                <div className="mt-2">
+                                  <div className="flex items-center gap-2">
+                                    <Input
+                                      value={replyInputs[comment.id] || ''}
+                                      onChange={(e) => setReplyInputs(prev => ({ ...prev, [comment.id]: e.target.value }))}
+                                      placeholder="Reply..."
+                                    />
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      disabled={commentSubmitting || !(replyInputs[comment.id] || '').trim()}
+                                      onClick={() => handleAddReply(comment.id)}
+                                    >
+                                      Reply
+                                    </Button>
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                            {children.length > 0 && (
+                              <div className="space-y-2">
+                                {children.map((child: any) => renderThread(child, depth + 1))}
+                              </div>
+                            )}
+                          </div>
                         )
-                      )
-                    }}
-                  />
+                      }
+
+                      return roots.map((c: any) => renderThread(c))
+                    })()}
+                    {(user?.role === 'client' || user?.role === 'admin') && (
+                      <form onSubmit={handleAddProjectComment} className="space-y-2">
+                        <Label htmlFor="project-comment">Add Comment</Label>
+                        <Textarea
+                          id="project-comment"
+                          value={newProjectComment}
+                          onChange={(e) => setNewProjectComment(e.target.value)}
+                          placeholder="Write your comment..."
+                          disabled={commentSubmitting}
+                        />
+                        <div className="flex justify-end">
+                          <Button type="submit" disabled={commentSubmitting || !newProjectComment.trim()}>
+                            {commentSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                            {commentSubmitting ? 'Posting...' : 'Post Comment'}
+                          </Button>
+                        </div>
+                      </form>
+                    )}
+                  </div>
                 </div>
               </div>
 
@@ -2466,7 +2689,18 @@ function ProjectsPageContent() {
                           placeholder="e.g., Lead Editor, Designer"
                           value={teamRole}
                           onChange={(e) => setTeamRole(e.target.value)}
+                          disabled={viewerOnly}
                         />
+                        <div className="flex items-center gap-2">
+                          <input
+                            id="team-viewer-only"
+                            type="checkbox"
+                            className="h-4 w-4"
+                            checked={viewerOnly}
+                            onChange={(e) => setViewerOnly(e.target.checked)}
+                          />
+                          <Label htmlFor="team-viewer-only">View-only access</Label>
+                        </div>
                       </div>
                     </div>
                     <div className="flex justify-end gap-2 mt-4">
@@ -2733,7 +2967,8 @@ function ProjectsPageContent() {
                 <Label htmlFor="sub-project-video">Video URL (Optional)</Label>
                 <Input
                   id="sub-project-video"
-                  type="url"
+                  type="text"
+                  inputMode="url"
                   placeholder="https://youtube.com/watch?v=... or https://drive.google.com/..."
                   value={subProjectFormData.video_url}
                   onChange={(e) => setSubProjectFormData({ ...subProjectFormData, video_url: e.target.value })}
@@ -2752,7 +2987,7 @@ function ProjectsPageContent() {
               >
                 Cancel
               </Button>
-              <Button type="submit" disabled={submitting || !subProjectFormData.name.trim()}>
+              <Button type="submit" formNoValidate disabled={submitting || !subProjectFormData.name.trim()}>
                 {submitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                 {submitting ? 'Creating Task...' : 'Add Task'}
               </Button>
@@ -2789,6 +3024,20 @@ function ProjectsPageContent() {
                   onChange={(e) => setEditSubProjectFormData({ ...editSubProjectFormData, description: e.target.value })}
                   rows={3}
                 />
+                <div className="grid gap-2">
+                  <Label htmlFor="edit-sub-project-video">Video URL (Optional)</Label>
+                  <Input
+                    id="edit-sub-project-video"
+                    type="text"
+                    inputMode="url"
+                    placeholder="https://youtube.com/watch?v=... or https://drive.google.com/..."
+                    value={editSubProjectFormData.video_url}
+                    onChange={(e) => setEditSubProjectFormData({ ...editSubProjectFormData, video_url: e.target.value })}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Add a YouTube, Google Drive, or other video link
+                  </p>
+                </div>
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div className="grid gap-2">
@@ -2842,7 +3091,8 @@ function ProjectsPageContent() {
                 <Label htmlFor="edit-sub-project-video">Video URL (Optional)</Label>
                 <Input
                   id="edit-sub-project-video"
-                  type="url"
+                  type="text"
+                  inputMode="url"
                   placeholder="https://youtube.com/watch?v=... or https://drive.google.com/..."
                   value={editSubProjectFormData.video_url}
                   onChange={(e) => setEditSubProjectFormData({ ...editSubProjectFormData, video_url: e.target.value })}

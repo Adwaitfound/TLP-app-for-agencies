@@ -51,14 +51,11 @@ export default function LoginPage() {
         try {
             console.log('Step 1: Attempting login with:', email)
             debug.log('LOGIN', 'Attempting login', { email })
-            let { data: authData, error: authError } = await withTimeout(
-                supabase.auth.signInWithPassword({
-                    email,
-                    password,
-                }),
-                10000,
-                new Error('Login timed out')
-            )
+            // Avoid aggressive timeouts on auth; rely on UI watchdog
+            let { data: authData, error: authError } = await supabase.auth.signInWithPassword({
+                email,
+                password,
+            })
             console.log('Step 2: Auth response received', {
                 authError: authError?.message,
                 userId: authData?.user?.id,
@@ -74,7 +71,7 @@ export default function LoginPage() {
                         debug.success('LOGIN', 'Email confirmed server-side, retrying login', { userId: res.userId })
                         const retry = await withTimeout(
                             supabase.auth.signInWithPassword({ email, password }),
-                            8000,
+                            15000,
                             new Error('Retry login timed out')
                         )
                         authData = retry.data
@@ -91,6 +88,36 @@ export default function LoginPage() {
                 throw new Error('No user returned from authentication')
             }
 
+            // Ensure session is established and SIGNED_IN fired before proceeding
+            const waitForSignedIn = async (ms: number) => {
+                return new Promise<void>(async (resolve) => {
+                    let resolved = false
+                    const timer = setTimeout(() => {
+                        if (!resolved) {
+                            debug.warn('LOGIN', 'Proceeding without SIGNED_IN event (timeout)')
+                            resolved = true
+                            resolve()
+                        }
+                    }, ms)
+                    // Quick check if session already present
+                    const { data } = await supabase.auth.getSession()
+                    if (data.session?.user && !resolved) {
+                        clearTimeout(timer)
+                        resolved = true
+                        return resolve()
+                    }
+                    const { data: sub } = supabase.auth.onAuthStateChange((event, session) => {
+                        if (event === 'SIGNED_IN' && session?.user && !resolved) {
+                            clearTimeout(timer)
+                            sub.subscription?.unsubscribe()
+                            resolved = true
+                            resolve()
+                        }
+                    })
+                })
+            }
+            await waitForSignedIn(8000)
+
             console.log('Step 3: User authenticated:', authData.user.id)
             debug.success('LOGIN', 'User authenticated', { userId: authData.user.id })
 
@@ -102,7 +129,7 @@ export default function LoginPage() {
                     .select('*')
                     .eq('id', authData.user.id)
                     .maybeSingle(),
-                10000,
+                15000,
                 new Error('Profile fetch timed out')
             )
 

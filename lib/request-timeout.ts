@@ -36,10 +36,19 @@ export function withTimeout<T>(
     timeoutMs: number = 10000,
     timeoutError: Error = new Error('Operation timeout')
 ): Promise<T> {
-    return Promise.race([
-        promise,
-        new Promise<T>((_, reject) =>
-            setTimeout(() => reject(timeoutError), timeoutMs)
-        ),
-    ])
+    return new Promise<T>((resolve, reject) => {
+        const timer = setTimeout(() => {
+            reject(timeoutError)
+        }, timeoutMs)
+
+        promise
+            .then((value) => {
+                clearTimeout(timer)
+                resolve(value)
+            })
+            .catch((err) => {
+                clearTimeout(timer)
+                reject(err)
+            })
+    })
 }
