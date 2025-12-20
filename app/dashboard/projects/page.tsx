@@ -61,7 +61,7 @@ function ProjectsPageContent() {
   const [teamRole, setTeamRole] = useState("")
   const [viewerOnly, setViewerOnly] = useState(false)
   const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null)
-  const [toastTimer, setToastTimer] = useState<number | null>(null)
+  const [toastTimer, setToastTimer] = useState<NodeJS.Timeout | null>(null)
   const [milestoneFormData, setMilestoneFormData] = useState({
     title: "",
     description: "",

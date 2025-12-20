@@ -123,15 +123,18 @@ export default function LoginPage() {
 
             // Fetch user data from users table (optimized)
             console.log('Step 4: Fetching user profile...')
-            let { data: userData, error: userError } = await withTimeout(
-                supabase
-                    .from('users')
-                    .select('*')
-                    .eq('id', authData.user.id)
-                    .maybeSingle(),
+            const userQueryResult = await withTimeout(
+                (async () => {
+                    return await supabase
+                        .from('users')
+                        .select('*')
+                        .eq('id', authData.user.id)
+                        .maybeSingle()
+                })(),
                 15000,
                 new Error('Profile fetch timed out')
             )
+            let { data: userData, error: userError } = userQueryResult as { data: any; error: any }
 
             console.log('Step 5: User profile response', {
                 error: userError?.message,
@@ -149,15 +152,18 @@ export default function LoginPage() {
             // Handle case where user doesn't exist in users table
             if (!userData) {
                 console.error('User profile not found by id; trying email lookup:', authData.user.id)
-                const { data: byEmail } = await withTimeout(
-                    supabase
-                        .from('users')
-                        .select('*')
-                        .eq('email', authData.user.email!)
-                        .limit(1),
+                const byEmailResult = await withTimeout(
+                    (async () => {
+                        return await supabase
+                            .from('users')
+                            .select('*')
+                            .eq('email', authData.user.email!)
+                            .limit(1)
+                    })(),
                     8000,
                     new Error('Email lookup timed out')
                 )
+                const { data: byEmail } = byEmailResult as { data: any }
                 if (byEmail && byEmail.length > 0) {
                     userData = byEmail[0]
                 } else {
@@ -175,15 +181,18 @@ export default function LoginPage() {
                         throw new Error('Failed to create user profile. Please contact support.')
                     }
                     // Fetch newly created profile
-                    const { data: created } = await withTimeout(
-                        supabase
-                            .from('users')
-                            .select('*')
-                            .eq('id', authData.user.id)
-                            .limit(1),
+                    const createdResult = await withTimeout(
+                        (async () => {
+                            return await supabase
+                                .from('users')
+                                .select('*')
+                                .eq('id', authData.user.id)
+                                .limit(1)
+                        })(),
                         8000,
                         new Error('Profile refetch timed out')
                     )
+                    const { data: created } = createdResult as { data: any }
                     userData = created?.[0] || null
                     if (!userData) {
                         throw new Error('Profile creation completed but could not load profile. Please retry.')

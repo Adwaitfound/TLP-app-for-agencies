@@ -188,7 +188,7 @@ export function FileManager({ projectId, driveFolderUrl, onDriveFolderUpdate, re
 
         const validation = validateFileSize(selectedFile)
         if (!validation.valid) {
-            showToast(validation.error, "error")
+            showToast(validation.error || "File validation failed", "error")
             return
         }
 

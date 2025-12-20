@@ -34,7 +34,7 @@ export function TaskManager() {
     const [loading, setLoading] = useState(true)
     const [isDialogOpen, setIsDialogOpen] = useState(false)
     const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null)
-    const [toastTimer, setToastTimer] = useState<number | null>(null)
+    const [toastTimer, setToastTimer] = useState<NodeJS.Timeout | null>(null)
     const [projectOptions, setProjectOptions] = useState<{ id: string, name: string }[]>([])
     const [projectLoading, setProjectLoading] = useState(false)
     const [deletingTaskId, setDeletingTaskId] = useState<string | null>(null)
