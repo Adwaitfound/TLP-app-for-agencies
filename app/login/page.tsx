@@ -6,12 +6,13 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Video } from "lucide-react"
+import { Video, Loader2 } from "lucide-react"
 import { createClient } from "@/lib/supabase/client"
 import { debug } from "@/lib/debug"
 import { forceConfirmEmail } from "@/app/actions/force-confirm-email"
 import { registerPendingUser } from "@/app/actions/register-pending-user"
 import type { UserRole } from "@/types"
+import { withTimeout } from "@/lib/request-timeout"
 
 export default function LoginPage() {
     const [email, setEmail] = useState("")
@@ -45,15 +46,19 @@ export default function LoginPage() {
             debug.warn('LOGIN', 'Login timeout - taking longer than expected')
             setLoading(false)
             setError('Login is taking too long. Please check your connection and try again.')
-        }, 30000) // 30 second timeout
+        }, 15000) // 15 second timeout
 
         try {
             console.log('Step 1: Attempting login with:', email)
             debug.log('LOGIN', 'Attempting login', { email })
-            let { data: authData, error: authError } = await supabase.auth.signInWithPassword({
-                email,
-                password,
-            })
+            let { data: authData, error: authError } = await withTimeout(
+                supabase.auth.signInWithPassword({
+                    email,
+                    password,
+                }),
+                10000,
+                new Error('Login timed out')
+            )
             console.log('Step 2: Auth response received', {
                 authError: authError?.message,
                 userId: authData?.user?.id,
@@ -67,7 +72,11 @@ export default function LoginPage() {
                     const res = await forceConfirmEmail(email)
                     if (res.success) {
                         debug.success('LOGIN', 'Email confirmed server-side, retrying login', { userId: res.userId })
-                        const retry = await supabase.auth.signInWithPassword({ email, password })
+                        const retry = await withTimeout(
+                            supabase.auth.signInWithPassword({ email, password }),
+                            8000,
+                            new Error('Retry login timed out')
+                        )
                         authData = retry.data
                         authError = retry.error as any
                     }
@@ -87,11 +96,15 @@ export default function LoginPage() {
 
             // Fetch user data from users table (optimized)
             console.log('Step 4: Fetching user profile...')
-            const { data: userData, error: userError } = await supabase
-                .from('users')
-                .select('*')
-                .eq('id', authData.user.id)
-                .maybeSingle()
+            let { data: userData, error: userError } = await withTimeout(
+                supabase
+                    .from('users')
+                    .select('*')
+                    .eq('id', authData.user.id)
+                    .maybeSingle(),
+                10000,
+                new Error('Profile fetch timed out')
+            )
 
             console.log('Step 5: User profile response', {
                 error: userError?.message,
@@ -109,11 +122,15 @@ export default function LoginPage() {
             // Handle case where user doesn't exist in users table
             if (!userData) {
                 console.error('User profile not found by id; trying email lookup:', authData.user.id)
-                const { data: byEmail } = await supabase
-                    .from('users')
-                    .select('*')
-                    .eq('email', authData.user.email!)
-                    .limit(1)
+                const { data: byEmail } = await withTimeout(
+                    supabase
+                        .from('users')
+                        .select('*')
+                        .eq('email', authData.user.email!)
+                        .limit(1),
+                    8000,
+                    new Error('Email lookup timed out')
+                )
                 if (byEmail && byEmail.length > 0) {
                     userData = byEmail[0]
                 } else {
@@ -131,11 +148,15 @@ export default function LoginPage() {
                         throw new Error('Failed to create user profile. Please contact support.')
                     }
                     // Fetch newly created profile
-                    const { data: created } = await supabase
-                        .from('users')
-                        .select('*')
-                        .eq('id', authData.user.id)
-                        .limit(1)
+                    const { data: created } = await withTimeout(
+                        supabase
+                            .from('users')
+                            .select('*')
+                            .eq('id', authData.user.id)
+                            .limit(1),
+                        8000,
+                        new Error('Profile refetch timed out')
+                    )
                     userData = created?.[0] || null
                     if (!userData) {
                         throw new Error('Profile creation completed but could not load profile. Please retry.')
@@ -243,6 +264,7 @@ export default function LoginPage() {
                         </div>
 
                         <Button type="submit" className="w-full" disabled={loading}>
+                            {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                             {loading ? "Signing in..." : "Sign In"}
                         </Button>
 

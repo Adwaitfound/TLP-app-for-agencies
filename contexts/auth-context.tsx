@@ -91,7 +91,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             return null
         }
 
-        const { error: refetchError } = await supabase
+        const { data: createdProfile, error: refetchError } = await supabase
             .from('users')
             .select('*')
             .eq('id', sessionUser.id)
@@ -102,7 +102,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             return null
         }
 
-        const profile = createdProfile?.[0] || null
+        const profile = createdProfile || null
         if (profile) {
             debug.success('AUTH', 'User profile created', { email: profile.email, role: profile.role })
             setProfileCache(prev => new Map(prev).set(sessionUser.id, profile))
@@ -205,12 +205,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setSupabaseUser(null)
         setProfileCache(new Map())
         debug.log('AUTH', 'User state cleared')
-        await supabase.auth.signOut()
-        debug.success('AUTH', 'Supabase signOut complete')
+        try {
+            await supabase.auth.signOut()
+            debug.success('AUTH', 'Supabase signOut complete')
+        } catch (err: any) {
+            debug.error('AUTH', 'Supabase signOut error', { message: err?.message })
+        }
         router.push("/")
-        debug.log('AUTH', 'Redirecting to login...')
-        router.refresh()
-        debug.log('AUTH', 'Logout complete')
+        debug.log('AUTH', 'Redirected to home')
     }
 
     return (

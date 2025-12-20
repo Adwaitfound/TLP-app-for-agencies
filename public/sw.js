@@ -1,10 +1,84 @@
+// Service Worker for aggressive caching and offline support
+const CACHE_NAME = 'tlp-video-app-v1';
+const STATIC_CACHE = 'tlp-static-v1';
+const DYNAMIC_CACHE = 'tlp-dynamic-v1';
+
+// Cache these static assets immediately
+const STATIC_ASSETS = [
+    '/',
+    '/manifest.json',
+    '/icons/icon-192x192.png',
+    '/icons/icon-512x512.png',
+];
+
 if (typeof window === 'undefined') {
-    self.addEventListener('install', () => {
+    // Install event - cache static assets
+    self.addEventListener('install', (event) => {
+        event.waitUntil(
+            caches.open(STATIC_CACHE).then((cache) => {
+                return cache.addAll(STATIC_ASSETS).catch(() => { });
+            })
+        );
         self.skipWaiting();
     });
 
+    // Activate event - clean old caches
     self.addEventListener('activate', (event) => {
-        event.waitUntil(clients.claim());
+        event.waitUntil(
+            caches.keys().then((keys) => {
+                return Promise.all(
+                    keys
+                        .filter((key) => key !== STATIC_CACHE && key !== DYNAMIC_CACHE)
+                        .map((key) => caches.delete(key))
+                );
+            })
+        );
+        self.clients.claim();
+    });
+
+    // Fetch event - serve from cache, fallback to network
+    self.addEventListener('fetch', (event) => {
+        const { request } = event;
+        const url = new URL(request.url);
+
+        // Skip non-GET requests
+        if (request.method !== 'GET') return;
+
+        // Skip Supabase API calls and external resources
+        if (url.origin.includes('supabase') ||
+            url.origin.includes('google') ||
+            url.pathname.startsWith('/api/')) {
+            return;
+        }
+
+        event.respondWith(
+            caches.match(request).then((cached) => {
+                // Return cached version if available
+                if (cached) {
+                    // Fetch in background to update cache
+                    fetch(request).then((response) => {
+                        if (response.ok) {
+                            caches.open(DYNAMIC_CACHE).then((cache) => {
+                                cache.put(request, response);
+                            });
+                        }
+                    }).catch(() => { });
+                    return cached;
+                }
+
+                // Not in cache, fetch from network
+                return fetch(request).then((response) => {
+                    // Cache successful responses
+                    if (response.ok && url.origin === location.origin) {
+                        const clone = response.clone();
+                        caches.open(DYNAMIC_CACHE).then((cache) => {
+                            cache.put(request, clone);
+                        });
+                    }
+                    return response;
+                });
+            })
+        );
     });
 
     self.addEventListener('message', (event) => {

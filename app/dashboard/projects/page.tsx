@@ -2,7 +2,7 @@
 /* eslint-disable @typescript-eslint/no-unused-vars, react-hooks/exhaustive-deps, jsx-a11y/alt-text, @next/next/no-img-element */
 
 import React from "react"
-import { useState, useEffect, Suspense } from "react"
+import { useState, useEffect, useMemo, useDeferredValue, Suspense } from "react"
 import { useSearchParams } from "next/navigation"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -43,6 +43,7 @@ function ProjectsPageContent() {
   const [projectCreators, setProjectCreators] = useState<Record<string, User>>({})
   const [loading, setLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState("")
+  const deferredSearchQuery = useDeferredValue(searchQuery)
   const [statusFilter, setStatusFilter] = useState("all")
   const [serviceFilter, setServiceFilter] = useState<string>("all")
   const [isDialogOpen, setIsDialogOpen] = useState(false)
@@ -775,14 +776,17 @@ function ProjectsPageContent() {
     }
   }
 
-  const filteredProjects = projects.filter((project) => {
-    const matchesSearch =
-      project.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      project.clients?.company_name.toLowerCase().includes(searchQuery.toLowerCase())
-    const matchesStatus = statusFilter === "all" || project.status === statusFilter
-    const matchesService = serviceFilter === "all" || project.service_type === serviceFilter
-    return matchesSearch && matchesStatus && matchesService
-  })
+  const filteredProjects = useMemo(() => {
+    const term = deferredSearchQuery.toLowerCase()
+    return projects.filter((project) => {
+      const matchesSearch =
+        project.name.toLowerCase().includes(term) ||
+        project.clients?.company_name.toLowerCase().includes(term)
+      const matchesStatus = statusFilter === "all" || project.status === statusFilter
+      const matchesService = serviceFilter === "all" || project.service_type === serviceFilter
+      return matchesSearch && matchesStatus && matchesService
+    })
+  }, [projects, deferredSearchQuery, statusFilter, serviceFilter])
 
   // Calculate project stats
   const projectStats = {

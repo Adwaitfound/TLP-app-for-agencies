@@ -6,7 +6,7 @@ import { debug } from '@/lib/debug'
 import { logAuditEvent } from '@/app/actions/audit-log'
 // Rate limiting: track last log time to prevent flooding
 let lastLogTime = 0
-const MIN_LOG_INTERVAL = 500 // ms - max 2 clicks/second logged
+const MIN_LOG_INTERVAL = 1500 // ms - ~0.6 clicks/second logged
 
 
 function getElementSelector(el: Element | null): string {
@@ -53,7 +53,11 @@ export function GlobalClickTracker() {
         const selector = getElementSelector(target)
 
         // Get button/link details
+        // Only log clicks on interactive elements (buttons/links) to reduce noise
         const clickable = target.closest('button, a, [role="button"]')
+        if (!clickable) return
+        // Skip inputs/textareas to avoid logging while typing
+        if (target.closest('input, textarea, [contenteditable="true"]')) return
         const buttonName =
           target.getAttribute('aria-label') ||
           target.getAttribute('data-name') ||
@@ -61,7 +65,7 @@ export function GlobalClickTracker() {
           target.getAttribute('id') ||
           textContent.substring(0, 50)
 
-        const href = clickable?.getAttribute('href') || ''
+        const href = (clickable as HTMLElement)?.getAttribute('href') || ''
         const currentUrl = typeof window !== 'undefined' ? window.location.href : ''
 
         debug.log('CLICK', 'Global click captured', {

@@ -23,6 +23,13 @@ export async function proxy(request: NextRequest) {
         request,
     })
 
+    // Add performance headers early
+    if (request.nextUrl.pathname.startsWith('/_next/static')) {
+        const response = NextResponse.next()
+        response.headers.set('Cache-Control', 'public, max-age=31536000, immutable')
+        return response
+    }
+
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
     const supabaseAnon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 
@@ -130,6 +137,12 @@ export async function proxy(request: NextRequest) {
     ) {
         return supabaseResponse
     }
+
+    // Add security and performance headers
+    supabaseResponse.headers.set('X-Content-Type-Options', 'nosniff')
+    supabaseResponse.headers.set('X-Frame-Options', 'DENY')
+    supabaseResponse.headers.set('X-XSS-Protection', '1; mode=block')
+    supabaseResponse.headers.set('Referrer-Policy', 'strict-origin-when-cross-origin')
 
     return supabaseResponse
 }

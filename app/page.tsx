@@ -1,7 +1,7 @@
 "use client"
 
 import { useRouter } from "next/navigation"
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { ArrowRight, Users, Zap, Video, CheckCircle, BarChart3, FileText, FolderKanban, UserCog, Briefcase, Building2 } from "lucide-react"
@@ -18,6 +18,11 @@ export default function Home() {
   const router = useRouter()
   const [isLoading, setIsLoading] = useState(false)
   const [showLoginOptions, setShowLoginOptions] = useState(false)
+
+  // Prefetch login page for instant navigation
+  useEffect(() => {
+    router.prefetch('/login')
+  }, [router])
 
   const handleGetStarted = () => {
     setShowLoginOptions(true)

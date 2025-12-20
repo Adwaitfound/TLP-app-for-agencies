@@ -20,6 +20,11 @@ export interface AuditLogData {
  * This tracks all user actions for compliance and debugging
  */
 export async function logAuditEvent(data: AuditLogData) {
+    // Skip heavy audit logging when explicitly disabled or when not in production to keep dev fast
+    const auditDisabled = process.env.NEXT_PUBLIC_AUDIT_DISABLED === 'true' || process.env.NODE_ENV !== 'production'
+    if (auditDisabled) {
+        return { success: true }
+    }
     // Validate input
     if (!data || !data.action || !data.entityType) {
         console.error('[logAuditEvent] Invalid data:', data)
