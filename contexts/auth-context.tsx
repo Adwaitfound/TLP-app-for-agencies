@@ -38,27 +38,37 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const [user, setUser] = useState<User | null>(null)
     const [supabaseUser, setSupabaseUser] = useState<SupabaseUser | null>(null)
     const [loading, setLoading] = useState(true)
+    const [profileCache, setProfileCache] = useState<Map<string, User>>(new Map())
     const router = useRouter()
     const supabase = createClient()
 
     const ensureUserProfile = async (sessionUser: SupabaseUser) => {
+        // Check cache first
+        const cached = profileCache.get(sessionUser.id)
+        if (cached) {
+            debug.log('AUTH', 'Using cached profile', { email: cached.email, role: cached.role })
+            return cached
+        }
+
         const derivedRole = (sessionUser.user_metadata?.role as UserRole) || 'project_manager'
         const derivedName = sessionUser.user_metadata?.full_name || sessionUser.email?.split('@')[0] || 'User'
 
         debug.log('AUTH', 'Fetching user profile from users table...', { userId: sessionUser.id })
-        const { data: usersData, error } = await supabase
+        const { data: userData, error } = await supabase
             .from('users')
             .select('*')
             .eq('id', sessionUser.id)
+            .maybeSingle()
 
         if (error) {
             debug.error('AUTH', 'Failed to fetch user profile', { message: error.message, code: error.code })
             return null
         }
 
-        if (usersData && usersData.length > 0) {
-            debug.success('AUTH', 'User profile loaded', { email: usersData[0].email, role: usersData[0].role })
-            return usersData[0]
+        if (userData) {
+            debug.success('AUTH', 'User profile loaded', { email: userData.email, role: userData.role })
+            setProfileCache(prev => new Map(prev).set(sessionUser.id, userData))
+            return userData
         }
 
         debug.warn('AUTH', 'User profile missing, creating default profile', {
@@ -81,10 +91,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             return null
         }
 
-        const { data: createdProfile, error: refetchError } = await supabase
+        const { error: refetchError } = await supabase
             .from('users')
             .select('*')
             .eq('id', sessionUser.id)
+            .maybeSingle()
 
         if (refetchError) {
             debug.error('AUTH', 'Profile created but refetch failed', { message: refetchError.message, code: refetchError.code })
@@ -94,6 +105,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const profile = createdProfile?.[0] || null
         if (profile) {
             debug.success('AUTH', 'User profile created', { email: profile.email, role: profile.role })
+            setProfileCache(prev => new Map(prev).set(sessionUser.id, profile))
         }
         return profile
     }
@@ -191,6 +203,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         debug.log('AUTH', 'Logout initiated', { currentUser: user?.email })
         setUser(null)
         setSupabaseUser(null)
+        setProfileCache(new Map())
         debug.log('AUTH', 'User state cleared')
         await supabase.auth.signOut()
         debug.success('AUTH', 'Supabase signOut complete')

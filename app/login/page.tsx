@@ -29,34 +29,10 @@ export default function LoginPage() {
         return err?.message || 'Failed to log in'
     }
 
-    // Hard reset any existing session when landing on login to avoid cross-account reuse
+    // Clear form fields on mount (removed slow signOut)
     useEffect(() => {
-        const resetSession = async () => {
-            try {
-                await supabase.auth.signOut()
-            } catch (err) {
-                debug.warn('LOGIN', 'Initial signOut on login mount failed', { message: (err as any)?.message })
-            }
-        }
-        resetSession()
-
-        // Aggressively clear form fields to prevent browser autofill
-        setTimeout(() => {
-            setEmail("")
-            setPassword("")
-            // Also clear any browser-filled values in the DOM
-            const emailInput = document.getElementById('email') as HTMLInputElement
-            const passwordInput = document.getElementById('password') as HTMLInputElement
-            if (emailInput) emailInput.value = ""
-            if (passwordInput) passwordInput.value = ""
-        }, 100)
-
-        // Cleanup on unmount
-        return () => {
-            setEmail("")
-            setPassword("")
-        }
-        // eslint-disable-next-line react-hooks/exhaustive-deps
+        setEmail("")
+        setPassword("")
     }, [])
 
     const handleLogin = async (e: React.FormEvent) => {
@@ -72,9 +48,6 @@ export default function LoginPage() {
         }, 30000) // 30 second timeout
 
         try {
-            // Always clear any existing session to avoid cross-account bleed
-            await supabase.auth.signOut()
-
             console.log('Step 1: Attempting login with:', email)
             debug.log('LOGIN', 'Attempting login', { email })
             let { data: authData, error: authError } = await supabase.auth.signInWithPassword({
@@ -112,17 +85,17 @@ export default function LoginPage() {
             console.log('Step 3: User authenticated:', authData.user.id)
             debug.success('LOGIN', 'User authenticated', { userId: authData.user.id })
 
-            // Fetch user data from users table
+            // Fetch user data from users table (optimized)
             console.log('Step 4: Fetching user profile...')
-            const { data: usersData, error: userError } = await supabase
+            const { data: userData, error: userError } = await supabase
                 .from('users')
                 .select('*')
                 .eq('id', authData.user.id)
+                .maybeSingle()
 
             console.log('Step 5: User profile response', {
                 error: userError?.message,
-                rowCount: usersData?.length,
-                role: usersData?.[0]?.role
+                role: userData?.role
             })
 
             if (userError) {
@@ -134,7 +107,6 @@ export default function LoginPage() {
             }
 
             // Handle case where user doesn't exist in users table
-            let userData = usersData && usersData.length > 0 ? usersData[0] : null
             if (!userData) {
                 console.error('User profile not found by id; trying email lookup:', authData.user.id)
                 const { data: byEmail } = await supabase
@@ -189,9 +161,6 @@ export default function LoginPage() {
                     return
                 }
             }
-
-            // Small delay to ensure session is properly set before redirect
-            await new Promise(resolve => setTimeout(resolve, 500))
 
             // Redirect based on role
             if (userData.role === 'admin') {

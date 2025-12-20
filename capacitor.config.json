@@ -4,9 +4,10 @@
     "webDir": "out",
     "bundledWebRuntime": false,
     "server": {
-        "url": "https://app.thelostproject.xyz",
+        "url": "https://tlp-video-appdec20.vercel.app",
         "cleartext": false,
         "allowNavigation": [
+            "*.vercel.app",
             "*.thelostproject.xyz",
             "*.supabase.co"
         ]
