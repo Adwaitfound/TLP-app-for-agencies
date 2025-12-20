@@ -1,0 +1,35 @@
+{
+  "node": {
+    "4001860d967ff1d29143ee49c09c9bbdff4d1af8fb": {
+      "workers": {
+        "app/dashboard/comments/page": {
+          "moduleId": 18026,
+          "async": false,
+          "exportedName": "logAuditEvent",
+          "filename": "app/actions/audit-log.ts"
+        }
+      },
+      "layer": {
+        "app/dashboard/comments/page": "action-browser"
+      },
+      "exportedName": "logAuditEvent",
+      "filename": "app/actions/audit-log.ts"
+    },
+    "405c5bdfe2a43767b9832e1c2375adb8b49762ba71": {
+      "workers": {
+        "app/dashboard/comments/page": {
+          "moduleId": 18026,
+          "async": false,
+          "exportedName": "assignCommentToEmployee",
+          "filename": "app/actions/client-comments.ts"
+        }
+      },
+      "layer": {
+        "app/dashboard/comments/page": "action-browser"
+      },
+      "exportedName": "assignCommentToEmployee",
+      "filename": "app/actions/client-comments.ts"
+    }
+  },
+  "edge": {}
+}

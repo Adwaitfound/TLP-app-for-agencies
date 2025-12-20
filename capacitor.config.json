@@ -1,0 +1,31 @@
+{
+    "appId": "com.vidpro.app",
+    "appName": "Video Production App",
+    "webDir": "out",
+    "bundledWebRuntime": false,
+    "server": {
+        "url": "https://app.thelostproject.xyz",
+        "cleartext": false,
+        "allowNavigation": [
+            "*.thelostproject.xyz",
+            "*.supabase.co"
+        ]
+    },
+    "ios": {
+        "contentInset": "automatic"
+    },
+    "android": {
+        "allowMixedContent": true,
+        "webContentsDebuggingEnabled": true
+    },
+    "plugins": {
+        "App": {
+            "exitOnBackButton": false
+        },
+        "SplashScreen": {
+            "launchAutoHide": true,
+            "backgroundColor": "#000000",
+            "androidScaleType": "centerInside"
+        }
+    }
+}

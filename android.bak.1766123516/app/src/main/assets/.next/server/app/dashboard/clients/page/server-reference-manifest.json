@@ -1,0 +1,50 @@
+{
+  "node": {
+    "4001860d967ff1d29143ee49c09c9bbdff4d1af8fb": {
+      "workers": {
+        "app/dashboard/clients/page": {
+          "moduleId": 1034,
+          "async": false,
+          "exportedName": "logAuditEvent",
+          "filename": "app/actions/audit-log.ts"
+        }
+      },
+      "layer": {
+        "app/dashboard/clients/page": "action-browser"
+      },
+      "exportedName": "logAuditEvent",
+      "filename": "app/actions/audit-log.ts"
+    },
+    "40a8276182358e0473daf518fe2722245d125a62c6": {
+      "workers": {
+        "app/dashboard/clients/page": {
+          "moduleId": 1034,
+          "async": false,
+          "exportedName": "createClientAccount",
+          "filename": "app/actions/create-client.ts"
+        }
+      },
+      "layer": {
+        "app/dashboard/clients/page": "action-browser"
+      },
+      "exportedName": "createClientAccount",
+      "filename": "app/actions/create-client.ts"
+    },
+    "4093ee1a78e1b6192e9a5026676301b1f60fb07d0c": {
+      "workers": {
+        "app/dashboard/clients/page": {
+          "moduleId": 1034,
+          "async": false,
+          "exportedName": "deleteClient",
+          "filename": "app/actions/delete-client.ts"
+        }
+      },
+      "layer": {
+        "app/dashboard/clients/page": "action-browser"
+      },
+      "exportedName": "deleteClient",
+      "filename": "app/actions/delete-client.ts"
+    }
+  },
+  "edge": {}
+}

@@ -1,0 +1,20 @@
+{
+  "node": {
+    "4001860d967ff1d29143ee49c09c9bbdff4d1af8fb": {
+      "workers": {
+        "app/dashboard/client/page": {
+          "moduleId": 92365,
+          "async": false,
+          "exportedName": "logAuditEvent",
+          "filename": "app/actions/audit-log.ts"
+        }
+      },
+      "layer": {
+        "app/dashboard/client/page": "action-browser"
+      },
+      "exportedName": "logAuditEvent",
+      "filename": "app/actions/audit-log.ts"
+    }
+  },
+  "edge": {}
+}

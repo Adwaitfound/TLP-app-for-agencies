@@ -1,0 +1,3 @@
+module.exports=[57707,a=>{"use strict";var b=a.i(74779),c=a.i(37936);async function d(){return{success:!0,message:"Server action works!"}}(0,a.i(13095).ensureServerEntryExports)([d]),(0,c.registerServerReference)(d,"00834b63fa259af4b2b6a9e7112406ce81905c2fd3",null),a.s([],93467),a.i(93467),a.s(["00834b63fa259af4b2b6a9e7112406ce81905c2fd3",()=>d,"4001860d967ff1d29143ee49c09c9bbdff4d1af8fb",()=>b.logAuditEvent],57707)},85685,a=>{a.v(b=>Promise.all(["server/chunks/ssr/[externals]_crypto_c412f66b._.js"].map(b=>a.l(b))).then(()=>b(54799)))}];
+
+//# sourceMappingURL=%5Broot-of-the-server%5D__b42947bf._.js.map

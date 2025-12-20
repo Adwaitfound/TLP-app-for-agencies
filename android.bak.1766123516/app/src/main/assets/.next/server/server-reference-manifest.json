@@ -1,0 +1,677 @@
+{
+  "node": {
+    "4001860d967ff1d29143ee49c09c9bbdff4d1af8fb": {
+      "workers": {
+        "app/_not-found/page": {
+          "moduleId": 37182,
+          "async": false,
+          "exportedName": "logAuditEvent",
+          "filename": "app/actions/audit-log.ts"
+        },
+        "app/auth/select-role/page": {
+          "moduleId": 72556,
+          "async": false,
+          "exportedName": "logAuditEvent",
+          "filename": "app/actions/audit-log.ts"
+        },
+        "app/dashboard/analytics/page": {
+          "moduleId": 29738,
+          "async": false,
+          "exportedName": "logAuditEvent",
+          "filename": "app/actions/audit-log.ts"
+        },
+        "app/dashboard/client/page": {
+          "moduleId": 92365,
+          "async": false,
+          "exportedName": "logAuditEvent",
+          "filename": "app/actions/audit-log.ts"
+        },
+        "app/dashboard/client/projects/[id]/page": {
+          "moduleId": 83622,
+          "async": false,
+          "exportedName": "logAuditEvent",
+          "filename": "app/actions/audit-log.ts"
+        },
+        "app/dashboard/clients/page": {
+          "moduleId": 1034,
+          "async": false,
+          "exportedName": "logAuditEvent",
+          "filename": "app/actions/audit-log.ts"
+        },
+        "app/dashboard/comments/page": {
+          "moduleId": 18026,
+          "async": false,
+          "exportedName": "logAuditEvent",
+          "filename": "app/actions/audit-log.ts"
+        },
+        "app/dashboard/employee/page": {
+          "moduleId": 67438,
+          "async": false,
+          "exportedName": "logAuditEvent",
+          "filename": "app/actions/audit-log.ts"
+        },
+        "app/dashboard/employee/projects/[id]/page": {
+          "moduleId": 11764,
+          "async": false,
+          "exportedName": "logAuditEvent",
+          "filename": "app/actions/audit-log.ts"
+        },
+        "app/dashboard/employee/settings/page": {
+          "moduleId": 52640,
+          "async": false,
+          "exportedName": "logAuditEvent",
+          "filename": "app/actions/audit-log.ts"
+        },
+        "app/dashboard/invoices/page": {
+          "moduleId": 22461,
+          "async": false,
+          "exportedName": "logAuditEvent",
+          "filename": "app/actions/audit-log.ts"
+        },
+        "app/dashboard/notifications/page": {
+          "moduleId": 74729,
+          "async": false,
+          "exportedName": "logAuditEvent",
+          "filename": "app/actions/audit-log.ts"
+        },
+        "app/dashboard/page": {
+          "moduleId": 10184,
+          "async": false,
+          "exportedName": "logAuditEvent",
+          "filename": "app/actions/audit-log.ts"
+        },
+        "app/dashboard/projects/page": {
+          "moduleId": 73222,
+          "async": false,
+          "exportedName": "logAuditEvent",
+          "filename": "app/actions/audit-log.ts"
+        },
+        "app/dashboard/settings/page": {
+          "moduleId": 40866,
+          "async": false,
+          "exportedName": "logAuditEvent",
+          "filename": "app/actions/audit-log.ts"
+        },
+        "app/dashboard/team/page": {
+          "moduleId": 72730,
+          "async": false,
+          "exportedName": "logAuditEvent",
+          "filename": "app/actions/audit-log.ts"
+        },
+        "app/login/page": {
+          "moduleId": 27448,
+          "async": false,
+          "exportedName": "logAuditEvent",
+          "filename": "app/actions/audit-log.ts"
+        },
+        "app/page": {
+          "moduleId": 28652,
+          "async": false,
+          "exportedName": "logAuditEvent",
+          "filename": "app/actions/audit-log.ts"
+        },
+        "app/signup/page": {
+          "moduleId": 16172,
+          "async": false,
+          "exportedName": "logAuditEvent",
+          "filename": "app/actions/audit-log.ts"
+        },
+        "app/test-server-action/page": {
+          "moduleId": 57707,
+          "async": false,
+          "exportedName": "logAuditEvent",
+          "filename": "app/actions/audit-log.ts"
+        }
+      },
+      "layer": {
+        "app/_not-found/page": "action-browser",
+        "app/auth/select-role/page": "action-browser",
+        "app/dashboard/analytics/page": "action-browser",
+        "app/dashboard/client/page": "action-browser",
+        "app/dashboard/client/projects/[id]/page": "action-browser",
+        "app/dashboard/clients/page": "action-browser",
+        "app/dashboard/comments/page": "action-browser",
+        "app/dashboard/employee/page": "action-browser",
+        "app/dashboard/employee/projects/[id]/page": "action-browser",
+        "app/dashboard/employee/settings/page": "action-browser",
+        "app/dashboard/invoices/page": "action-browser",
+        "app/dashboard/notifications/page": "action-browser",
+        "app/dashboard/page": "action-browser",
+        "app/dashboard/projects/page": "action-browser",
+        "app/dashboard/settings/page": "action-browser",
+        "app/dashboard/team/page": "action-browser",
+        "app/login/page": "action-browser",
+        "app/page": "action-browser",
+        "app/signup/page": "action-browser",
+        "app/test-server-action/page": "action-browser"
+      },
+      "filename": "app/actions/audit-log.ts",
+      "exportedName": "logAuditEvent"
+    },
+    "40e9debad081e2ea61fef36767d769afdc486d2864": {
+      "workers": {
+        "app/dashboard/page": {
+          "moduleId": 10184,
+          "async": false,
+          "exportedName": "reviewProjectProposal",
+          "filename": "app/actions/employee-tasks.ts"
+        }
+      },
+      "layer": {
+        "app/dashboard/page": "action-browser"
+      },
+      "filename": "app/actions/employee-tasks.ts",
+      "exportedName": "reviewProjectProposal"
+    },
+    "407d00f69ec1463aaf4cba7dfeb078331c034b7beb": {
+      "workers": {
+        "app/dashboard/page": {
+          "moduleId": 10184,
+          "async": false,
+          "exportedName": "approveUserAccount",
+          "filename": "app/actions/approve-user.ts"
+        }
+      },
+      "layer": {
+        "app/dashboard/page": "action-browser"
+      },
+      "filename": "app/actions/approve-user.ts",
+      "exportedName": "approveUserAccount"
+    },
+    "40562833b8610881280abfc4553d749f1e50b42e3d": {
+      "workers": {
+        "app/dashboard/page": {
+          "moduleId": 10184,
+          "async": false,
+          "exportedName": "grantAdminByEmail",
+          "filename": "app/actions/grant-admin.ts"
+        }
+      },
+      "layer": {
+        "app/dashboard/page": "action-browser"
+      },
+      "filename": "app/actions/grant-admin.ts",
+      "exportedName": "grantAdminByEmail"
+    },
+    "407dfc82b3267d99c51cea5a0a0ab48bad3c28a250": {
+      "workers": {
+        "app/dashboard/page": {
+          "moduleId": 10184,
+          "async": false,
+          "exportedName": "forceConfirmEmail",
+          "filename": "app/actions/force-confirm-email.ts"
+        },
+        "app/login/page": {
+          "moduleId": 27448,
+          "async": false,
+          "exportedName": "forceConfirmEmail",
+          "filename": "app/actions/force-confirm-email.ts"
+        }
+      },
+      "layer": {
+        "app/dashboard/page": "action-browser",
+        "app/login/page": "action-browser"
+      },
+      "filename": "app/actions/force-confirm-email.ts",
+      "exportedName": "forceConfirmEmail"
+    },
+    "40a6382be664f50ea66fe39a98d1462f3f57004b5a": {
+      "workers": {
+        "app/dashboard/client/projects/[id]/page": {
+          "moduleId": 83622,
+          "async": false,
+          "exportedName": "createProjectComment",
+          "filename": "app/actions/client-comments.ts"
+        }
+      },
+      "layer": {
+        "app/dashboard/client/projects/[id]/page": "action-browser"
+      },
+      "filename": "app/actions/client-comments.ts",
+      "exportedName": "createProjectComment"
+    },
+    "40bb02f9168fd9109458766923437b569718746a1e": {
+      "workers": {
+        "app/dashboard/client/projects/[id]/page": {
+          "moduleId": 83622,
+          "async": false,
+          "exportedName": "listProjectComments",
+          "filename": "app/actions/client-comments.ts"
+        }
+      },
+      "layer": {
+        "app/dashboard/client/projects/[id]/page": "action-browser"
+      },
+      "filename": "app/actions/client-comments.ts",
+      "exportedName": "listProjectComments"
+    },
+    "4057388ae1c8d7ff911fc03a5fdfae99a64813f401": {
+      "workers": {
+        "app/dashboard/client/projects/[id]/page": {
+          "moduleId": 83622,
+          "async": false,
+          "exportedName": "clientApproveProject",
+          "filename": "app/actions/client-comments.ts"
+        }
+      },
+      "layer": {
+        "app/dashboard/client/projects/[id]/page": "action-browser"
+      },
+      "filename": "app/actions/client-comments.ts",
+      "exportedName": "clientApproveProject"
+    },
+    "405c5bdfe2a43767b9832e1c2375adb8b49762ba71": {
+      "workers": {
+        "app/dashboard/client/projects/[id]/page": {
+          "moduleId": 83622,
+          "async": false,
+          "exportedName": "assignCommentToEmployee",
+          "filename": "app/actions/client-comments.ts"
+        },
+        "app/dashboard/comments/page": {
+          "moduleId": 18026,
+          "async": false,
+          "exportedName": "assignCommentToEmployee",
+          "filename": "app/actions/client-comments.ts"
+        }
+      },
+      "layer": {
+        "app/dashboard/client/projects/[id]/page": "action-browser",
+        "app/dashboard/comments/page": "action-browser"
+      },
+      "filename": "app/actions/client-comments.ts",
+      "exportedName": "assignCommentToEmployee"
+    },
+    "40a8276182358e0473daf518fe2722245d125a62c6": {
+      "workers": {
+        "app/dashboard/clients/page": {
+          "moduleId": 1034,
+          "async": false,
+          "exportedName": "createClientAccount",
+          "filename": "app/actions/create-client.ts"
+        }
+      },
+      "layer": {
+        "app/dashboard/clients/page": "action-browser"
+      },
+      "filename": "app/actions/create-client.ts",
+      "exportedName": "createClientAccount"
+    },
+    "4093ee1a78e1b6192e9a5026676301b1f60fb07d0c": {
+      "workers": {
+        "app/dashboard/clients/page": {
+          "moduleId": 1034,
+          "async": false,
+          "exportedName": "deleteClient",
+          "filename": "app/actions/delete-client.ts"
+        }
+      },
+      "layer": {
+        "app/dashboard/clients/page": "action-browser"
+      },
+      "filename": "app/actions/delete-client.ts",
+      "exportedName": "deleteClient"
+    },
+    "407077dfde7a116ae486d76ab40cd50a1dba0a0bf7": {
+      "workers": {
+        "app/dashboard/employee/page": {
+          "moduleId": 67438,
+          "async": false,
+          "exportedName": "createTask",
+          "filename": "app/actions/employee-tasks.ts"
+        }
+      },
+      "layer": {
+        "app/dashboard/employee/page": "action-browser"
+      },
+      "filename": "app/actions/employee-tasks.ts",
+      "exportedName": "createTask"
+    },
+    "609962e915a2b373a08c0bbbfedde9f0e153e565b9": {
+      "workers": {
+        "app/dashboard/employee/page": {
+          "moduleId": 67438,
+          "async": false,
+          "exportedName": "updateTask",
+          "filename": "app/actions/employee-tasks.ts"
+        }
+      },
+      "layer": {
+        "app/dashboard/employee/page": "action-browser"
+      },
+      "filename": "app/actions/employee-tasks.ts",
+      "exportedName": "updateTask"
+    },
+    "405aa6ef311de4fc1dcf524a8ec77eb1514a4cd5e6": {
+      "workers": {
+        "app/dashboard/employee/page": {
+          "moduleId": 67438,
+          "async": false,
+          "exportedName": "deleteTask",
+          "filename": "app/actions/employee-tasks.ts"
+        }
+      },
+      "layer": {
+        "app/dashboard/employee/page": "action-browser"
+      },
+      "filename": "app/actions/employee-tasks.ts",
+      "exportedName": "deleteTask"
+    },
+    "00572e83ec2be9ea7f5328beb33ed7049696a51b55": {
+      "workers": {
+        "app/dashboard/employee/page": {
+          "moduleId": 67438,
+          "async": false,
+          "exportedName": "getTodayTasks",
+          "filename": "app/actions/employee-tasks.ts"
+        }
+      },
+      "layer": {
+        "app/dashboard/employee/page": "action-browser"
+      },
+      "filename": "app/actions/employee-tasks.ts",
+      "exportedName": "getTodayTasks"
+    },
+    "002677cfdd008f5d83d9c5f60a6f9cdb9be67678b3": {
+      "workers": {
+        "app/dashboard/employee/page": {
+          "moduleId": 67438,
+          "async": false,
+          "exportedName": "getOverdueTasks",
+          "filename": "app/actions/employee-tasks.ts"
+        }
+      },
+      "layer": {
+        "app/dashboard/employee/page": "action-browser"
+      },
+      "filename": "app/actions/employee-tasks.ts",
+      "exportedName": "getOverdueTasks"
+    },
+    "609ad8544995b5847b0ce8a82278134f0856ad1454": {
+      "workers": {
+        "app/dashboard/employee/page": {
+          "moduleId": 67438,
+          "async": false,
+          "exportedName": "getSignedProjectFileUrl",
+          "filename": "app/actions/project-file-operations.ts"
+        },
+        "app/dashboard/projects/page": {
+          "moduleId": 73222,
+          "async": false,
+          "exportedName": "getSignedProjectFileUrl",
+          "filename": "app/actions/project-file-operations.ts"
+        }
+      },
+      "layer": {
+        "app/dashboard/employee/page": "action-browser",
+        "app/dashboard/projects/page": "action-browser"
+      },
+      "filename": "app/actions/project-file-operations.ts",
+      "exportedName": "getSignedProjectFileUrl"
+    },
+    "40f54ce617644a4784493e827870e17a65e9273ef2": {
+      "workers": {
+        "app/dashboard/invoices/page": {
+          "moduleId": 22461,
+          "async": false,
+          "exportedName": "uploadInvoiceFile",
+          "filename": "app/actions/upload-invoice.ts"
+        }
+      },
+      "layer": {
+        "app/dashboard/invoices/page": "action-browser"
+      },
+      "filename": "app/actions/upload-invoice.ts",
+      "exportedName": "uploadInvoiceFile"
+    },
+    "005e4c4e42c0c2763b1f47fcf35b742542a8e3595f": {
+      "workers": {
+        "app/dashboard/invoices/page": {
+          "moduleId": 22461,
+          "async": false,
+          "exportedName": "fetchInvoicesData",
+          "filename": "app/actions/invoice-operations.ts"
+        }
+      },
+      "layer": {
+        "app/dashboard/invoices/page": "action-browser"
+      },
+      "filename": "app/actions/invoice-operations.ts",
+      "exportedName": "fetchInvoicesData"
+    },
+    "60a1647e99863c4a9ca254b5e3376492d2265241a0": {
+      "workers": {
+        "app/dashboard/invoices/page": {
+          "moduleId": 22461,
+          "async": false,
+          "exportedName": "updateInvoiceStatus",
+          "filename": "app/actions/invoice-operations.ts"
+        }
+      },
+      "layer": {
+        "app/dashboard/invoices/page": "action-browser"
+      },
+      "filename": "app/actions/invoice-operations.ts",
+      "exportedName": "updateInvoiceStatus"
+    },
+    "6080e6bd584b0a9051540e8465bc2512b088944e84": {
+      "workers": {
+        "app/dashboard/invoices/page": {
+          "moduleId": 22461,
+          "async": false,
+          "exportedName": "deleteInvoice",
+          "filename": "app/actions/invoice-operations.ts"
+        }
+      },
+      "layer": {
+        "app/dashboard/invoices/page": "action-browser"
+      },
+      "filename": "app/actions/invoice-operations.ts",
+      "exportedName": "deleteInvoice"
+    },
+    "400ac50675809b5125de28467cacbc1423e833b418": {
+      "workers": {
+        "app/dashboard/invoices/page": {
+          "moduleId": 22461,
+          "async": false,
+          "exportedName": "getSignedInvoiceUrl",
+          "filename": "app/actions/invoice-operations.ts"
+        }
+      },
+      "layer": {
+        "app/dashboard/invoices/page": "action-browser"
+      },
+      "filename": "app/actions/invoice-operations.ts",
+      "exportedName": "getSignedInvoiceUrl"
+    },
+    "408c33e2053a5e4ec12804d77b9a527496c0be7d31": {
+      "workers": {
+        "app/dashboard/notifications/page": {
+          "moduleId": 74729,
+          "async": false,
+          "exportedName": "markAllNotificationsRead",
+          "filename": "app/actions/notifications.ts"
+        }
+      },
+      "layer": {
+        "app/dashboard/notifications/page": "action-browser"
+      },
+      "filename": "app/actions/notifications.ts",
+      "exportedName": "markAllNotificationsRead"
+    },
+    "40a4dbbba46d42778ca13443447c1eace251478be0": {
+      "workers": {
+        "app/dashboard/projects/page": {
+          "moduleId": 73222,
+          "async": false,
+          "exportedName": "createMilestone",
+          "filename": "app/actions/milestones.ts"
+        }
+      },
+      "layer": {
+        "app/dashboard/projects/page": "action-browser"
+      },
+      "filename": "app/actions/milestones.ts",
+      "exportedName": "createMilestone"
+    },
+    "60e5c3f9efb3e2af71ede94483ceab393987c93573": {
+      "workers": {
+        "app/dashboard/projects/page": {
+          "moduleId": 73222,
+          "async": false,
+          "exportedName": "updateMilestoneStatus",
+          "filename": "app/actions/milestones.ts"
+        }
+      },
+      "layer": {
+        "app/dashboard/projects/page": "action-browser"
+      },
+      "filename": "app/actions/milestones.ts",
+      "exportedName": "updateMilestoneStatus"
+    },
+    "40976afb0bc8b7c7b1a06e4d2172dc94d38c18b70d": {
+      "workers": {
+        "app/dashboard/projects/page": {
+          "moduleId": 73222,
+          "async": false,
+          "exportedName": "deleteMilestone",
+          "filename": "app/actions/milestones.ts"
+        }
+      },
+      "layer": {
+        "app/dashboard/projects/page": "action-browser"
+      },
+      "filename": "app/actions/milestones.ts",
+      "exportedName": "deleteMilestone"
+    },
+    "402c40f1248f942cb86ca82d64406c24bccf9cd9f8": {
+      "workers": {
+        "app/dashboard/projects/page": {
+          "moduleId": 73222,
+          "async": false,
+          "exportedName": "createCalendarEvent",
+          "filename": "app/actions/calendar-events.ts"
+        }
+      },
+      "layer": {
+        "app/dashboard/projects/page": "action-browser"
+      },
+      "filename": "app/actions/calendar-events.ts",
+      "exportedName": "createCalendarEvent"
+    },
+    "60b6756cfc70cd7d7fa5fb7b854a8371f2376414a6": {
+      "workers": {
+        "app/dashboard/projects/page": {
+          "moduleId": 73222,
+          "async": false,
+          "exportedName": "updateCalendarEvent",
+          "filename": "app/actions/calendar-events.ts"
+        }
+      },
+      "layer": {
+        "app/dashboard/projects/page": "action-browser"
+      },
+      "filename": "app/actions/calendar-events.ts",
+      "exportedName": "updateCalendarEvent"
+    },
+    "4040a7ed52ad3b81aa998665830614d31c6c2a70b4": {
+      "workers": {
+        "app/dashboard/projects/page": {
+          "moduleId": 73222,
+          "async": false,
+          "exportedName": "deleteCalendarEvent",
+          "filename": "app/actions/calendar-events.ts"
+        }
+      },
+      "layer": {
+        "app/dashboard/projects/page": "action-browser"
+      },
+      "filename": "app/actions/calendar-events.ts",
+      "exportedName": "deleteCalendarEvent"
+    },
+    "6069b06d93201d992f20335d654a277635cdc8d5f9": {
+      "workers": {
+        "app/dashboard/projects/page": {
+          "moduleId": 73222,
+          "async": false,
+          "exportedName": "listCalendarEvents",
+          "filename": "app/actions/calendar-events.ts"
+        }
+      },
+      "layer": {
+        "app/dashboard/projects/page": "action-browser"
+      },
+      "filename": "app/actions/calendar-events.ts",
+      "exportedName": "listCalendarEvents"
+    },
+    "40cc7236ea0e9d536a40a43673d7c8d15f6f1f5ada": {
+      "workers": {
+        "app/dashboard/team/page": {
+          "moduleId": 72730,
+          "async": false,
+          "exportedName": "createTeamMember",
+          "filename": "app/actions/create-team-member.ts"
+        }
+      },
+      "layer": {
+        "app/dashboard/team/page": "action-browser"
+      },
+      "filename": "app/actions/create-team-member.ts",
+      "exportedName": "createTeamMember"
+    },
+    "40ccf2a3dde700e871dd0ca51628e0652e1064d905": {
+      "workers": {
+        "app/login/page": {
+          "moduleId": 27448,
+          "async": false,
+          "exportedName": "registerPendingUser",
+          "filename": "app/actions/register-pending-user.ts"
+        },
+        "app/signup/page": {
+          "moduleId": 16172,
+          "async": false,
+          "exportedName": "registerPendingUser",
+          "filename": "app/actions/register-pending-user.ts"
+        }
+      },
+      "layer": {
+        "app/login/page": "action-browser",
+        "app/signup/page": "action-browser"
+      },
+      "filename": "app/actions/register-pending-user.ts",
+      "exportedName": "registerPendingUser"
+    },
+    "402c6d535aade73d322b5373083d5b4b6b869c009c": {
+      "workers": {
+        "app/signup/page": {
+          "moduleId": 16172,
+          "async": false,
+          "exportedName": "adminCreateUserSignup",
+          "filename": "app/actions/admin-signup.ts"
+        }
+      },
+      "layer": {
+        "app/signup/page": "action-browser"
+      },
+      "filename": "app/actions/admin-signup.ts",
+      "exportedName": "adminCreateUserSignup"
+    },
+    "00834b63fa259af4b2b6a9e7112406ce81905c2fd3": {
+      "workers": {
+        "app/test-server-action/page": {
+          "moduleId": 57707,
+          "async": false,
+          "exportedName": "pingServer",
+          "filename": "app/actions/ping.ts"
+        }
+      },
+      "layer": {
+        "app/test-server-action/page": "action-browser"
+      },
+      "filename": "app/actions/ping.ts",
+      "exportedName": "pingServer"
+    }
+  },
+  "edge": {},
+  "encryptionKey": "YIJgr4/I5JRrQZCk8MgC9AZz17/KauzR5HvEfUf7YRc="
+}

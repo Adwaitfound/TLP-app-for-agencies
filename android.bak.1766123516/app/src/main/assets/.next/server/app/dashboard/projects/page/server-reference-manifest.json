@@ -1,0 +1,140 @@
+{
+  "node": {
+    "4001860d967ff1d29143ee49c09c9bbdff4d1af8fb": {
+      "workers": {
+        "app/dashboard/projects/page": {
+          "moduleId": 73222,
+          "async": false,
+          "exportedName": "logAuditEvent",
+          "filename": "app/actions/audit-log.ts"
+        }
+      },
+      "layer": {
+        "app/dashboard/projects/page": "action-browser"
+      },
+      "exportedName": "logAuditEvent",
+      "filename": "app/actions/audit-log.ts"
+    },
+    "609ad8544995b5847b0ce8a82278134f0856ad1454": {
+      "workers": {
+        "app/dashboard/projects/page": {
+          "moduleId": 73222,
+          "async": false,
+          "exportedName": "getSignedProjectFileUrl",
+          "filename": "app/actions/project-file-operations.ts"
+        }
+      },
+      "layer": {
+        "app/dashboard/projects/page": "action-browser"
+      },
+      "exportedName": "getSignedProjectFileUrl",
+      "filename": "app/actions/project-file-operations.ts"
+    },
+    "40a4dbbba46d42778ca13443447c1eace251478be0": {
+      "workers": {
+        "app/dashboard/projects/page": {
+          "moduleId": 73222,
+          "async": false,
+          "exportedName": "createMilestone",
+          "filename": "app/actions/milestones.ts"
+        }
+      },
+      "layer": {
+        "app/dashboard/projects/page": "action-browser"
+      },
+      "exportedName": "createMilestone",
+      "filename": "app/actions/milestones.ts"
+    },
+    "60e5c3f9efb3e2af71ede94483ceab393987c93573": {
+      "workers": {
+        "app/dashboard/projects/page": {
+          "moduleId": 73222,
+          "async": false,
+          "exportedName": "updateMilestoneStatus",
+          "filename": "app/actions/milestones.ts"
+        }
+      },
+      "layer": {
+        "app/dashboard/projects/page": "action-browser"
+      },
+      "exportedName": "updateMilestoneStatus",
+      "filename": "app/actions/milestones.ts"
+    },
+    "40976afb0bc8b7c7b1a06e4d2172dc94d38c18b70d": {
+      "workers": {
+        "app/dashboard/projects/page": {
+          "moduleId": 73222,
+          "async": false,
+          "exportedName": "deleteMilestone",
+          "filename": "app/actions/milestones.ts"
+        }
+      },
+      "layer": {
+        "app/dashboard/projects/page": "action-browser"
+      },
+      "exportedName": "deleteMilestone",
+      "filename": "app/actions/milestones.ts"
+    },
+    "402c40f1248f942cb86ca82d64406c24bccf9cd9f8": {
+      "workers": {
+        "app/dashboard/projects/page": {
+          "moduleId": 73222,
+          "async": false,
+          "exportedName": "createCalendarEvent",
+          "filename": "app/actions/calendar-events.ts"
+        }
+      },
+      "layer": {
+        "app/dashboard/projects/page": "action-browser"
+      },
+      "exportedName": "createCalendarEvent",
+      "filename": "app/actions/calendar-events.ts"
+    },
+    "60b6756cfc70cd7d7fa5fb7b854a8371f2376414a6": {
+      "workers": {
+        "app/dashboard/projects/page": {
+          "moduleId": 73222,
+          "async": false,
+          "exportedName": "updateCalendarEvent",
+          "filename": "app/actions/calendar-events.ts"
+        }
+      },
+      "layer": {
+        "app/dashboard/projects/page": "action-browser"
+      },
+      "exportedName": "updateCalendarEvent",
+      "filename": "app/actions/calendar-events.ts"
+    },
+    "4040a7ed52ad3b81aa998665830614d31c6c2a70b4": {
+      "workers": {
+        "app/dashboard/projects/page": {
+          "moduleId": 73222,
+          "async": false,
+          "exportedName": "deleteCalendarEvent",
+          "filename": "app/actions/calendar-events.ts"
+        }
+      },
+      "layer": {
+        "app/dashboard/projects/page": "action-browser"
+      },
+      "exportedName": "deleteCalendarEvent",
+      "filename": "app/actions/calendar-events.ts"
+    },
+    "6069b06d93201d992f20335d654a277635cdc8d5f9": {
+      "workers": {
+        "app/dashboard/projects/page": {
+          "moduleId": 73222,
+          "async": false,
+          "exportedName": "listCalendarEvents",
+          "filename": "app/actions/calendar-events.ts"
+        }
+      },
+      "layer": {
+        "app/dashboard/projects/page": "action-browser"
+      },
+      "exportedName": "listCalendarEvents",
+      "filename": "app/actions/calendar-events.ts"
+    }
+  },
+  "edge": {}
+}

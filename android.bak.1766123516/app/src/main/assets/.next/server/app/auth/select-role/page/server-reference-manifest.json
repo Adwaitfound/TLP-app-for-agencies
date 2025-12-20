@@ -1,0 +1,20 @@
+{
+  "node": {
+    "4001860d967ff1d29143ee49c09c9bbdff4d1af8fb": {
+      "workers": {
+        "app/auth/select-role/page": {
+          "moduleId": 72556,
+          "async": false,
+          "exportedName": "logAuditEvent",
+          "filename": "app/actions/audit-log.ts"
+        }
+      },
+      "layer": {
+        "app/auth/select-role/page": "action-browser"
+      },
+      "exportedName": "logAuditEvent",
+      "filename": "app/actions/audit-log.ts"
+    }
+  },
+  "edge": {}
+}

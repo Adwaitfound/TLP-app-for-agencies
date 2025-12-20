@@ -1,0 +1,3 @@
+module.exports=[74729,a=>{"use strict";var b=a.i(74779),c=a.i(37936),d=a.i(98310);async function e(a){let b=(0,d.createServiceClient)(),{error:c}=await b.from("notifications").update({read:!0}).eq("user_id",a).eq("read",!1);return c?{success:!1,error:c.message}:{success:!0}}(0,a.i(13095).ensureServerEntryExports)([e]),(0,c.registerServerReference)(e,"408c33e2053a5e4ec12804d77b9a527496c0be7d31",null),a.s([],41793),a.i(41793),a.s(["4001860d967ff1d29143ee49c09c9bbdff4d1af8fb",()=>b.logAuditEvent,"408c33e2053a5e4ec12804d77b9a527496c0be7d31",()=>e],74729)},85685,a=>{a.v(b=>Promise.all(["server/chunks/ssr/[externals]_crypto_c412f66b._.js"].map(b=>a.l(b))).then(()=>b(54799)))}];
+
+//# sourceMappingURL=%5Broot-of-the-server%5D__d94fecb0._.js.map

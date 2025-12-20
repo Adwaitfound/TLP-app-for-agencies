@@ -1,0 +1,95 @@
+{
+  "node": {
+    "4001860d967ff1d29143ee49c09c9bbdff4d1af8fb": {
+      "workers": {
+        "app/dashboard/invoices/page": {
+          "moduleId": 22461,
+          "async": false,
+          "exportedName": "logAuditEvent",
+          "filename": "app/actions/audit-log.ts"
+        }
+      },
+      "layer": {
+        "app/dashboard/invoices/page": "action-browser"
+      },
+      "exportedName": "logAuditEvent",
+      "filename": "app/actions/audit-log.ts"
+    },
+    "40f54ce617644a4784493e827870e17a65e9273ef2": {
+      "workers": {
+        "app/dashboard/invoices/page": {
+          "moduleId": 22461,
+          "async": false,
+          "exportedName": "uploadInvoiceFile",
+          "filename": "app/actions/upload-invoice.ts"
+        }
+      },
+      "layer": {
+        "app/dashboard/invoices/page": "action-browser"
+      },
+      "exportedName": "uploadInvoiceFile",
+      "filename": "app/actions/upload-invoice.ts"
+    },
+    "005e4c4e42c0c2763b1f47fcf35b742542a8e3595f": {
+      "workers": {
+        "app/dashboard/invoices/page": {
+          "moduleId": 22461,
+          "async": false,
+          "exportedName": "fetchInvoicesData",
+          "filename": "app/actions/invoice-operations.ts"
+        }
+      },
+      "layer": {
+        "app/dashboard/invoices/page": "action-browser"
+      },
+      "exportedName": "fetchInvoicesData",
+      "filename": "app/actions/invoice-operations.ts"
+    },
+    "60a1647e99863c4a9ca254b5e3376492d2265241a0": {
+      "workers": {
+        "app/dashboard/invoices/page": {
+          "moduleId": 22461,
+          "async": false,
+          "exportedName": "updateInvoiceStatus",
+          "filename": "app/actions/invoice-operations.ts"
+        }
+      },
+      "layer": {
+        "app/dashboard/invoices/page": "action-browser"
+      },
+      "exportedName": "updateInvoiceStatus",
+      "filename": "app/actions/invoice-operations.ts"
+    },
+    "6080e6bd584b0a9051540e8465bc2512b088944e84": {
+      "workers": {
+        "app/dashboard/invoices/page": {
+          "moduleId": 22461,
+          "async": false,
+          "exportedName": "deleteInvoice",
+          "filename": "app/actions/invoice-operations.ts"
+        }
+      },
+      "layer": {
+        "app/dashboard/invoices/page": "action-browser"
+      },
+      "exportedName": "deleteInvoice",
+      "filename": "app/actions/invoice-operations.ts"
+    },
+    "400ac50675809b5125de28467cacbc1423e833b418": {
+      "workers": {
+        "app/dashboard/invoices/page": {
+          "moduleId": 22461,
+          "async": false,
+          "exportedName": "getSignedInvoiceUrl",
+          "filename": "app/actions/invoice-operations.ts"
+        }
+      },
+      "layer": {
+        "app/dashboard/invoices/page": "action-browser"
+      },
+      "exportedName": "getSignedInvoiceUrl",
+      "filename": "app/actions/invoice-operations.ts"
+    }
+  },
+  "edge": {}
+}

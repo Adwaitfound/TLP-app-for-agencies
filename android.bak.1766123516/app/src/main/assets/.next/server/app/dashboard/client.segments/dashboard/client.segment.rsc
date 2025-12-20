@@ -1,0 +1,5 @@
+1:"$Sreact.fragment"
+2:I[32641,["/_next/static/chunks/45939a8ca1fa985b.js","/_next/static/chunks/6e6ad317b13a95cd.js","/_next/static/chunks/7cd519104a69502e.js","/_next/static/chunks/7c3bb64a2929078c.js","/_next/static/chunks/12251a148558ba05.js","/_next/static/chunks/b2fef59c054f4705.js","/_next/static/chunks/6f66a4a933cc13a1.js","/_next/static/chunks/4784d9ea61dbe392.js","/_next/static/chunks/b499686fb965d823.js"],"ClientHeader"]
+3:I[39756,["/_next/static/chunks/ff1a16fafef87110.js","/_next/static/chunks/64c0a5e3a0354479.js"],"default"]
+4:I[37457,["/_next/static/chunks/ff1a16fafef87110.js","/_next/static/chunks/64c0a5e3a0354479.js"],"default"]
+0:{"buildId":"aTIJIa7jnyAkFn_vN71ig","rsc":["$","$1","c",{"children":[[["$","script","script-0",{"src":"/_next/static/chunks/b499686fb965d823.js","async":true}]],["$","div",null,{"className":"flex min-h-screen w-full flex-col","children":[["$","$L2",null,{}],["$","main",null,{"className":"flex flex-1 flex-col gap-4 p-4 lg:gap-6 lg:p-6","children":["$","$L3",null,{"parallelRouterKey":"children","template":["$","$L4",null,{}]}]}]]}]]}],"loading":null,"isPartial":false}

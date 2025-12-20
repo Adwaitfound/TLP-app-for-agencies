@@ -1,0 +1,110 @@
+{
+  "node": {
+    "4001860d967ff1d29143ee49c09c9bbdff4d1af8fb": {
+      "workers": {
+        "app/dashboard/employee/page": {
+          "moduleId": 67438,
+          "async": false,
+          "exportedName": "logAuditEvent",
+          "filename": "app/actions/audit-log.ts"
+        }
+      },
+      "layer": {
+        "app/dashboard/employee/page": "action-browser"
+      },
+      "exportedName": "logAuditEvent",
+      "filename": "app/actions/audit-log.ts"
+    },
+    "407077dfde7a116ae486d76ab40cd50a1dba0a0bf7": {
+      "workers": {
+        "app/dashboard/employee/page": {
+          "moduleId": 67438,
+          "async": false,
+          "exportedName": "createTask",
+          "filename": "app/actions/employee-tasks.ts"
+        }
+      },
+      "layer": {
+        "app/dashboard/employee/page": "action-browser"
+      },
+      "exportedName": "createTask",
+      "filename": "app/actions/employee-tasks.ts"
+    },
+    "609962e915a2b373a08c0bbbfedde9f0e153e565b9": {
+      "workers": {
+        "app/dashboard/employee/page": {
+          "moduleId": 67438,
+          "async": false,
+          "exportedName": "updateTask",
+          "filename": "app/actions/employee-tasks.ts"
+        }
+      },
+      "layer": {
+        "app/dashboard/employee/page": "action-browser"
+      },
+      "exportedName": "updateTask",
+      "filename": "app/actions/employee-tasks.ts"
+    },
+    "405aa6ef311de4fc1dcf524a8ec77eb1514a4cd5e6": {
+      "workers": {
+        "app/dashboard/employee/page": {
+          "moduleId": 67438,
+          "async": false,
+          "exportedName": "deleteTask",
+          "filename": "app/actions/employee-tasks.ts"
+        }
+      },
+      "layer": {
+        "app/dashboard/employee/page": "action-browser"
+      },
+      "exportedName": "deleteTask",
+      "filename": "app/actions/employee-tasks.ts"
+    },
+    "00572e83ec2be9ea7f5328beb33ed7049696a51b55": {
+      "workers": {
+        "app/dashboard/employee/page": {
+          "moduleId": 67438,
+          "async": false,
+          "exportedName": "getTodayTasks",
+          "filename": "app/actions/employee-tasks.ts"
+        }
+      },
+      "layer": {
+        "app/dashboard/employee/page": "action-browser"
+      },
+      "exportedName": "getTodayTasks",
+      "filename": "app/actions/employee-tasks.ts"
+    },
+    "002677cfdd008f5d83d9c5f60a6f9cdb9be67678b3": {
+      "workers": {
+        "app/dashboard/employee/page": {
+          "moduleId": 67438,
+          "async": false,
+          "exportedName": "getOverdueTasks",
+          "filename": "app/actions/employee-tasks.ts"
+        }
+      },
+      "layer": {
+        "app/dashboard/employee/page": "action-browser"
+      },
+      "exportedName": "getOverdueTasks",
+      "filename": "app/actions/employee-tasks.ts"
+    },
+    "609ad8544995b5847b0ce8a82278134f0856ad1454": {
+      "workers": {
+        "app/dashboard/employee/page": {
+          "moduleId": 67438,
+          "async": false,
+          "exportedName": "getSignedProjectFileUrl",
+          "filename": "app/actions/project-file-operations.ts"
+        }
+      },
+      "layer": {
+        "app/dashboard/employee/page": "action-browser"
+      },
+      "exportedName": "getSignedProjectFileUrl",
+      "filename": "app/actions/project-file-operations.ts"
+    }
+  },
+  "edge": {}
+}

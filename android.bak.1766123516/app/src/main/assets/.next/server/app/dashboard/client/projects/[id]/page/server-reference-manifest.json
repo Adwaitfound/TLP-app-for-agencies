@@ -1,0 +1,80 @@
+{
+  "node": {
+    "4001860d967ff1d29143ee49c09c9bbdff4d1af8fb": {
+      "workers": {
+        "app/dashboard/client/projects/[id]/page": {
+          "moduleId": 83622,
+          "async": false,
+          "exportedName": "logAuditEvent",
+          "filename": "app/actions/audit-log.ts"
+        }
+      },
+      "layer": {
+        "app/dashboard/client/projects/[id]/page": "action-browser"
+      },
+      "exportedName": "logAuditEvent",
+      "filename": "app/actions/audit-log.ts"
+    },
+    "40a6382be664f50ea66fe39a98d1462f3f57004b5a": {
+      "workers": {
+        "app/dashboard/client/projects/[id]/page": {
+          "moduleId": 83622,
+          "async": false,
+          "exportedName": "createProjectComment",
+          "filename": "app/actions/client-comments.ts"
+        }
+      },
+      "layer": {
+        "app/dashboard/client/projects/[id]/page": "action-browser"
+      },
+      "exportedName": "createProjectComment",
+      "filename": "app/actions/client-comments.ts"
+    },
+    "40bb02f9168fd9109458766923437b569718746a1e": {
+      "workers": {
+        "app/dashboard/client/projects/[id]/page": {
+          "moduleId": 83622,
+          "async": false,
+          "exportedName": "listProjectComments",
+          "filename": "app/actions/client-comments.ts"
+        }
+      },
+      "layer": {
+        "app/dashboard/client/projects/[id]/page": "action-browser"
+      },
+      "exportedName": "listProjectComments",
+      "filename": "app/actions/client-comments.ts"
+    },
+    "4057388ae1c8d7ff911fc03a5fdfae99a64813f401": {
+      "workers": {
+        "app/dashboard/client/projects/[id]/page": {
+          "moduleId": 83622,
+          "async": false,
+          "exportedName": "clientApproveProject",
+          "filename": "app/actions/client-comments.ts"
+        }
+      },
+      "layer": {
+        "app/dashboard/client/projects/[id]/page": "action-browser"
+      },
+      "exportedName": "clientApproveProject",
+      "filename": "app/actions/client-comments.ts"
+    },
+    "405c5bdfe2a43767b9832e1c2375adb8b49762ba71": {
+      "workers": {
+        "app/dashboard/client/projects/[id]/page": {
+          "moduleId": 83622,
+          "async": false,
+          "exportedName": "assignCommentToEmployee",
+          "filename": "app/actions/client-comments.ts"
+        }
+      },
+      "layer": {
+        "app/dashboard/client/projects/[id]/page": "action-browser"
+      },
+      "exportedName": "assignCommentToEmployee",
+      "filename": "app/actions/client-comments.ts"
+    }
+  },
+  "edge": {}
+}

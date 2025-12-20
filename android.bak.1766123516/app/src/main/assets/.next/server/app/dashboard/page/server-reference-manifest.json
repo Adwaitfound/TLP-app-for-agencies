@@ -1,0 +1,80 @@
+{
+  "node": {
+    "4001860d967ff1d29143ee49c09c9bbdff4d1af8fb": {
+      "workers": {
+        "app/dashboard/page": {
+          "moduleId": 10184,
+          "async": false,
+          "exportedName": "logAuditEvent",
+          "filename": "app/actions/audit-log.ts"
+        }
+      },
+      "layer": {
+        "app/dashboard/page": "action-browser"
+      },
+      "exportedName": "logAuditEvent",
+      "filename": "app/actions/audit-log.ts"
+    },
+    "40e9debad081e2ea61fef36767d769afdc486d2864": {
+      "workers": {
+        "app/dashboard/page": {
+          "moduleId": 10184,
+          "async": false,
+          "exportedName": "reviewProjectProposal",
+          "filename": "app/actions/employee-tasks.ts"
+        }
+      },
+      "layer": {
+        "app/dashboard/page": "action-browser"
+      },
+      "exportedName": "reviewProjectProposal",
+      "filename": "app/actions/employee-tasks.ts"
+    },
+    "407d00f69ec1463aaf4cba7dfeb078331c034b7beb": {
+      "workers": {
+        "app/dashboard/page": {
+          "moduleId": 10184,
+          "async": false,
+          "exportedName": "approveUserAccount",
+          "filename": "app/actions/approve-user.ts"
+        }
+      },
+      "layer": {
+        "app/dashboard/page": "action-browser"
+      },
+      "exportedName": "approveUserAccount",
+      "filename": "app/actions/approve-user.ts"
+    },
+    "40562833b8610881280abfc4553d749f1e50b42e3d": {
+      "workers": {
+        "app/dashboard/page": {
+          "moduleId": 10184,
+          "async": false,
+          "exportedName": "grantAdminByEmail",
+          "filename": "app/actions/grant-admin.ts"
+        }
+      },
+      "layer": {
+        "app/dashboard/page": "action-browser"
+      },
+      "exportedName": "grantAdminByEmail",
+      "filename": "app/actions/grant-admin.ts"
+    },
+    "407dfc82b3267d99c51cea5a0a0ab48bad3c28a250": {
+      "workers": {
+        "app/dashboard/page": {
+          "moduleId": 10184,
+          "async": false,
+          "exportedName": "forceConfirmEmail",
+          "filename": "app/actions/force-confirm-email.ts"
+        }
+      },
+      "layer": {
+        "app/dashboard/page": "action-browser"
+      },
+      "exportedName": "forceConfirmEmail",
+      "filename": "app/actions/force-confirm-email.ts"
+    }
+  },
+  "edge": {}
+}

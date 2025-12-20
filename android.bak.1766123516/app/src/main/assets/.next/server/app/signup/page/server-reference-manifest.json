@@ -1,0 +1,50 @@
+{
+  "node": {
+    "4001860d967ff1d29143ee49c09c9bbdff4d1af8fb": {
+      "workers": {
+        "app/signup/page": {
+          "moduleId": 16172,
+          "async": false,
+          "exportedName": "logAuditEvent",
+          "filename": "app/actions/audit-log.ts"
+        }
+      },
+      "layer": {
+        "app/signup/page": "action-browser"
+      },
+      "exportedName": "logAuditEvent",
+      "filename": "app/actions/audit-log.ts"
+    },
+    "40ccf2a3dde700e871dd0ca51628e0652e1064d905": {
+      "workers": {
+        "app/signup/page": {
+          "moduleId": 16172,
+          "async": false,
+          "exportedName": "registerPendingUser",
+          "filename": "app/actions/register-pending-user.ts"
+        }
+      },
+      "layer": {
+        "app/signup/page": "action-browser"
+      },
+      "exportedName": "registerPendingUser",
+      "filename": "app/actions/register-pending-user.ts"
+    },
+    "402c6d535aade73d322b5373083d5b4b6b869c009c": {
+      "workers": {
+        "app/signup/page": {
+          "moduleId": 16172,
+          "async": false,
+          "exportedName": "adminCreateUserSignup",
+          "filename": "app/actions/admin-signup.ts"
+        }
+      },
+      "layer": {
+        "app/signup/page": "action-browser"
+      },
+      "exportedName": "adminCreateUserSignup",
+      "filename": "app/actions/admin-signup.ts"
+    }
+  },
+  "edge": {}
+}
