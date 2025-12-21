@@ -671,7 +671,13 @@ export function FileManager({ projectId, driveFolderUrl, onDriveFolderUpdate, re
                             <CardTitle className="text-lg">Google Drive Folder</CardTitle>
                             <CardDescription>Main project folder for large files</CardDescription>
                         </div>
-                        <Button variant="outline" size="sm" onClick={() => setIsDriveFolderDialogOpen(true)} disabled={!!readOnly}>
+                        <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setIsDriveFolderDialogOpen(true)}
+                            disabled={!!readOnly}
+                        >
                             {driveFolderUrl ? 'Update' : 'Add'} Folder
                         </Button>
                     </div>
@@ -696,6 +702,7 @@ export function FileManager({ projectId, driveFolderUrl, onDriveFolderUpdate, re
                 <div className="flex items-center justify-between">
                     <div className="flex gap-2">
                         <Button
+                            type="button"
                             onClick={() => { debug.log('FILE_MANAGER', 'Open upload dialog'); setIsUploadDialogOpen(true) }}
                             disabled={files.length >= 20 || !!readOnly}
                         >
@@ -703,6 +710,7 @@ export function FileManager({ projectId, driveFolderUrl, onDriveFolderUpdate, re
                             Upload File
                         </Button>
                         <Button
+                            type="button"
                             onClick={() => {
                                 if (isSubmittingRef.current || isUploadingRef.current) return
                                 debug.log('FILE_MANAGER', 'Open add link dialog');
@@ -759,13 +767,14 @@ export function FileManager({ projectId, driveFolderUrl, onDriveFolderUpdate, re
                                             </div>
                                         </div>
                                         <div className="flex items-center gap-2">
-                                            <Button variant="ghost" size="sm" onClick={() => openPreview(file)}>
+                                            <Button type="button" variant="ghost" size="sm" onClick={() => openPreview(file)}>
                                                 <Eye className="h-4 w-4" />
                                             </Button>
-                                            <Button variant="ghost" size="sm" onClick={() => openFile(file)}>
+                                            <Button type="button" variant="ghost" size="sm" onClick={() => openFile(file)}>
                                                 <ExternalLink className="h-4 w-4" />
                                             </Button>
                                             <Button
+                                                type="button"
                                                 variant="ghost"
                                                 size="sm"
                                                 onClick={() => handleDeleteFile(file.id, file.file_url, file.storage_type)}
@@ -1042,10 +1051,10 @@ export function FileManager({ projectId, driveFolderUrl, onDriveFolderUpdate, re
                         )}
                     </div>
                     <DialogFooter>
-                        <Button variant="outline" onClick={() => setIsPreviewOpen(false)}>Close</Button>
+                        <Button type="button" variant="outline" onClick={() => setIsPreviewOpen(false)}>Close</Button>
                         {previewFile && (
                             previewFile.storage_type === 'supabase' ? (
-                                <Button onClick={() => openFile(previewFile)}>Open in new tab</Button>
+                                <Button type="button" onClick={() => openFile(previewFile)}>Open in new tab</Button>
                             ) : (
                                 <Button asChild>
                                     <a href={previewFile.file_url} target="_blank" rel="noopener noreferrer">Open in new tab</a>

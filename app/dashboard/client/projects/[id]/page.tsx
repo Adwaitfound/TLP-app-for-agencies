@@ -42,14 +42,15 @@ export default function ClientProjectDetailPage() {
     const [hasFetched, setHasFetched] = useState(false)
 
     const supabase = useMemo(() => createClient(), [])
-    const projectId = params.id as string
+    const projectId = (params?.id as string) || (typeof window !== 'undefined' ? window.location.pathname.split('/').pop() || '' : '')
 
     useEffect(() => {
         let mounted = true
 
         async function fetchProjectDetails() {
+            // Guard: if auth not ready or route param missing, stop loading
             if (!user || !projectId || hasFetched) {
-                if (!user) setLoading(false)
+                if (!user || !projectId) setLoading(false)
                 return
             }
 

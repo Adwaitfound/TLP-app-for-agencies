@@ -1,0 +1,1 @@
+The user provided an image that I need to save. Since I cannot directly write binary files, I'll guide the user to save it manually.

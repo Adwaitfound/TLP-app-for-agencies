@@ -4,12 +4,10 @@
     "webDir": "out",
     "bundledWebRuntime": false,
     "server": {
-        "url": "https://tlp-video-appdec20.vercel.app",
-        "cleartext": false,
+        "url": "http://192.168.1.37:3001/auth/select-role",
+        "cleartext": true,
         "allowNavigation": [
-            "*.vercel.app",
-            "*.thelostproject.xyz",
-            "*.supabase.co"
+            "*"
         ]
     },
     "ios": {
@@ -20,6 +18,11 @@
         "webContentsDebuggingEnabled": true
     },
     "plugins": {
+        "StatusBar": {
+            "overlaysWebView": false,
+            "backgroundColor": "#000000",
+            "style": "DARK"
+        },
         "App": {
             "exitOnBackButton": false
         },

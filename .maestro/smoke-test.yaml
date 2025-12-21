@@ -1,0 +1,100 @@
+appId: com.vidpro.app
+---
+
+# APK Smoke Test - Client Dashboard & File Manager
+# Run: maestro test .maestro/smoke-test.yaml
+
+- launchApp
+- assertVisible: "Choose Your Login Type"
+- assertVisible: "Client"
+
+# Open login dialog
+- tapOn: "Get Started"
+- assertVisible: "Choose Your Login Type"
+- assertVisible: "Client"
+
+# Select client login
+- tapOn: "Client"
+- assertVisible: 
+    text: "Login"
+
+# NOTE: Update credentials for your test client
+- tapOn: 
+    id: "email"
+- inputText: "avani@thelostproject.in"
+- tapOn:
+    id: "password"
+- inputText: "tlp1234"
+- tapOn: "Sign In"
+
+# Wait for dashboard to load
+- assertVisible:
+    text: "Welcome"
+
+# Check dashboard tab loaded
+- assertVisible: "Active Projects"
+- assertVisible: "Total Spent"
+
+# Switch to Projects tab
+- tapOn: "Projects"
+- assertVisible:
+    text: "Search projects"
+
+# Switch to Invoices tab
+- tapOn: "Invoices"
+- assertVisible:
+    text: "Search invoices"
+
+# Switch to Comments tab
+- tapOn: "Comments"
+- assertVisible:
+    text: "Search comments"
+
+# Return to Dashboard
+- tapOn: "Dashboard"
+- assertVisible: "Active Projects"
+
+# If projects exist, test file manager
+- tapOn: "Projects"
+- extendedWaitUntil:
+    visible: "View Details"
+- tapOn: "View Details"
+
+# Wait for project detail page
+- assertVisible:
+    text: "Files"
+
+# Scroll to Files section (may need adjustment based on screen)
+- scroll
+
+# Test Upload File button opens dialog
+- tapOn: "Upload File"
+- assertVisible:
+    text: "Upload File"
+- tapOn: "Cancel"
+
+# Test Add Drive Link button opens dialog
+- tapOn: "Add Drive Link"
+- assertVisible:
+    text: "Add Google Drive Link"
+- assertVisible: "File Name"
+- assertVisible: "Google Drive URL"
+- tapOn: "Cancel"
+
+# Test Drive Folder button (if visible)
+- tapOn:
+    text: "Add Folder|Update Folder"
+    optional: true
+- assertVisible:
+    text: "Set Google Drive Folder"
+    optional: true
+- tapOn:
+    text: "Cancel"
+    optional: true
+
+# Navigate back
+- back
+- assertVisible: "Projects"
+
+# Success
+- stopApp

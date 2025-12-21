@@ -35,7 +35,7 @@ const nextConfig: NextConfig = {
   },
 
   // Static page generation where possible
-  output: 'standalone',
+  // On Vercel, omit standalone output to use platform defaults
 
   // Headers for performance
   async headers() {
@@ -54,6 +54,41 @@ const nextConfig: NextConfig = {
         ],
       },
     ];
+  },
+
+  async redirects() {
+    return [
+      {
+        source: '/work',
+        destination: 'https://www.thelostproject.in/work',
+        permanent: false,
+      },
+      {
+        source: '/collections/video-production',
+        destination: 'https://www.thelostproject.in/collections/video-production',
+        permanent: false,
+      },
+      {
+        source: '/collections/social-media',
+        destination: 'https://www.thelostproject.in/collections/social-media',
+        permanent: false,
+      },
+      {
+        source: '/collections/design',
+        destination: 'https://www.thelostproject.in/collections/design',
+        permanent: false,
+      },
+      {
+        source: '/contact',
+        destination: 'https://www.thelostproject.in/pages/contact',
+        permanent: false,
+      },
+      {
+        source: '/shop',
+        destination: 'https://www.thelostproject.in/collections/all',
+        permanent: false,
+      },
+    ]
   },
 };
 

@@ -7,8 +7,6 @@ const DYNAMIC_CACHE = 'tlp-dynamic-v1';
 const STATIC_ASSETS = [
     '/',
     '/manifest.json',
-    '/icons/icon-192x192.png',
-    '/icons/icon-512x512.png',
 ];
 
 if (typeof window === 'undefined') {
@@ -91,8 +89,8 @@ if (typeof window === 'undefined') {
         const data = event.data ? event.data.json() : {};
         const options = {
             body: data.body || 'New notification',
-            icon: '/icons/icon-192x192.png',
-            badge: '/icons/badge-72x72.png',
+            icon: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR4nGNgYAAAAAMAAWgmWQ0AAAAASUVORK5CYII=',
+            badge: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR4nGNgYAAAAAMAAWgmWQ0AAAAASUVORK5CYII=',
             tag: data.tag || 'notification',
             requireInteraction: data.requireInteraction || false,
         };

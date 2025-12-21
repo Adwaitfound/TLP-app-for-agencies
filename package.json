@@ -2,6 +2,9 @@
   "name": "video-production-app",
   "version": "0.1.0",
   "private": true,
+  "engines": {
+    "node": "20.x"
+  },
   "scripts": {
     "dev": "next dev",
     "build": "next build",
@@ -14,7 +17,12 @@
     "build:apk": "npm run build && cd android && ./gradlew assembleRelease",
     "cap:add:android": "npx cap add android",
     "cap:sync": "npx cap sync",
-    "cap:open:android": "npx cap open android"
+    "cap:open:android": "npx cap open android",
+    "test:e2e": "playwright test",
+    "test:e2e:ui": "playwright test --ui",
+    "test:e2e:headed": "playwright test --headed",
+    "test:e2e:report": "playwright show-report",
+    "test:maestro": "maestro test .maestro/smoke-test.yaml"
   },
   "dependencies": {
     "@capacitor/android": "^6.1.0",
@@ -52,6 +60,7 @@
   },
   "devDependencies": {
     "@capacitor/cli": "^8.0.0",
+    "@playwright/test": "^1.57.0",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",

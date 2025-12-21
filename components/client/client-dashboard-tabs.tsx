@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useMemo } from "react"
+import { useState, useEffect, useMemo, useCallback } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -28,78 +28,99 @@ export default function ClientDashboardTabs() {
     const [comments, setComments] = useState<any[]>([])
     const [clientData, setClientData] = useState<any>(null)
     const [loading, setLoading] = useState(true)
+    const [error, setError] = useState<string | null>(null)
     const [searchQuery, setSearchQuery] = useState('')
     const [statusFilter, setStatusFilter] = useState<string>('all')
     const [invoiceFilter, setInvoiceFilter] = useState<string>('all')
     const [favoriteProjects, setFavoriteProjects] = useState<string[]>([])
 
-    useEffect(() => {
-        async function fetchClientData() {
-            if (!user || authLoading) return
+    const fetchClientData = useCallback(async () => {
+        // Guard when auth still initializing
+        if (!user || authLoading) {
+            if (!user && !authLoading) {
+                setClientData(null)
+                setProjects([])
+                setInvoices([])
+                setFiles([])
+                setComments([])
+                setLoading(false)
+            }
+            return
+        }
 
-            const supabase = createClient()
+        setLoading(true)
+        setError(null)
+        const supabase = createClient()
 
-            try {
-                // Get client record
-                const { data: clientRecord, error: clientError } = await supabase
-                    .from('clients')
-                    .select('*')
-                    .eq('user_id', user.id)
-                    .single()
+        try {
+            // Get client record
+            const { data: clientRecord, error: clientError } = await supabase
+                .from('clients')
+                .select('*')
+                .eq('user_id', user.id)
+                .single()
 
-                if (clientError) throw clientError
-                setClientData(clientRecord)
+            if (clientError) throw clientError
+            setClientData(clientRecord)
 
-                // Fetch projects for this client
-                const { data: projectsData, error: projectsError } = await supabase
-                    .from('projects')
-                    .select('*, clients(company_name)')
-                    .eq('client_id', clientRecord.id)
-                    .order('created_at', { ascending: false })
+            // Fetch projects for this client
+            const { data: projectsData, error: projectsError } = await supabase
+                .from('projects')
+                .select('*, clients(company_name)')
+                .eq('client_id', clientRecord.id)
+                .order('created_at', { ascending: false })
 
-                if (projectsError) throw projectsError
+            if (projectsError) throw projectsError
 
-                // Fetch invoices for this client
-                const { data: invoicesData, error: invoicesError } = await supabase
-                    .from('invoices')
-                    .select('*')
-                    .eq('client_id', clientRecord.id)
-                    .order('created_at', { ascending: false })
+            // Fetch invoices for this client
+            const { data: invoicesData, error: invoicesError } = await supabase
+                .from('invoices')
+                .select('*')
+                .eq('client_id', clientRecord.id)
+                .order('created_at', { ascending: false })
 
-                if (invoicesError) throw invoicesError
+            if (invoicesError) throw invoicesError
 
-                // Fetch all files for client's projects
-                const projectIds = projectsData?.map(p => p.id) || []
-                const { data: filesData, error: filesError } = await supabase
+            const projectIds = projectsData?.map(p => p.id) || []
+
+            // If there are no projects yet, short-circuit file/comment queries to avoid empty IN errors
+            let filesData: any[] = []
+            let commentsData: any[] = []
+            if (projectIds.length > 0) {
+                const { data: fetchedFiles, error: filesError } = await supabase
                     .from('project_files')
                     .select('*, projects(name)')
                     .in('project_id', projectIds)
                     .order('created_at', { ascending: false })
 
                 if (filesError) throw filesError
+                filesData = fetchedFiles || []
 
-                // Fetch all comments for client's projects
-                const { data: commentsData, error: commentsError } = await supabase
+                const { data: fetchedComments, error: commentsError } = await supabase
                     .from('project_comments')
                     .select('*, projects(name), user:users!user_id(full_name, email)')
                     .in('project_id', projectIds)
                     .order('created_at', { ascending: false })
 
                 if (commentsError) throw commentsError
-
-                setProjects(projectsData || [])
-                setInvoices(invoicesData || [])
-                setFiles(filesData || [])
-                setComments(commentsData || [])
-            } catch (error) {
-                console.error('Error fetching client data:', error)
-            } finally {
-                setLoading(false)
+                commentsData = fetchedComments || []
             }
-        }
 
-        fetchClientData()
+            setProjects(projectsData || [])
+            setInvoices(invoicesData || [])
+            setFiles(filesData)
+            setComments(commentsData)
+        } catch (err: any) {
+            console.error('Error fetching client data:', err)
+            setError('Failed to load your dashboard. Please try again.')
+        } finally {
+            setLoading(false)
+        }
     }, [user?.id, authLoading])
+
+    useEffect(() => {
+        fetchClientData()
+    }, [fetchClientData])
 
     const stats = useMemo(() => {
         const activeCount = projects.filter(p => p.status === 'in_progress' || p.status === 'in_review').length
@@ -163,6 +184,18 @@ export default function ClientDashboardTabs() {
             <div className="flex items-center justify-center h-96">
                 <p className="text-muted-foreground">Loading...</p>
             </div>
+        )
+    }
+
+    if (error) {
+        return (
+            <Card>
+                <CardContent className="flex flex-col gap-3 py-10 items-center text-center">
+                    <h2 className="text-lg font-semibold">Dashboard failed to load</h2>
+                    <p className="text-sm text-muted-foreground">{error}</p>
+                    <Button onClick={fetchClientData}>Retry</Button>
+                </CardContent>
+            </Card>
         )
     }
 
