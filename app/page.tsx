@@ -1,46 +1,19 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import {
   ArrowRight,
   BarChart3,
-  Briefcase,
-  Building2,
   CheckCircle,
   FileText,
   FolderKanban,
-  UserCog,
   Users,
   Zap,
 } from "lucide-react";
 
 export default function Home() {
-  const router = useRouter();
-  const [isLoading, setIsLoading] = useState(false);
-  const [showLoginOptions, setShowLoginOptions] = useState(false);
-
-  useEffect(() => {
-    router.prefetch("/login");
-  }, [router]);
-
-  const handleGetStarted = () => setShowLoginOptions(true);
-
-  const handleRoleLogin = (role: "admin" | "employee" | "client") => {
-    setIsLoading(true);
-    setShowLoginOptions(false);
-    router.push(`/login?role=${role}`);
-  };
 
   return (
     <div className="flex min-h-screen flex-col bg-background text-foreground">
@@ -57,13 +30,11 @@ export default function Home() {
             </div>
           </Link>
 
-          <Button
-            onClick={handleGetStarted}
-            disabled={isLoading}
-            className="gap-2 rounded-full bg-primary px-6 text-primary-foreground hover:bg-primary/90"
-          >
-            {isLoading ? "Loading..." : "Get Started"}
-            {!isLoading && <ArrowRight className="h-4 w-4" />}
+          <Button asChild className="gap-2 rounded-full bg-primary px-6 text-primary-foreground hover:bg-primary/90">
+            <Link href="/auth/select-role">
+              Get Started
+              <ArrowRight className="h-4 w-4" />
+            </Link>
           </Button>
         </div>
       </header>
@@ -116,20 +87,21 @@ export default function Home() {
               <div className="flex w-full flex-col gap-4 sm:w-auto sm:flex-row sm:justify-center">
                 <Button
                   size="lg"
-                  onClick={handleGetStarted}
-                  disabled={isLoading}
+                  asChild
                   className="w-full gap-2 rounded-full bg-primary px-8 text-primary-foreground hover:bg-primary/90 sm:w-auto"
                 >
-                  Get Started
-                  <ArrowRight className="h-5 w-5" />
+                  <Link href="/auth/select-role">
+                    Get Started
+                    <ArrowRight className="h-5 w-5" />
+                  </Link>
                 </Button>
                 <Button
                   size="lg"
                   variant="outline"
-                  onClick={handleGetStarted}
+                  asChild
                   className="w-full rounded-full bg-transparent px-8 sm:w-auto"
                 >
-                  Login
+                  <Link href="/auth/select-role">Login</Link>
                 </Button>
               </div>
             </div>
@@ -215,12 +187,13 @@ export default function Home() {
                 </p>
                 <Button
                   size="lg"
-                  onClick={handleGetStarted}
-                  disabled={isLoading}
+                  asChild
                   className="gap-2 rounded-full bg-primary px-8 text-primary-foreground hover:bg-primary/90"
                 >
-                  {isLoading ? "Loading..." : "Get Started"}
-                  {!isLoading && <ArrowRight className="h-5 w-5" />}
+                  <Link href="/auth/select-role">
+                    Get Started
+                    <ArrowRight className="h-5 w-5" />
+                  </Link>
                 </Button>
               </CardContent>
             </Card>
@@ -244,66 +217,6 @@ export default function Home() {
           </div>
         </div>
       </footer>
-
-      <Dialog open={showLoginOptions} onOpenChange={setShowLoginOptions}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Choose Your Login Type</DialogTitle>
-            <DialogDescription>
-              Select your role to access the appropriate dashboard.
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="grid gap-4 py-4">
-            {[
-              {
-                key: "admin" as const,
-                title: "Admin",
-                description: "Manage users, projects, and system settings.",
-                icon: UserCog,
-              },
-              {
-                key: "employee" as const,
-                title: "Employee",
-                description: "Work on assigned projects and deliverables.",
-                icon: Briefcase,
-              },
-              {
-                key: "client" as const,
-                title: "Client",
-                description: "Review updates, files, and invoices.",
-                icon: Building2,
-              },
-            ].map((role) => (
-              <Card
-                key={role.key}
-                role="button"
-                tabIndex={0}
-                className="cursor-pointer transition-colors hover:border-primary/50"
-                onClick={() => handleRoleLogin(role.key)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" || e.key === " ") {
-                    e.preventDefault();
-                    handleRoleLogin(role.key);
-                  }
-                }}
-              >
-                <CardContent className="flex items-center gap-4 p-6">
-                  <div className="rounded-full bg-primary/10 p-3">
-                    <role.icon className="h-6 w-6 text-primary" />
-                  </div>
-                  <div className="text-left">
-                    <div className="font-semibold">{role.title}</div>
-                    <div className="text-sm text-muted-foreground">
-                      {role.description}
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }
