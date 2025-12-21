@@ -1,553 +1,1177 @@
-"use client"
+"use client";
 
-import { useState, useEffect, useMemo, useCallback } from "react"
-import { useRouter, useSearchParams } from "next/navigation"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
+import { useState, useEffect, useMemo, useCallback } from "react";
+import Link from "next/link";
+import { useRouter, useSearchParams } from "next/navigation";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
-    FolderKanban, Download, FileText, Plus, Eye, Filter, CalendarClock,
-    Search, MessageSquare, TrendingUp, Clock, CheckCircle2, Star
-} from "lucide-react"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { StatusBadge } from "@/components/shared/status-badge"
-import { StatCard } from "@/components/shared/stat-card"
-import { createClient } from "@/lib/supabase/client"
-import { useAuth } from "@/contexts/auth-context"
-import { Progress } from "@/components/ui/progress"
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Badge } from "@/components/ui/badge";
+import {
+  FolderKanban,
+  Download,
+  FileText,
+  Plus,
+  Eye,
+  Search,
+  MessageSquare,
+  Clock,
+  Star,
+} from "lucide-react";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { StatusBadge } from "@/components/shared/status-badge";
+import { StatCard } from "@/components/shared/stat-card";
+import { createClient } from "@/lib/supabase/client";
+import { useAuth } from "@/contexts/auth-context";
+import { Progress } from "@/components/ui/progress";
+import { debug } from "@/lib/debug";
+import { getFileType, getGoogleDriveThumbnailUrl } from "@/lib/file-upload";
 
 export default function ClientDashboardTabs() {
-    const { user, loading: authLoading } = useAuth()
-    const router = useRouter()
-    const searchParams = useSearchParams()
-    const [activeTab, setActiveTab] = useState(searchParams.get('tab') || 'dashboard')
-    const [projects, setProjects] = useState<any[]>([])
-    const [invoices, setInvoices] = useState<any[]>([])
-    const [files, setFiles] = useState<any[]>([])
-    const [comments, setComments] = useState<any[]>([])
-    const [clientData, setClientData] = useState<any>(null)
-    const [loading, setLoading] = useState(true)
-    const [error, setError] = useState<string | null>(null)
-    const [searchQuery, setSearchQuery] = useState('')
-    const [statusFilter, setStatusFilter] = useState<string>('all')
-    const [invoiceFilter, setInvoiceFilter] = useState<string>('all')
-    const [favoriteProjects, setFavoriteProjects] = useState<string[]>([])
+  const { user, loading: authLoading } = useAuth();
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const [activeTab, setActiveTab] = useState("dashboard");
+  const [projects, setProjects] = useState<any[]>([]);
+  const [invoices, setInvoices] = useState<any[]>([]);
+  const [files, setFiles] = useState<any[]>([]);
+  const [comments, setComments] = useState<any[]>([]);
+  const [subProjects, setSubProjects] = useState<any[]>([]);
+  const [clientData, setClientData] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [invoiceFilter, setInvoiceFilter] = useState<string>("all");
+  const [favoriteProjects, setFavoriteProjects] = useState<string[]>([]);
+  const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
+  const [newCommentText, setNewCommentText] = useState<string>("");
+  const [newCommentFileId, setNewCommentFileId] = useState<string | null>(null);
+  const [newCommentTimestamp, setNewCommentTimestamp] = useState<string>("");
+  const [submittingComment, setSubmittingComment] = useState<boolean>(false);
 
-    const fetchClientData = useCallback(async () => {
-        // Guard when auth still initializing
-        if (!user || authLoading) {
-            if (!user && !authLoading) {
-                setClientData(null)
-                setProjects([])
-                setInvoices([])
-                setFiles([])
-                setComments([])
-                setLoading(false)
-            }
-            return
+  const userId = user?.id;
+
+  const tabParam = searchParams.get("tab");
+
+  useEffect(() => {
+    const nextTab = tabParam || "dashboard";
+    if (
+      nextTab === "dashboard" ||
+      nextTab === "projects" ||
+      nextTab === "invoices" ||
+      nextTab === "comments"
+    ) {
+      setActiveTab(nextTab);
+    } else {
+      setActiveTab("dashboard");
+    }
+  }, [tabParam]);
+
+  const handleTabChange = (nextValue: string) => {
+    const nextTab =
+      nextValue === "dashboard" ||
+      nextValue === "projects" ||
+      nextValue === "invoices" ||
+      nextValue === "comments"
+        ? nextValue
+        : "dashboard";
+
+    setActiveTab(nextTab);
+
+    const params = new URLSearchParams(searchParams.toString());
+    params.set("tab", nextTab);
+    router.replace(`/dashboard/client?${params.toString()}`);
+  };
+
+  const fetchClientData = useCallback(async () => {
+    // Guard when auth still initializing
+    if (!userId || authLoading) {
+      if (!userId && !authLoading) {
+        setClientData(null);
+        setProjects([]);
+        setInvoices([]);
+        setFiles([]);
+        setComments([]);
+        setLoading(false);
+      }
+      return;
+    }
+
+    setLoading(true);
+    setError(null);
+    const supabase = createClient();
+
+    try {
+      // Get client record
+      const { data: clientRecord, error: clientError } = await supabase
+        .from("clients")
+        .select("*")
+        .eq("user_id", userId)
+        .single();
+
+      if (clientError) {
+        console.error("[1/6] Clients query failed:", clientError);
+        throw clientError;
+      }
+      console.debug("[1/6] Clients query OK");
+      setClientData(clientRecord);
+
+      // Fetch projects for this client
+      const { data: projectsData, error: projectsError } = await supabase
+        .from("projects")
+        .select("*, clients(company_name)")
+        .eq("client_id", clientRecord.id)
+        .order("created_at", { ascending: false });
+
+      if (projectsError) {
+        console.error("[2/6] Projects query failed:", projectsError);
+        throw projectsError;
+      }
+      console.debug("[2/6] Projects query OK:", projectsData?.length);
+
+      const projectIds = projectsData?.map((p) => p.id) || [];
+
+      // Fetch invoices for this client.
+      // Some older records may be linked via project_id but have an unexpected/missing client_id.
+      const { data: invoicesByClient, error: invoicesByClientError } =
+        await supabase
+          .from("invoices")
+          .select("*")
+          .eq("client_id", clientRecord.id)
+          .eq("status", "sent")
+          .eq("shared_with_client", true)
+          .order("created_at", { ascending: false });
+
+      if (invoicesByClientError) {
+        console.error("[3/6] Invoices (by client) query failed:", invoicesByClientError);
+        throw invoicesByClientError;
+      }
+      console.debug("[3/6] Invoices (by client) query OK:", invoicesByClient?.length);
+
+      let invoicesByProject: any[] = [];
+      if (projectIds.length > 0) {
+        const { data: fetchedInvoices, error: invoicesByProjectError } =
+          await supabase
+            .from("invoices")
+            .select("*")
+            .in("project_id", projectIds)
+            .eq("status", "sent")
+            .eq("shared_with_client", true)
+            .order("created_at", { ascending: false });
+
+        if (invoicesByProjectError) {
+          console.error("[4/6] Invoices (by project) query failed:", invoicesByProjectError);
+          throw invoicesByProjectError;
         }
+        console.debug("[4/6] Invoices (by project) query OK:", fetchedInvoices?.length);
+        invoicesByProject = fetchedInvoices || [];
+      }
 
-        setLoading(true)
-        setError(null)
-        const supabase = createClient()
+      const invoicesData = (() => {
+        const byId = new Map<string, any>();
+        for (const inv of invoicesByClient || []) byId.set(inv.id, inv);
+        for (const inv of invoicesByProject || []) byId.set(inv.id, inv);
+        return Array.from(byId.values());
+      })();
 
-        try {
-            // Get client record
-            const { data: clientRecord, error: clientError } = await supabase
-                .from('clients')
-                .select('*')
-                .eq('user_id', user.id)
-                .single()
+      // If there are no projects yet, short-circuit file/comment queries to avoid empty IN errors
+      let filesData: any[] = [];
+      let commentsData: any[] = [];
+      let subProjectsData: any[] = [];
+      if (projectIds.length > 0) {
+        const { data: fetchedFiles, error: filesError } = await supabase
+          .from("project_files")
+          .select("*, projects(name)")
+          .in("project_id", projectIds)
+          .order("created_at", { ascending: false });
 
-            if (clientError) throw clientError
-            setClientData(clientRecord)
-
-            // Fetch projects for this client
-            const { data: projectsData, error: projectsError } = await supabase
-                .from('projects')
-                .select('*, clients(company_name)')
-                .eq('client_id', clientRecord.id)
-                .order('created_at', { ascending: false })
-
-            if (projectsError) throw projectsError
-
-            // Fetch invoices for this client
-            const { data: invoicesData, error: invoicesError } = await supabase
-                .from('invoices')
-                .select('*')
-                .eq('client_id', clientRecord.id)
-                .order('created_at', { ascending: false })
-
-            if (invoicesError) throw invoicesError
-
-            const projectIds = projectsData?.map(p => p.id) || []
-
-            // If there are no projects yet, short-circuit file/comment queries to avoid empty IN errors
-            let filesData: any[] = []
-            let commentsData: any[] = []
-            if (projectIds.length > 0) {
-                const { data: fetchedFiles, error: filesError } = await supabase
-                    .from('project_files')
-                    .select('*, projects(name)')
-                    .in('project_id', projectIds)
-                    .order('created_at', { ascending: false })
-
-                if (filesError) throw filesError
-                filesData = fetchedFiles || []
-
-                const { data: fetchedComments, error: commentsError } = await supabase
-                    .from('project_comments')
-                    .select('*, projects(name), user:users!user_id(full_name, email)')
-                    .in('project_id', projectIds)
-                    .order('created_at', { ascending: false })
-
-                if (commentsError) throw commentsError
-                commentsData = fetchedComments || []
-            }
-
-            setProjects(projectsData || [])
-            setInvoices(invoicesData || [])
-            setFiles(filesData)
-            setComments(commentsData)
-        } catch (err: any) {
-            console.error('Error fetching client data:', err)
-            setError('Failed to load your dashboard. Please try again.')
-        } finally {
-            setLoading(false)
+        if (filesError) {
+          console.error("[5a/6] Files query failed:", filesError);
+          throw filesError;
         }
-    }, [user?.id, authLoading])
+        console.debug("[5a/6] Files query OK:", fetchedFiles?.length);
+        filesData = fetchedFiles || [];
 
-    useEffect(() => {
-        fetchClientData()
-    }, [fetchClientData])
+        const { data: fetchedComments, error: commentsError } = await supabase
+          .from("project_comments")
+          .select("*, projects(name), user:users!user_id(full_name, email)")
+          .in("project_id", projectIds)
+          .order("created_at", { ascending: false });
 
-    const stats = useMemo(() => {
-        const activeCount = projects.filter(p => p.status === 'in_progress' || p.status === 'in_review').length
-        const completedCount = projects.filter(p => p.status === 'completed').length
-        const pendingInvoicesCount = invoices.filter(inv => inv.status === 'sent' || inv.status === 'overdue').length
-        const totalSpent = invoices.filter(inv => inv.status === 'paid').reduce((sum, inv) => sum + (inv.total || 0), 0)
+        if (commentsError) {
+          console.error("[5b/6] Comments query failed:", commentsError);
+          throw commentsError;
+        }
+        console.debug("[5b/6] Comments query OK:", fetchedComments?.length);
+        commentsData = fetchedComments || [];
 
+        const { data: fetchedSubProjects, error: subProjectsError } = await supabase
+          .from("sub_projects")
+          .select("*")
+          .in("project_id", projectIds)
+          .order("created_at", { ascending: false });
+
+        if (subProjectsError) {
+          // Not all clients may have visibility to sub_projects under RLS; proceed without blocking.
+          console.warn("[6/6] sub_projects fetch skipped due to permissions:", subProjectsError);
+          subProjectsData = [];
+        } else {
+          console.debug("[6/6] Sub-projects query OK:", fetchedSubProjects?.length);
+          subProjectsData = fetchedSubProjects || [];
+        }
+      }
+
+      setProjects(projectsData || []);
+      setInvoices(invoicesData || []);
+      setFiles(filesData);
+      setComments(commentsData);
+      setSubProjects(subProjectsData);
+    } catch (err: any) {
+      const errorDetails = {
+        message: err?.message || "Unknown error",
+        code: err?.code || "UNKNOWN",
+        details: err?.details || null,
+        hint: err?.hint || null,
+        status: err?.status || null,
+        statusText: err?.statusText || null,
+        toString: err?.toString?.() || String(err),
+        fullError: JSON.stringify(err, null, 2),
+      };
+      console.error("❌ Error fetching client data:", errorDetails);
+      console.error("   Raw error object:", err);
+      setError("Failed to load your dashboard. Please try again.");
+    } finally {
+      setLoading(false);
+    }
+  }, [userId, authLoading]);
+
+  useEffect(() => {
+    fetchClientData();
+  }, [fetchClientData]);
+
+  const stats = useMemo(() => {
+    const activeCount = projects.filter(
+      (p) => p.status === "in_progress" || p.status === "in_review",
+    ).length;
+    const completedCount = projects.filter(
+      (p) => p.status === "completed",
+    ).length;
+    const pendingInvoicesCount = invoices.filter(
+      (inv) => inv.status === "sent" || inv.status === "overdue",
+    ).length;
+    const totalSpent = invoices
+      .filter((inv) => inv.status === "paid")
+      .reduce((sum, inv) => sum + (inv.total || 0), 0);
+
+    return {
+      activeProjects: activeCount,
+      completedProjects: completedCount,
+      pendingInvoices: pendingInvoicesCount,
+      totalSpent,
+    };
+  }, [projects, invoices]);
+
+  const filteredProjects = useMemo(() => {
+    let filtered = projects;
+    if (statusFilter !== "all") {
+      filtered = filtered.filter((p) => p.status === statusFilter);
+    }
+    if (searchQuery.trim()) {
+      filtered = filtered.filter(
+        (p) =>
+          p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          p.description?.toLowerCase().includes(searchQuery.toLowerCase()),
+      );
+    }
+    return filtered;
+  }, [projects, statusFilter, searchQuery]);
+
+  const filteredInvoices = useMemo(() => {
+    let filtered = invoices;
+    if (invoiceFilter !== "all") {
+      filtered = filtered.filter((inv) => inv.status === invoiceFilter);
+    }
+    if (searchQuery.trim()) {
+      filtered = filtered.filter((inv) =>
+        inv.invoice_number?.toLowerCase().includes(searchQuery.toLowerCase()),
+      );
+    }
+    return filtered;
+  }, [invoices, invoiceFilter, searchQuery]);
+
+  const filteredComments = useMemo(() => {
+    if (!searchQuery.trim()) return comments;
+    return comments.filter(
+      (c) =>
+        c.comment_text?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        c.projects?.name?.toLowerCase().includes(searchQuery.toLowerCase()),
+    );
+  }, [comments, searchQuery]);
+
+  const toggleFavorite = (projectId: string) => {
+    setFavoriteProjects((prev) =>
+      prev.includes(projectId)
+        ? prev.filter((id) => id !== projectId)
+        : [...prev, projectId],
+    );
+  };
+
+  const projectDetailsHref = useCallback((projectId: string) => {
+    return `/client/project-details/${projectId}`;
+  }, []);
+
+  const selectedProject = useMemo(
+    () => projects.find((p) => p.id === selectedProjectId) || null,
+    [projects, selectedProjectId],
+  );
+
+  const selectedMilestones = useMemo(
+    () => subProjects.filter((m) => m.project_id === selectedProjectId),
+    [subProjects, selectedProjectId],
+  );
+
+  const selectedFiles = useMemo(
+    () => files.filter((f) => f.project_id === selectedProjectId),
+    [files, selectedProjectId],
+  );
+
+  const selectedComments = useMemo(
+    () => comments.filter((c) => c.project_id === selectedProjectId),
+    [comments, selectedProjectId],
+  );
+
+  const submitComment = useCallback(async () => {
+    if (!selectedProjectId || submittingComment) return;
+    const text = newCommentText.trim();
+    if (!text) return;
+    try {
+      setSubmittingComment(true);
+      const timestampSeconds = newCommentTimestamp
+        ? Number.parseFloat(newCommentTimestamp)
+        : null;
+      const res = await fetch(`/api/client/projects/${selectedProjectId}/comments`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          comment_text: text,
+          file_id: newCommentFileId ? newCommentFileId : null,
+          timestamp_seconds: Number.isFinite(timestampSeconds as number)
+            ? (timestampSeconds as number)
+            : null,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error || "Failed to submit comment");
+      // Prepend the new comment and clear form
+      setComments((prev) => [data.comment, ...prev]);
+      setNewCommentText("");
+      setNewCommentFileId("");
+      setNewCommentTimestamp("");
+    } catch (e: any) {
+      console.error("Submit comment failed:", e);
+      alert(e?.message || "Could not submit comment. Please try again.");
+    } finally {
+      setSubmittingComment(false);
+    }
+  }, [selectedProjectId, newCommentText, newCommentFileId, newCommentTimestamp, submittingComment]);
+
+  const statusAccent = useMemo(() => {
+    const s = selectedProject?.status;
+    switch (s) {
+      case "in_progress":
         return {
-            activeProjects: activeCount,
-            completedProjects: completedCount,
-            pendingInvoices: pendingInvoicesCount,
-            totalSpent,
-        }
-    }, [projects, invoices])
-
-    const filteredProjects = useMemo(() => {
-        let filtered = projects
-        if (statusFilter !== 'all') {
-            filtered = filtered.filter(p => p.status === statusFilter)
-        }
-        if (searchQuery.trim()) {
-            filtered = filtered.filter(p =>
-                p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                p.description?.toLowerCase().includes(searchQuery.toLowerCase())
-            )
-        }
-        return filtered
-    }, [projects, statusFilter, searchQuery])
-
-    const filteredInvoices = useMemo(() => {
-        let filtered = invoices
-        if (invoiceFilter !== 'all') {
-            filtered = filtered.filter(inv => inv.status === invoiceFilter)
-        }
-        if (searchQuery.trim()) {
-            filtered = filtered.filter(inv =>
-                inv.invoice_number?.toLowerCase().includes(searchQuery.toLowerCase())
-            )
-        }
-        return filtered
-    }, [invoices, invoiceFilter, searchQuery])
-
-    const filteredComments = useMemo(() => {
-        if (!searchQuery.trim()) return comments
-        return comments.filter(c =>
-            c.comment_text?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-            c.projects?.name?.toLowerCase().includes(searchQuery.toLowerCase())
-        )
-    }, [comments, searchQuery])
-
-    const toggleFavorite = (projectId: string) => {
-        setFavoriteProjects(prev =>
-            prev.includes(projectId)
-                ? prev.filter(id => id !== projectId)
-                : [...prev, projectId]
-        )
+          card: "border-emerald-500/30 bg-emerald-500/5",
+          badge: "bg-emerald-500/10 text-emerald-600",
+        };
+      case "in_review":
+        return {
+          card: "border-amber-500/30 bg-amber-500/5",
+          badge: "bg-amber-500/10 text-amber-600",
+        };
+      case "completed":
+        return {
+          card: "border-sky-500/30 bg-sky-500/5",
+          badge: "bg-sky-500/10 text-sky-600",
+        };
+      case "planning":
+        return {
+          card: "border-slate-500/30 bg-slate-500/5",
+          badge: "bg-slate-500/10 text-slate-600",
+        };
+      default:
+        return {
+          card: "border-primary/20 bg-card",
+          badge: "bg-primary/10",
+        };
     }
+  }, [selectedProject?.status]);
 
-    if (authLoading || loading) {
-        return (
-            <div className="flex items-center justify-center h-96">
-                <p className="text-muted-foreground">Loading...</p>
-            </div>
-        )
-    }
-
-    if (error) {
-        return (
-            <Card>
-                <CardContent className="flex flex-col gap-3 py-10 items-center text-center">
-                    <h2 className="text-lg font-semibold">Dashboard failed to load</h2>
-                    <p className="text-sm text-muted-foreground">{error}</p>
-                    <Button onClick={fetchClientData}>Retry</Button>
-                </CardContent>
-            </Card>
-        )
-    }
-
-    const statsCards = [
-        {
-            title: "Active Projects",
-            value: stats.activeProjects.toString(),
-            change: `${stats.completedProjects} completed`,
-            trend: "neutral" as const,
-            icon: FolderKanban,
-        },
-        {
-            title: "Total Spent",
-            value: `₹${stats.totalSpent.toLocaleString()}`,
-            change: "Paid invoices",
-            trend: "neutral" as const,
-            icon: FileText,
-        },
-        {
-            title: "Pending Invoices",
-            value: stats.pendingInvoices.toString(),
-            change: "Awaiting payment",
-            trend: stats.pendingInvoices > 0 ? "down" as const : "neutral" as const,
-            icon: FileText,
-        },
-        {
-            title: "Total Comments",
-            value: comments.length.toString(),
-            change: "Across all projects",
-            trend: "neutral" as const,
-            icon: MessageSquare,
-        },
-    ]
-
+  if (authLoading || loading) {
     return (
-        <div className="flex flex-col gap-6">
-            {/* Header */}
-            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-                <div>
-                    <h1 className="text-3xl font-bold tracking-tight">Welcome, {clientData?.company_name}</h1>
-                    <p className="text-muted-foreground">Manage your projects, invoices, and communications</p>
-                </div>
-                <Button onClick={() => router.push('/dashboard/client/request')}>
-                    <Plus className="h-4 w-4 mr-2" />
-                    Request Project
-                </Button>
-            </div>
+      <div className="flex items-center justify-center h-96">
+        <p className="text-muted-foreground">Loading...</p>
+      </div>
+    );
+  }
 
-            {/* Tabs */}
-            <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-                <TabsList className="grid w-full grid-cols-4">
-                    <TabsTrigger value="dashboard">Dashboard</TabsTrigger>
-                    <TabsTrigger value="projects">Projects</TabsTrigger>
-                    <TabsTrigger value="invoices">Invoices</TabsTrigger>
-                    <TabsTrigger value="comments">Comments</TabsTrigger>
-                </TabsList>
+  if (error) {
+    return (
+      <Card>
+        <CardContent className="flex flex-col gap-3 py-10 items-center text-center">
+          <h2 className="text-lg font-semibold">Dashboard failed to load</h2>
+          <p className="text-sm text-muted-foreground">{error}</p>
+          <Button onClick={fetchClientData}>Retry</Button>
+        </CardContent>
+      </Card>
+    );
+  }
 
-                {/* Dashboard Tab */}
-                <TabsContent value="dashboard" className="space-y-6">
-                    <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
-                        {statsCards.map((stat) => (
-                            <StatCard key={stat.title} {...stat} />
-                        ))}
-                    </div>
+  const statsCards = [
+    {
+      title: "Active Projects",
+      value: stats.activeProjects.toString(),
+      change: `${stats.completedProjects} completed`,
+      trend: "neutral" as const,
+      icon: FolderKanban,
+    },
+    {
+      title: "Total Spent",
+      value: `₹${stats.totalSpent.toLocaleString()}`,
+      change: "Paid invoices",
+      trend: "neutral" as const,
+      icon: FileText,
+    },
+    {
+      title: "Pending Invoices",
+      value: stats.pendingInvoices.toString(),
+      change: "Awaiting payment",
+      trend:
+        stats.pendingInvoices > 0 ? ("down" as const) : ("neutral" as const),
+      icon: FileText,
+    },
+    {
+      title: "Total Comments",
+      value: comments.length.toString(),
+      change: "Across all projects",
+      trend: "neutral" as const,
+      icon: MessageSquare,
+    },
+  ];
 
-                    <div className="grid gap-4 lg:grid-cols-2">
-                        {/* Recent Projects */}
-                        <Card>
-                            <CardHeader>
-                                <CardTitle>Recent Projects</CardTitle>
-                                <CardDescription>Your latest active projects</CardDescription>
-                            </CardHeader>
-                            <CardContent>
-                                <div className="space-y-3">
-                                    {projects.slice(0, 5).map((project) => (
-                                        <div
-                                            key={project.id}
-                                            className="p-3 rounded-lg border hover:bg-accent cursor-pointer transition-colors"
-                                            onClick={() => router.push(`/dashboard/client/projects/${project.id}`)}
-                                        >
-                                            <div className="flex items-center justify-between mb-2">
-                                                <p className="font-medium">{project.name}</p>
-                                                <StatusBadge status={project.status} />
-                                            </div>
-                                            <div className="flex items-center gap-2">
-                                                <Progress value={project.progress_percentage || 0} className="h-2 flex-1" />
-                                                <span className="text-xs text-muted-foreground">{project.progress_percentage || 0}%</span>
-                                            </div>
-                                        </div>
-                                    ))}
-                                </div>
-                            </CardContent>
-                        </Card>
-
-                        {/* Recent Deliverables */}
-                        <Card>
-                            <CardHeader>
-                                <CardTitle>Latest Deliverables</CardTitle>
-                                <CardDescription>Recently uploaded files</CardDescription>
-                            </CardHeader>
-                            <CardContent>
-                                <div className="space-y-3">
-                                    {files.slice(0, 5).map((file) => (
-                                        <div key={file.id} className="flex items-center justify-between p-3 rounded-lg border">
-                                            <div className="flex items-center gap-3 flex-1 min-w-0">
-                                                <FileText className="h-5 w-5 text-muted-foreground flex-shrink-0" />
-                                                <div className="flex-1 min-w-0">
-                                                    <p className="font-medium text-sm truncate">{file.file_name}</p>
-                                                    <p className="text-xs text-muted-foreground">{file.projects?.name}</p>
-                                                </div>
-                                            </div>
-                                            <Button
-                                                size="sm"
-                                                variant="ghost"
-                                                onClick={() => router.push(`/dashboard/client/projects/${file.project_id}`)}
-                                            >
-                                                <Eye className="h-4 w-4" />
-                                            </Button>
-                                        </div>
-                                    ))}
-                                </div>
-                            </CardContent>
-                        </Card>
-                    </div>
-                </TabsContent>
-
-                {/* Projects Tab */}
-                <TabsContent value="projects" className="space-y-4">
-                    {/* Search and Filters */}
-                    <div className="flex flex-col sm:flex-row gap-3">
-                        <div className="relative flex-1">
-                            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                            <Input
-                                placeholder="Search projects..."
-                                value={searchQuery}
-                                onChange={(e) => setSearchQuery(e.target.value)}
-                                className="pl-9"
-                            />
-                        </div>
-                        <Select value={statusFilter} onValueChange={setStatusFilter}>
-                            <SelectTrigger className="w-[180px]">
-                                <SelectValue placeholder="Filter by status" />
-                            </SelectTrigger>
-                            <SelectContent>
-                                <SelectItem value="all">All Status</SelectItem>
-                                <SelectItem value="planning">Planning</SelectItem>
-                                <SelectItem value="in_progress">In Progress</SelectItem>
-                                <SelectItem value="in_review">In Review</SelectItem>
-                                <SelectItem value="completed">Completed</SelectItem>
-                            </SelectContent>
-                        </Select>
-                    </div>
-
-                    {/* Projects Grid */}
-                    <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-                        {filteredProjects.map((project) => (
-                            <Card key={project.id} className="hover:shadow-lg transition-shadow">
-                                <CardHeader>
-                                    <div className="flex items-start justify-between">
-                                        <div className="flex-1">
-                                            <CardTitle className="text-lg">{project.name}</CardTitle>
-                                            <CardDescription className="mt-1 line-clamp-2">
-                                                {project.description || 'No description'}
-                                            </CardDescription>
-                                        </div>
-                                        <Button
-                                            variant="ghost"
-                                            size="icon"
-                                            onClick={(e) => {
-                                                e.stopPropagation()
-                                                toggleFavorite(project.id)
-                                            }}
-                                        >
-                                            <Star className={`h-4 w-4 ${favoriteProjects.includes(project.id) ? 'fill-yellow-500 text-yellow-500' : ''}`} />
-                                        </Button>
-                                    </div>
-                                </CardHeader>
-                                <CardContent className="space-y-3">
-                                    <div className="flex items-center justify-between text-sm">
-                                        <span className="text-muted-foreground">Status</span>
-                                        <StatusBadge status={project.status} />
-                                    </div>
-                                    <div className="space-y-1">
-                                        <div className="flex items-center justify-between text-sm">
-                                            <span className="text-muted-foreground">Progress</span>
-                                            <span className="font-medium">{project.progress_percentage || 0}%</span>
-                                        </div>
-                                        <Progress value={project.progress_percentage || 0} className="h-2" />
-                                    </div>
-                                    {project.deadline && (
-                                        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                                            <Clock className="h-4 w-4" />
-                                            <span>Due: {new Date(project.deadline).toLocaleDateString()}</span>
-                                        </div>
-                                    )}
-                                    <Button
-                                        className="w-full"
-                                        onClick={() => router.push(`/dashboard/client/projects/${project.id}`)}
-                                    >
-                                        <Eye className="h-4 w-4 mr-2" />
-                                        View Details
-                                    </Button>
-                                </CardContent>
-                            </Card>
-                        ))}
-                    </div>
-
-                    {filteredProjects.length === 0 && (
-                        <Card>
-                            <CardContent className="flex flex-col items-center justify-center py-12">
-                                <FolderKanban className="h-12 w-12 text-muted-foreground mb-4" />
-                                <h3 className="text-lg font-semibold mb-2">No projects found</h3>
-                                <p className="text-sm text-muted-foreground mb-4">Try adjusting your filters</p>
-                            </CardContent>
-                        </Card>
-                    )}
-                </TabsContent>
-
-                {/* Invoices Tab */}
-                <TabsContent value="invoices" className="space-y-4">
-                    {/* Search and Filters */}
-                    <div className="flex flex-col sm:flex-row gap-3">
-                        <div className="relative flex-1">
-                            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                            <Input
-                                placeholder="Search invoices..."
-                                value={searchQuery}
-                                onChange={(e) => setSearchQuery(e.target.value)}
-                                className="pl-9"
-                            />
-                        </div>
-                        <Select value={invoiceFilter} onValueChange={setInvoiceFilter}>
-                            <SelectTrigger className="w-[180px]">
-                                <SelectValue placeholder="Filter by status" />
-                            </SelectTrigger>
-                            <SelectContent>
-                                <SelectItem value="all">All Invoices</SelectItem>
-                                <SelectItem value="draft">Draft</SelectItem>
-                                <SelectItem value="sent">Sent</SelectItem>
-                                <SelectItem value="paid">Paid</SelectItem>
-                                <SelectItem value="overdue">Overdue</SelectItem>
-                            </SelectContent>
-                        </Select>
-                    </div>
-
-                    {/* Invoices List */}
-                    <div className="space-y-3">
-                        {filteredInvoices.map((invoice) => (
-                            <Card key={invoice.id} className="hover:shadow-md transition-shadow">
-                                <CardContent className="p-6">
-                                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-                                        <div className="flex-1">
-                                            <div className="flex items-center gap-3 mb-2">
-                                                <h3 className="font-semibold text-lg">{invoice.invoice_number}</h3>
-                                                <StatusBadge status={invoice.status} />
-                                            </div>
-                                            <div className="grid grid-cols-2 gap-2 text-sm text-muted-foreground">
-                                                <div>Issue Date: {new Date(invoice.issue_date).toLocaleDateString()}</div>
-                                                {invoice.due_date && (
-                                                    <div>Due: {new Date(invoice.due_date).toLocaleDateString()}</div>
-                                                )}
-                                            </div>
-                                        </div>
-                                        <div className="flex items-center gap-3">
-                                            <div className="text-right">
-                                                <p className="text-2xl font-bold">₹{invoice.total?.toLocaleString()}</p>
-                                            </div>
-                                            <div className="flex gap-2">
-                                                {invoice.invoice_file_url && (
-                                                    <Button
-                                                        size="sm"
-                                                        variant="outline"
-                                                        onClick={() => window.open(invoice.invoice_file_url, '_blank')}
-                                                    >
-                                                        <Download className="h-4 w-4 mr-1" />
-                                                        PDF
-                                                    </Button>
-                                                )}
-                                                {invoice.status !== 'paid' && (
-                                                    <Button size="sm">
-                                                        Pay Now
-                                                    </Button>
-                                                )}
-                                            </div>
-                                        </div>
-                                    </div>
-                                </CardContent>
-                            </Card>
-                        ))}
-                    </div>
-
-                    {filteredInvoices.length === 0 && (
-                        <Card>
-                            <CardContent className="flex flex-col items-center justify-center py-12">
-                                <FileText className="h-12 w-12 text-muted-foreground mb-4" />
-                                <h3 className="text-lg font-semibold mb-2">No invoices found</h3>
-                                <p className="text-sm text-muted-foreground">Try adjusting your filters</p>
-                            </CardContent>
-                        </Card>
-                    )}
-                </TabsContent>
-
-                {/* Comments Tab */}
-                <TabsContent value="comments" className="space-y-4">
-                    {/* Search */}
-                    <div className="relative">
-                        <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                        <Input
-                            placeholder="Search comments..."
-                            value={searchQuery}
-                            onChange={(e) => setSearchQuery(e.target.value)}
-                            className="pl-9"
-                        />
-                    </div>
-
-                    {/* Comments List */}
-                    <div className="space-y-3">
-                        {filteredComments.map((comment) => (
-                            <Card key={comment.id} className="hover:shadow-md transition-shadow">
-                                <CardContent className="p-6">
-                                    <div className="flex items-start justify-between mb-3">
-                                        <div className="flex-1">
-                                            <p className="font-medium">{comment.projects?.name}</p>
-                                            <p className="text-xs text-muted-foreground">
-                                                By {comment.user?.full_name || comment.user?.email || 'Unknown'} • {new Date(comment.created_at).toLocaleString()}
-                                            </p>
-                                        </div>
-                                        <Button
-                                            size="sm"
-                                            variant="outline"
-                                            onClick={() => router.push(`/dashboard/client/projects/${comment.project_id}`)}
-                                        >
-                                            View Project
-                                        </Button>
-                                    </div>
-                                    <p className="text-sm">{comment.comment_text}</p>
-                                </CardContent>
-                            </Card>
-                        ))}
-                    </div>
-
-                    {filteredComments.length === 0 && (
-                        <Card>
-                            <CardContent className="flex flex-col items-center justify-center py-12">
-                                <MessageSquare className="h-12 w-12 text-muted-foreground mb-4" />
-                                <h3 className="text-lg font-semibold mb-2">No comments found</h3>
-                                <p className="text-sm text-muted-foreground">Comments will appear here</p>
-                            </CardContent>
-                        </Card>
-                    )}
-                </TabsContent>
-            </Tabs>
+  return (
+    <div className="flex flex-col gap-6">
+      {/* Header */}
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight">
+            Welcome, {clientData?.company_name}
+          </h1>
+          <p className="text-muted-foreground">
+            Manage your projects, invoices, and communications
+          </p>
         </div>
-    )
+        <Button onClick={() => router.push("/contact")}>
+          <Plus className="h-4 w-4 mr-2" />
+          Request Project
+        </Button>
+      </div>
+
+      {/* Tabs */}
+      <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
+        <TabsList className="grid w-full grid-cols-4">
+          <TabsTrigger value="dashboard">Dashboard</TabsTrigger>
+          <TabsTrigger value="projects">Projects</TabsTrigger>
+          <TabsTrigger value="invoices">Invoices</TabsTrigger>
+          <TabsTrigger value="comments">Comments</TabsTrigger>
+        </TabsList>
+
+        {/* Dashboard Tab */}
+        <TabsContent value="dashboard" className="space-y-6">
+          <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
+            {statsCards.map((stat) => (
+              <StatCard key={stat.title} {...stat} />
+            ))}
+          </div>
+
+          <div className="grid gap-4 lg:grid-cols-2">
+            {/* Recent Projects */}
+            <Card>
+              <CardHeader>
+                <CardTitle>Recent Projects</CardTitle>
+                <CardDescription>Your latest active projects</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-3">
+                  {projects.slice(0, 5).map((project) => (
+                    <div
+                      key={project.id}
+                      className="p-3 rounded-lg border hover:bg-accent cursor-pointer transition-colors"
+                        onClick={() => {
+                          debug.log("CLIENT_DASHBOARD", "Recent project clicked", {
+                            projectId: project.id,
+                            projectName: project.name,
+                          });
+                          setSelectedProjectId(project.id);
+                        }}
+                    >
+                      <div className="flex items-center justify-between mb-2">
+                        <p className="font-medium">{project.name}</p>
+                        <StatusBadge status={project.status} />
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Progress
+                          value={project.progress_percentage || 0}
+                          className="h-2 flex-1"
+                        />
+                        <span className="text-xs text-muted-foreground">
+                          {project.progress_percentage || 0}%
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Recent Deliverables */}
+            <Card>
+              <CardHeader>
+                <CardTitle>Latest Deliverables</CardTitle>
+                <CardDescription>Recently uploaded files</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-3">
+                  {files.slice(0, 5).map((file) => (
+                    <div
+                      key={file.id}
+                      className="flex items-center justify-between p-3 rounded-lg border"
+                    >
+                      <div className="flex items-center gap-3 flex-1 min-w-0">
+                        {(() => {
+                          const type = file.file_type || getFileType(file.file_name || "");
+                          const isImage = type === "image";
+                          const isVideo = type === "video";
+                          const thumb =
+                            file.thumbnail_url ||
+                            (file.storage_type === "gdrive" ? getGoogleDriveThumbnailUrl(file.file_url, 160) : null) ||
+                            (isImage ? file.file_url : null) ||
+                            (isVideo && file.video_thumbnail_url ? file.video_thumbnail_url : null);
+                          return thumb ? (
+                            <img src={thumb} alt={file.file_name || "File"} className="h-10 w-10 rounded object-cover flex-shrink-0" />
+                          ) : (
+                            <FileText className="h-5 w-5 text-muted-foreground flex-shrink-0" />
+                          );
+                        })()}
+                        <div className="flex-1 min-w-0">
+                          <p className="font-medium text-sm truncate">
+                            {file.file_name}
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            {file.projects?.name}
+                          </p>
+                        </div>
+                      </div>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => file.project_id && setSelectedProjectId(file.project_id)}
+                        disabled={!file.project_id}
+                      >
+                        <Eye className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        </TabsContent>
+
+        {/* Projects Tab */}
+        <TabsContent value="projects" className="space-y-4">
+          {/* Search and Filters */}
+          <div className="flex flex-col sm:flex-row gap-3">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Search projects..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="pl-9"
+              />
+            </div>
+            <Select value={statusFilter} onValueChange={setStatusFilter}>
+              <SelectTrigger className="w-[180px]">
+                <SelectValue placeholder="Filter by status" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Status</SelectItem>
+                <SelectItem value="planning">Planning</SelectItem>
+                <SelectItem value="in_progress">In Progress</SelectItem>
+                <SelectItem value="in_review">In Review</SelectItem>
+                <SelectItem value="completed">Completed</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* Projects Grid */}
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+            {filteredProjects.map((project) => (
+              <Card
+                key={project.id}
+                className="hover:shadow-lg transition-shadow"
+              >
+                <CardHeader>
+                  <div className="flex items-start justify-between">
+                    <div className="flex-1">
+                      <CardTitle className="text-lg">{project.name}</CardTitle>
+                      <CardDescription className="mt-1 line-clamp-2">
+                        {project.description || "No description"}
+                      </CardDescription>
+                    </div>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        toggleFavorite(project.id);
+                      }}
+                    >
+                      <Star
+                        className={`h-4 w-4 ${favoriteProjects.includes(project.id) ? "fill-yellow-500 text-yellow-500" : ""}`}
+                      />
+                    </Button>
+                  </div>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-muted-foreground">Status</span>
+                    <StatusBadge status={project.status} />
+                  </div>
+                  <div className="space-y-1">
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-muted-foreground">Progress</span>
+                      <span className="font-medium">
+                        {project.progress_percentage || 0}%
+                      </span>
+                    </div>
+                    <Progress
+                      value={project.progress_percentage || 0}
+                      className="h-2"
+                    />
+                  </div>
+                  {project.deadline && (
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                      <Clock className="h-4 w-4" />
+                      <span>
+                        Due: {new Date(project.deadline).toLocaleDateString()}
+                      </span>
+                    </div>
+                  )}
+                  <Button
+                    className="w-full"
+                    onClick={() => {
+                      debug.log("CLIENT_DASHBOARD", "View Details clicked", {
+                        projectId: project.id,
+                        projectName: project.name,
+                      });
+                      setSelectedProjectId(project.id);
+                    }}
+                  >
+                    <Eye className="h-4 w-4 mr-2" />
+                    View Details
+                  </Button>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+
+          {filteredProjects.length === 0 && (
+            <Card>
+              <CardContent className="flex flex-col items-center justify-center py-12">
+                <FolderKanban className="h-12 w-12 text-muted-foreground mb-4" />
+                <h3 className="text-lg font-semibold mb-2">
+                  No projects found
+                </h3>
+                <p className="text-sm text-muted-foreground mb-4">
+                  Try adjusting your filters
+                </p>
+              </CardContent>
+            </Card>
+          )}
+        </TabsContent>
+
+        {/* Invoices Tab */}
+        <TabsContent value="invoices" className="space-y-4">
+          {/* Search and Filters */}
+          <div className="flex flex-col sm:flex-row gap-3">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Search invoices..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="pl-9"
+              />
+            </div>
+            <Select value={invoiceFilter} onValueChange={setInvoiceFilter}>
+              <SelectTrigger className="w-[180px]">
+                <SelectValue placeholder="Filter by status" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Invoices</SelectItem>
+                <SelectItem value="draft">Draft</SelectItem>
+                <SelectItem value="sent">Sent</SelectItem>
+                <SelectItem value="paid">Paid</SelectItem>
+                <SelectItem value="overdue">Overdue</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* Invoices List */}
+          <div className="space-y-3">
+            {filteredInvoices.map((invoice) => (
+              <Card
+                key={invoice.id}
+                className="hover:shadow-md transition-shadow"
+              >
+                <CardContent className="p-6">
+                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-3 mb-2">
+                        <h3 className="font-semibold text-lg">
+                          {invoice.invoice_number}
+                        </h3>
+                        <StatusBadge status={invoice.status} />
+                      </div>
+                      <div className="grid grid-cols-2 gap-2 text-sm text-muted-foreground">
+                        <div>
+                          Issue Date:{" "}
+                          {new Date(invoice.issue_date).toLocaleDateString()}
+                        </div>
+                        {invoice.due_date && (
+                          <div>
+                            Due:{" "}
+                            {new Date(invoice.due_date).toLocaleDateString()}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <div className="text-right">
+                        <p className="text-2xl font-bold">
+                          ₹{invoice.total?.toLocaleString()}
+                        </p>
+                      </div>
+                      <div className="flex gap-2">
+                        {invoice.invoice_file_url && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() =>
+                              window.open(invoice.invoice_file_url, "_blank")
+                            }
+                          >
+                            <Download className="h-4 w-4 mr-1" />
+                            PDF
+                          </Button>
+                        )}
+                        {invoice.status !== "paid" && (
+                          <Button size="sm">Pay Now</Button>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+
+          {filteredInvoices.length === 0 && (
+            <Card>
+              <CardContent className="flex flex-col items-center justify-center py-12">
+                <FileText className="h-12 w-12 text-muted-foreground mb-4" />
+                <h3 className="text-lg font-semibold mb-2">
+                  No invoices found
+                </h3>
+                <p className="text-sm text-muted-foreground">
+                  Try adjusting your filters
+                </p>
+              </CardContent>
+            </Card>
+          )}
+        </TabsContent>
+
+        {/* Comments Tab */}
+        <TabsContent value="comments" className="space-y-4">
+          {/* Search */}
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              placeholder="Search comments..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="pl-9"
+            />
+          </div>
+
+          {/* Comments List */}
+          <div className="space-y-3">
+            {filteredComments.map((comment) => (
+              <Card
+                key={comment.id}
+                className="hover:shadow-md transition-shadow"
+              >
+                <CardContent className="p-6">
+                  <div className="flex items-start justify-between mb-3">
+                    <div className="flex-1">
+                      <p className="font-medium">{comment.projects?.name}</p>
+                      <p className="text-xs text-muted-foreground">
+                        By{" "}
+                        {comment.user?.full_name ||
+                          comment.user?.email ||
+                          "Unknown"}{" "}
+                        • {new Date(comment.created_at).toLocaleString()}
+                      </p>
+                    </div>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() =>
+                        comment.project_id ? setSelectedProjectId(comment.project_id) : null
+                      }
+                    >
+                      View Details
+                    </Button>
+                  </div>
+                  <p className="text-sm">{comment.comment_text}</p>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+
+          {filteredComments.length === 0 && (
+            <Card>
+              <CardContent className="flex flex-col items-center justify-center py-12">
+                <MessageSquare className="h-12 w-12 text-muted-foreground mb-4" />
+                <h3 className="text-lg font-semibold mb-2">
+                  No comments found
+                </h3>
+                <p className="text-sm text-muted-foreground">
+                  Comments will appear here
+                </p>
+              </CardContent>
+            </Card>
+          )}
+        </TabsContent>
+      </Tabs>
+
+      <Dialog
+        open={!!selectedProjectId}
+        onOpenChange={(open) => {
+          if (!open) setSelectedProjectId(null);
+        }}
+      >
+        <DialogContent className="w-[95vw] max-w-4xl sm:w-[80vw] p-0">
+          {selectedProject ? (
+            <>
+              <DialogHeader className="sticky top-0 z-10 bg-background/95 backdrop-blur border-b px-4 py-3">
+                <DialogTitle className="flex flex-wrap items-center gap-3 justify-between">
+                  <span className="text-xl font-semibold">{selectedProject.name}</span>
+                  <StatusBadge status={selectedProject.status} />
+                </DialogTitle>
+                <DialogDescription>
+                  Project details stay in your dashboard.
+                </DialogDescription>
+              </DialogHeader>
+
+              <div className="max-h-[85vh] overflow-y-auto p-4">
+              <div className="grid gap-4 md:grid-cols-4">
+                <Card>
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-sm font-medium text-muted-foreground">Progress</CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-2">
+                    <div className="flex items-center justify-between text-sm font-semibold">
+                      <span>{selectedProject.progress_percentage ?? 0}%</span>
+                      <Badge className={`text-xs ${statusAccent.badge}`}>{selectedProject.status ?? "—"}</Badge>
+                    </div>
+                    <Progress value={selectedProject.progress_percentage ?? 0} className="h-2" />
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-sm font-medium text-muted-foreground">Timeline</CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-1 text-sm">
+                    <div className="flex items-center gap-2">
+                      <Clock className="h-4 w-4 text-muted-foreground" />
+                      <span>Start: {selectedProject.start_date ? new Date(selectedProject.start_date).toLocaleDateString() : "—"}</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Clock className="h-4 w-4 text-muted-foreground" />
+                      <span>Due: {selectedProject.end_date ? new Date(selectedProject.end_date).toLocaleDateString() : "—"}</span>
+                    </div>
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-sm font-medium text-muted-foreground">Artifacts</CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-1 text-sm">
+                    <div className="flex items-center gap-2">
+                      <FolderKanban className="h-4 w-4 text-muted-foreground" />
+                      <span>{selectedMilestones.length} milestones</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <FileText className="h-4 w-4 text-muted-foreground" />
+                      <span>{selectedFiles.length} files</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <MessageSquare className="h-4 w-4 text-muted-foreground" />
+                      <span>{selectedComments.length} comments</span>
+                    </div>
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-sm font-medium text-muted-foreground">Meta</CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-1 text-sm">
+                    <div className="flex items-center gap-2">
+                      <Clock className="h-4 w-4 text-muted-foreground" />
+                      <span>Created {selectedProject.created_at ? new Date(selectedProject.created_at).toLocaleDateString() : "—"}</span>
+                    </div>
+                    {selectedProject.updated_at ? (
+                      <div className="flex items-center gap-2">
+                        <Clock className="h-4 w-4 text-muted-foreground" />
+                        <span>Updated {new Date(selectedProject.updated_at).toLocaleDateString()}</span>
+                      </div>
+                    ) : null}
+                  </CardContent>
+                </Card>
+              </div>
+
+              <div className="space-y-4">
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Overview</CardTitle>
+                    <CardDescription>Status and description</CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-3 text-sm">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <StatusBadge status={selectedProject.status} />
+                      <Badge className={statusAccent.badge}>Client-owned</Badge>
+                    </div>
+                    {selectedProject.description ? (
+                      <div className="whitespace-pre-wrap leading-relaxed">{selectedProject.description}</div>
+                    ) : (
+                      <div className="text-muted-foreground">No description provided.</div>
+                    )}
+                  </CardContent>
+                </Card>
+
+                <div className="grid gap-4 lg:grid-cols-2">
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>Milestones</CardTitle>
+                      <CardDescription>Key steps and due dates</CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-2">
+                      {selectedMilestones.length ? (
+                        <ul className="space-y-2 text-sm">
+                          {selectedMilestones.map((m: any) => (
+                            <li key={m.id} className="flex items-center justify-between gap-3 rounded-md border p-3">
+                              <div className="min-w-0">
+                                <div className="font-medium truncate">{m.title || m.name || "Milestone"}</div>
+                                <div className="text-xs text-muted-foreground">
+                                  {m.status ?? "—"}
+                                  {m.due_date ? ` • Due ${m.due_date}` : ""}
+                                </div>
+                              </div>
+                              {m.progress_percentage != null ? (
+                                <span className="text-xs font-medium">{m.progress_percentage}%</span>
+                              ) : null}
+                            </li>
+                          ))}
+                        </ul>
+                      ) : (
+                        <div className="text-sm text-muted-foreground">No milestones yet.</div>
+                      )}
+                    </CardContent>
+                  </Card>
+
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>Files</CardTitle>
+                      <CardDescription>Latest uploads</CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-2">
+                      {selectedFiles.length ? (
+                        <ul className="space-y-2 text-sm">
+                          {selectedFiles.map((f: any) => (
+                            <li key={f.id} className="flex items-center justify-between gap-3 rounded-md border p-3">
+                              <div className="flex items-center gap-3 min-w-0">
+                                {(() => {
+                                  const type = f.file_type || getFileType(f.file_name || "");
+                                  const isImage = type === "image";
+                                  const isVideo = type === "video";
+                                  const thumb =
+                                    f.thumbnail_url ||
+                                    (f.storage_type === "gdrive" ? getGoogleDriveThumbnailUrl(f.file_url, 160) : null) ||
+                                    (isImage ? f.file_url : null) ||
+                                    (isVideo && f.video_thumbnail_url ? f.video_thumbnail_url : null);
+                                  return thumb ? (
+                                    <img src={thumb} alt={f.file_name || "File"} className="h-10 w-10 rounded object-cover flex-shrink-0" />
+                                  ) : (
+                                    <FileText className="h-5 w-5 text-muted-foreground flex-shrink-0" />
+                                  );
+                                })()}
+                                <div className="min-w-0">
+                                  <div className="font-medium truncate">{f.file_name ?? f.name ?? "File"}</div>
+                                  {f.created_at ? (
+                                    <div className="text-xs text-muted-foreground">
+                                      {new Date(f.created_at).toLocaleString()}
+                                    </div>
+                                  ) : null}
+                                </div>
+                              </div>
+                              {f.file_url ? (
+                                <a
+                                  href={f.file_url}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+                                >
+                                  Open
+                                </a>
+                              ) : (
+                                <span className="text-xs text-muted-foreground">No link</span>
+                              )}
+                            </li>
+                          ))}
+                        </ul>
+                      ) : (
+                        <div className="text-sm text-muted-foreground">No files uploaded yet.</div>
+                      )}
+                    </CardContent>
+                  </Card>
+                </div>
+
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Comments</CardTitle>
+                    <CardDescription>Feedback and discussion</CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-3">
+                    <div className="space-y-3 rounded-md border p-3">
+                      <div className="grid gap-3">
+                        <div className="space-y-1">
+                          <Label htmlFor="newCommentText">Add your feedback</Label>
+                          <Textarea
+                            id="newCommentText"
+                            placeholder="Type your comment here..."
+                            value={newCommentText}
+                            onChange={(e) => setNewCommentText(e.target.value)}
+                            rows={3}
+                          />
+                        </div>
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                          <div className="space-y-1">
+                            <Label htmlFor="associateFile">Associate to file (optional)</Label>
+                            <Select
+                              value={newCommentFileId ?? ""}
+                              onValueChange={(v) =>
+                                setNewCommentFileId(v === "none" ? null : v)
+                              }
+                            >
+                              <SelectTrigger id="associateFile">
+                                <SelectValue placeholder="Select a file" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="none">None</SelectItem>
+                                {selectedFiles.map((f: any) => (
+                                  <SelectItem key={f.id} value={f.id}>
+                                    {f.file_name ?? f.name ?? "File"}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          <div className="space-y-1 md:col-span-2">
+                            <Label htmlFor="timestamp">Timestamp (seconds, optional)</Label>
+                            <Input
+                              id="timestamp"
+                              type="number"
+                              inputMode="decimal"
+                              placeholder="e.g. 42.5"
+                              value={newCommentTimestamp}
+                              onChange={(e) => setNewCommentTimestamp(e.target.value)}
+                            />
+                          </div>
+                        </div>
+                        <div className="flex justify-end">
+                          <Button
+                            onClick={submitComment}
+                            disabled={submittingComment || !newCommentText.trim()}
+                          >
+                            {submittingComment ? "Submitting..." : "Post Comment"}
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                    {selectedComments.length ? (
+                      <ul className="space-y-3 text-sm">
+                        {selectedComments.map((c: any) => (
+                          <li key={c.id} className="rounded-md border p-3 space-y-1">
+                            <div className="text-xs text-muted-foreground">
+                              {c.user?.full_name || c.user?.email || "Unknown"}
+                              {c.created_at ? ` · ${new Date(c.created_at).toLocaleString()}` : ""}
+                            </div>
+                            <div className="whitespace-pre-wrap leading-relaxed">{c.comment_text ?? c.comment ?? ""}</div>
+                            {c.file_id ? (
+                              <div className="text-xs text-muted-foreground mt-1">
+                                Linked file: {selectedFiles.find((f) => f.id === c.file_id)?.file_name ?? "Unknown"}
+                                {c.timestamp_seconds != null ? ` • at ${c.timestamp_seconds}s` : ""}
+                              </div>
+                            ) : null}
+                          </li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <div className="text-sm text-muted-foreground">No comments yet.</div>
+                    )}
+                  </CardContent>
+                </Card>
+              </div>
+              </div>
+            </>
+          ) : null}
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
 }

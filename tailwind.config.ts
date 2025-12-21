@@ -8,6 +8,10 @@ const config: Config = {
     './components/**/*.{ts,tsx}',
     './app/**/*.{ts,tsx}',
     './src/**/*.{ts,tsx}',
+    './types/**/*.{ts,tsx}',
+    './lib/**/*.{ts,tsx}',
+    './contexts/**/*.{ts,tsx}',
+    './hooks/**/*.{ts,tsx}',
   ],
   theme: {
     container: {

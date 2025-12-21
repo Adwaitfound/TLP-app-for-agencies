@@ -72,7 +72,9 @@ export default function RootLayout({
         <link rel="preconnect" href={process.env.NEXT_PUBLIC_SUPABASE_URL} />
         <link rel="dns-prefetch" href={process.env.NEXT_PUBLIC_SUPABASE_URL} />
       </head>
-      <body className={`${geistSans.variable} ${geistMono.variable} font-sans antialiased`}>
+      <body
+        className={`${geistSans.variable} ${geistMono.variable} font-sans antialiased`}
+      >
         <ThemeProvider
           attribute="class"
           defaultTheme="system"
@@ -94,10 +96,31 @@ export default function RootLayout({
               // Register service worker only in production to avoid dev caching issues
               (function(){
                 try {
-                  var isProd = (typeof process !== 'undefined' && process.env && process.env.NODE_ENV === 'production') || (window && window.location && !window.location.hostname.includes('localhost'));
-                  if (isProd && 'serviceWorker' in navigator) {
-                    window.addEventListener('load', () => {
-                      navigator.serviceWorker.register('/sw.js').catch(() => {});
+                  var env = ${JSON.stringify(process.env.NODE_ENV)};
+                  var isProd = env === 'production';
+
+                  // In dev (including LAN/IP access), make sure no old SW/caches interfere with styling/assets.
+                  if (!isProd) {
+                    if ('serviceWorker' in navigator) {
+                      navigator.serviceWorker.getRegistrations().then(function (regs) {
+                        regs.forEach(function (reg) {
+                          reg.unregister();
+                        });
+                      }).catch(function () {});
+                    }
+                    if (typeof caches !== 'undefined' && caches && caches.keys) {
+                      caches.keys().then(function (keys) {
+                        keys.forEach(function (key) {
+                          caches.delete(key);
+                        });
+                      }).catch(function () {});
+                    }
+                    return;
+                  }
+
+                  if ('serviceWorker' in navigator) {
+                    window.addEventListener('load', function () {
+                      navigator.serviceWorker.register('/sw.js').catch(function () {});
                     });
                   }
                 } catch (e) {}

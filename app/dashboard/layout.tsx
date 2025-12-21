@@ -1,23 +1,27 @@
-"use client"
+"use client";
 
-import { usePathname } from "next/navigation"
-import { Sidebar } from "@/components/dashboard/sidebar"
-import { Header } from "@/components/dashboard/header"
+import { usePathname } from "next/navigation";
+import { Sidebar } from "@/components/dashboard/sidebar";
+import { Header } from "@/components/dashboard/header";
 
 export default function DashboardLayout({
   children,
 }: {
-  children: React.ReactNode
+  children: React.ReactNode;
 }) {
-  const pathname = usePathname()
+  const pathname = usePathname();
 
   // Check if this is a client or employee route - they have their own layouts
-  const isClientRoute = pathname.startsWith('/dashboard/client/') || pathname === '/dashboard/client'
-  const isEmployeeRoute = pathname.startsWith('/dashboard/employee/') || pathname === '/dashboard/employee'
+  const isClientRoute =
+    pathname.startsWith("/dashboard/client/") ||
+    pathname === "/dashboard/client";
+  const isEmployeeRoute =
+    pathname.startsWith("/dashboard/employee/") ||
+    pathname === "/dashboard/employee";
 
   // Client and employee routes have their own layouts, so just pass through children
   if (isClientRoute || isEmployeeRoute) {
-    return <>{children}</>
+    return <>{children}</>;
   }
 
   // Admin routes use the sidebar + header layout
@@ -33,5 +37,5 @@ export default function DashboardLayout({
         </main>
       </div>
     </div>
-  )
+  );
 }

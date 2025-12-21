@@ -4,27 +4,27 @@ test.describe('Landing Page', () => {
     test('should load and show Get Started button', async ({ page }) => {
         await page.goto('/')
 
-        // Check for Lost Project branding in header (not footer)
-        await expect(page.getByRole('link', { name: /Video-first studio/i })).toBeVisible()
+        // Header branding
+        await expect(page.locator('header').getByRole('img', { name: /the lost project/i })).toBeVisible()
 
-        // Check hero heading
-        await expect(page.locator('h1').filter({ hasText: /video-first crew/i })).toBeVisible()
+        // Hero heading
+        await expect(page.getByRole('heading', { level: 1 })).toContainText(/production/i)
 
-        // Check Get Started button exists
-        const getStartedBtn = page.getByRole('button', { name: /get started/i }).first()
-        await expect(getStartedBtn).toBeVisible()
+        // Primary CTA exists
+        await expect(page.getByRole('button', { name: /^get started$/i }).first()).toBeVisible()
     })
 
-    test('should open login dialog on Get Started', async ({ page }) => {
+    test('should open login dialog on primary CTA', async ({ page }) => {
         await page.goto('/')
 
-        const getStartedBtn = page.getByRole('button', { name: /get started/i }).first()
-        await getStartedBtn.click()
+        const primaryCta = page.getByRole('button', { name: /^get started$/i }).first()
+        await primaryCta.click()
 
         // Dialog should appear
-        await expect(page.locator('text=Choose Your Login Type')).toBeVisible()
-        await expect(page.locator('text=Admin')).toBeVisible()
-        await expect(page.locator('text=Employee')).toBeVisible()
-        await expect(page.locator('text=Client')).toBeVisible()
+        const dialog = page.getByRole('dialog')
+        await expect(dialog.getByText('Choose Your Login Type', { exact: true })).toBeVisible()
+        await expect(dialog.getByText('Admin', { exact: true })).toBeVisible()
+        await expect(dialog.getByText('Employee', { exact: true })).toBeVisible()
+        await expect(dialog.getByText('Client', { exact: true })).toBeVisible()
     })
 })

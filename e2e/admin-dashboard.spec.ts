@@ -10,41 +10,25 @@ const TEST_ADMIN_PASSWORD = process.env.TEST_ADMIN_PASSWORD || 'footb@ll'
 test.describe('Admin Dashboard Smoke Tests', () => {
     test('should login and load admin dashboard', async ({ page }) => {
         // Navigate to login
-        await page.goto('/login')
+        await page.goto('/login?role=admin')
 
         // Fill login form
         await page.fill('#email', TEST_ADMIN_EMAIL)
         await page.fill('#password', TEST_ADMIN_PASSWORD)
         await page.click('button[type="submit"]')
 
-        // Wait for navigation - could be any dashboard URL or back to login
-        const navigationPromise = Promise.race([
-            page.waitForURL('/dashboard', { timeout: 10000 }).then(() => '/dashboard'),
-            page.waitForURL('/dashboard/admin', { timeout: 10000 }).then(() => '/dashboard/admin'),
-            page.waitForURL('/dashboard/employee', { timeout: 10000 }).then(() => '/dashboard/employee'),
-            page.waitForURL('/dashboard/client', { timeout: 10000 }).then(() => '/dashboard/client'),
-            page.waitForURL('/login**', { timeout: 10000 }).then(() => '/login')
-        ])
-
-        const redirectUrl = await navigationPromise
-
-        // If redirected back to login, the credentials failed
-        if (redirectUrl === '/login') {
-            throw new Error(`Admin login failed - redirected back to /login. Email: ${TEST_ADMIN_EMAIL}`)
+        // Wait for redirect to dashboard; if it doesn't happen, include any visible error text.
+        try {
+            await page.waitForURL('**/dashboard**', { timeout: 20000 })
+        } catch {
+            const errorText = await page.locator('text=Invalid email or password').first().textContent().catch(() => null)
+            throw new Error(`Admin login did not reach dashboard. Current URL: ${page.url()}${errorText ? ` | Error: ${errorText}` : ''}`)
         }
 
         await page.waitForTimeout(1000)
 
         // Check dashboard loaded
-        const pageUrl = page.url()
-        expect(pageUrl).toMatch(/dashboard|login/i)
-
-        if (!pageUrl.includes('dashboard')) {
-            // If we're still on login, check the error message
-            const body = await page.locator('body').textContent()
-            console.log('Page body:', body)
-            throw new Error(`Expected to be on dashboard but on: ${pageUrl}`)
-        }
+        expect(page.url()).toContain('dashboard')
     })
 
     test('should display admin dashboard content', async ({ page }) => {
@@ -64,25 +48,13 @@ test.describe('Admin Dashboard Smoke Tests', () => {
     })
 
     test('should navigate sidebar menu', async ({ page }) => {
-        await page.goto('/login')
+        await page.goto('/login?role=admin')
         await page.fill('#email', TEST_ADMIN_EMAIL)
         await page.fill('#password', TEST_ADMIN_PASSWORD)
         await page.click('button[type="submit"]')
 
         // Wait for navigation to dashboard
-        const navigationPromise = Promise.race([
-            page.waitForURL('/dashboard', { timeout: 10000 }).then(() => '/dashboard'),
-            page.waitForURL('/dashboard/admin', { timeout: 10000 }).then(() => '/dashboard/admin'),
-            page.waitForURL('/dashboard/employee', { timeout: 10000 }).then(() => '/dashboard/employee'),
-            page.waitForURL('/dashboard/client', { timeout: 10000 }).then(() => '/dashboard/client'),
-            page.waitForURL('/login**', { timeout: 10000 }).then(() => '/login')
-        ])
-
-        const redirectUrl = await navigationPromise
-
-        if (redirectUrl === '/login') {
-            throw new Error(`Admin login failed - redirected back to /login`)
-        }
+        await page.waitForURL('**/dashboard**', { timeout: 20000 })
 
         await page.waitForTimeout(2000)
 

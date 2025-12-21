@@ -1,6 +1,6 @@
 "use client"
 
-import { createContext, useContext, useState, useEffect, ReactNode } from "react"
+import { createContext, useContext, useState, useEffect, ReactNode, useMemo } from "react"
 import { useRouter } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
 import type { User as SupabaseUser } from "@supabase/supabase-js"
@@ -40,7 +40,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const [loading, setLoading] = useState(true)
     const [profileCache, setProfileCache] = useState<Map<string, User>>(new Map())
     const router = useRouter()
-    const supabase = createClient()
+    const supabase = useMemo(() => createClient(), [])
+
+    const withTimeout = async <T,>(label: string, promise: Promise<T>, timeoutMs = 15000): Promise<T> => {
+        return await Promise.race([
+            promise,
+            new Promise<T>((_, reject) => {
+                const id = setTimeout(() => {
+                    clearTimeout(id)
+                    reject(new Error(`${label} timed out after ${timeoutMs}ms`))
+                }, timeoutMs)
+            }),
+        ])
+    }
 
     const ensureUserProfile = async (sessionUser: SupabaseUser) => {
         // Check cache first
@@ -115,7 +127,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const initAuth = async () => {
             try {
                 debug.log('AUTH', 'Initializing auth context...')
-                const { data: { session }, error: sessionError } = await supabase.auth.getSession()
+                const { data: { session }, error: sessionError } = await withTimeout(
+                    'auth.getSession',
+                    supabase.auth.getSession(),
+                    15000,
+                )
                 if (sessionError) {
                     debug.error('AUTH', 'Failed to fetch session', { message: sessionError.message, code: sessionError.code })
                 }
@@ -124,9 +140,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
                 if (session?.user) {
                     setSupabaseUser(session.user)
-                    const profile = await ensureUserProfile(session.user)
-                    if (profile) {
-                        setUser(profile)
+                    try {
+                        const profile = await withTimeout(
+                            'ensureUserProfile',
+                            ensureUserProfile(session.user),
+                            15000,
+                        )
+                        if (profile) {
+                            setUser(profile)
+                        }
+                    } catch (e: any) {
+                        debug.error('AUTH', 'Profile load timed out/failed; continuing without profile', {
+                            message: e?.message,
+                        })
+                        // Allow app to continue; downstream pages can still use supabaseUser id.
+                        setUser(null)
                     }
                 } else {
                     debug.log('AUTH', 'No active session found')
@@ -147,21 +175,35 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             console.log('Auth state change event:', event, 'user:', session?.user?.email)
             debug.log('AUTH', 'Auth state changed', { event, email: session?.user?.email, userId: session?.user?.id })
 
-            if (session?.user) {
-                setSupabaseUser(session.user)
-                const profile = await ensureUserProfile(session.user)
+            try {
+                if (session?.user) {
+                    setSupabaseUser(session.user)
+                    try {
+                        const profile = await withTimeout(
+                            'ensureUserProfile(onAuthStateChange)',
+                            ensureUserProfile(session.user),
+                            15000,
+                        )
 
-                if (profile) {
-                    setUser(profile)
+                        if (profile) {
+                            setUser(profile)
+                        } else {
+                            setUser(null)
+                        }
+                    } catch (e: any) {
+                        debug.error('AUTH', 'Profile load timed out/failed on auth change', {
+                            message: e?.message,
+                        })
+                        setUser(null)
+                    }
                 } else {
+                    debug.log('AUTH', 'Session cleared, setting user to null')
+                    setSupabaseUser(null)
                     setUser(null)
                 }
-            } else {
-                debug.log('AUTH', 'Session cleared, setting user to null')
-                setSupabaseUser(null)
-                setUser(null)
+            } finally {
+                setLoading(false)
             }
-            setLoading(false)
         })
 
         return () => {

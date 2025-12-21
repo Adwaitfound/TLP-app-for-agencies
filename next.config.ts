@@ -8,6 +8,18 @@ const nextConfig: NextConfig = {
   images: {
     unoptimized: true,
     formats: ['image/webp'],
+    remotePatterns: [
+      {
+        protocol: 'https',
+        hostname: 'www.thelostproject.in',
+        pathname: '/**',
+      },
+      {
+        protocol: 'https',
+        hostname: 'static.wixstatic.com',
+        pathname: '/**',
+      },
+    ],
   },
   // Suppress hydration warnings from Radix UI dynamic IDs
   logging: {

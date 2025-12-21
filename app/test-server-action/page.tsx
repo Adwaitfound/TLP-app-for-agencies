@@ -1,22 +1,22 @@
-'use client'
+"use client";
 
-import { pingServer } from '@/app/actions/ping'
-import { useState } from 'react'
-import { Button } from '@/components/ui/button'
+import { pingServer } from "@/app/actions/ping";
+import { useState } from "react";
+import { Button } from "@/components/ui/button";
 
 export default function TestServerActionPage() {
-  const [result, setResult] = useState<any>(null)
-  const [loading, setLoading] = useState(false)
+  const [result, setResult] = useState<any>(null);
+  const [loading, setLoading] = useState(false);
 
   async function handleTest() {
-    setLoading(true)
+    setLoading(true);
     try {
-      const res = await pingServer()
-      setResult({ success: true, data: res })
+      const res = await pingServer();
+      setResult({ success: true, data: res });
     } catch (error: any) {
-      setResult({ success: false, error: error.message })
+      setResult({ success: false, error: error.message });
     } finally {
-      setLoading(false)
+      setLoading(false);
     }
   }
 
@@ -24,7 +24,7 @@ export default function TestServerActionPage() {
     <div className="p-8">
       <h1 className="text-2xl font-bold mb-4">Server Action Test</h1>
       <Button onClick={handleTest} disabled={loading}>
-        {loading ? 'Testing...' : 'Test Server Action'}
+        {loading ? "Testing..." : "Test Server Action"}
       </Button>
       {result && (
         <div className="mt-4 p-4 border rounded">
@@ -32,5 +32,5 @@ export default function TestServerActionPage() {
         </div>
       )}
     </div>
-  )
+  );
 }

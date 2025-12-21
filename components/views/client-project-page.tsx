@@ -1,11 +1,13 @@
-"use client"
+"use client";
 
-import EnhancedClientProjectDetail from '@/components/client/enhanced-project-detail'
+import EnhancedClientProjectDetail from "@/components/client/enhanced-project-detail";
 
 interface ClientProjectPageProps {
-    projectId: string
+  projectId: string;
 }
 
-export default function ClientProjectPage({ projectId }: ClientProjectPageProps) {
-    return <EnhancedClientProjectDetail projectId={projectId} />
+export default function ClientProjectPage({
+  projectId,
+}: ClientProjectPageProps) {
+  return <EnhancedClientProjectDetail projectId={projectId} />;
 }

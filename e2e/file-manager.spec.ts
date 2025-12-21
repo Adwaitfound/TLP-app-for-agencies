@@ -30,7 +30,7 @@ test.describe('File Manager Smoke Tests', () => {
             try {
                 await firstMenuButton.click({ timeout: 3000 })
                 await page.waitForTimeout(500)
-            } catch (e) {
+            } catch {
                 // Menu button might not be clickable, continue anyway
             }
         }
@@ -84,7 +84,7 @@ test.describe('File Manager Smoke Tests', () => {
             try {
                 await firstMenuButton.click({ timeout: 3000 })
                 await page.waitForTimeout(500)
-            } catch (e) {
+            } catch {
                 // Menu button might not be clickable, continue anyway
             }
         }
@@ -142,7 +142,7 @@ test.describe('File Manager Smoke Tests', () => {
             try {
                 await firstMenuButton.click({ timeout: 3000 })
                 await page.waitForTimeout(500)
-            } catch (e) {
+            } catch {
                 // Menu button might not be clickable, continue anyway
             }
         }

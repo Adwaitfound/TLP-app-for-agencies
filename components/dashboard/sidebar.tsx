@@ -1,8 +1,8 @@
-"use client"
+"use client";
 
-import Link from "next/link"
-import { usePathname } from "next/navigation"
-import { cn } from "@/lib/utils"
+import Link from "next/link";
+import { usePathname } from "next/navigation";
+import { cn } from "@/lib/utils";
 import {
   LayoutDashboard,
   FolderKanban,
@@ -13,9 +13,9 @@ import {
   UserCheck,
   MessageSquare,
   Bell,
-  Wallet
-} from "lucide-react"
-import { useAuth } from "@/contexts/auth-context"
+  Wallet,
+} from "lucide-react";
+import { useAuth } from "@/contexts/auth-context";
 
 const adminRoutes = [
   {
@@ -68,7 +68,7 @@ const adminRoutes = [
     icon: Settings,
     href: "/dashboard/settings",
   },
-]
+];
 
 const employeeRoutes = [
   {
@@ -96,7 +96,7 @@ const employeeRoutes = [
     icon: Settings,
     href: "/dashboard/settings",
   },
-]
+];
 
 const clientRoutes = [
   {
@@ -119,18 +119,18 @@ const clientRoutes = [
     icon: Settings,
     href: "/dashboard/settings",
   },
-]
+];
 
 export function Sidebar() {
-  const pathname = usePathname()
-  const { user } = useAuth()
+  const pathname = usePathname();
+  const { user } = useAuth();
 
   // Determine routes based on user role
-  let routes = adminRoutes
-  if (user?.role === 'client') {
-    routes = clientRoutes
-  } else if (user?.role === 'project_manager') {
-    routes = employeeRoutes
+  let routes = adminRoutes;
+  if (user?.role === "client") {
+    routes = clientRoutes;
+  } else if (user?.role === "project_manager") {
+    routes = employeeRoutes;
   }
 
   return (
@@ -138,12 +138,20 @@ export function Sidebar() {
       <div className="flex h-14 items-center border-b px-4 lg:h-[60px] lg:px-6">
         <div className="flex items-center gap-2">
           <div className="h-8 w-8 rounded-lg bg-primary flex items-center justify-center">
-            <span className="text-primary-foreground font-bold text-lg">TLP</span>
+            <span className="text-primary-foreground font-bold text-lg">
+              TLP
+            </span>
           </div>
           <div className="flex flex-col">
-            <span className="text-lg font-bold leading-tight">The Lost Project</span>
+            <span className="text-lg font-bold leading-tight">
+              The Lost Project
+            </span>
             <span className="text-xs text-muted-foreground">
-              {user?.role === 'admin' ? 'Admin Panel' : user?.role === 'project_manager' ? 'Employee Portal' : 'Client Portal'}
+              {user?.role === "admin"
+                ? "Admin Panel"
+                : user?.role === "project_manager"
+                  ? "Employee Portal"
+                  : "Client Portal"}
             </span>
           </div>
         </div>
@@ -156,7 +164,7 @@ export function Sidebar() {
               href={route.href}
               className={cn(
                 "flex items-center gap-3 rounded-lg px-3 py-2 text-muted-foreground transition-all hover:text-primary",
-                pathname === route.href && "bg-muted text-primary"
+                pathname === route.href && "bg-muted text-primary",
               )}
             >
               <route.icon className="h-4 w-4" />
@@ -166,5 +174,5 @@ export function Sidebar() {
         </nav>
       </div>
     </div>
-  )
+  );
 }

@@ -1,9 +1,9 @@
-"use client"
+"use client";
 
-import { useRouter } from "next/navigation"
-import { Search, Moon, Sun, User, LogOut, Menu } from "lucide-react"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
+import { useRouter } from "next/navigation";
+import { Search, Moon, Sun, User, LogOut, Menu } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -11,24 +11,30 @@ import {
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { useTheme } from "next-themes"
-import { Sheet, SheetContent, SheetTrigger, SheetTitle, SheetDescription } from "@/components/ui/sheet"
-import { Sidebar } from "./sidebar"
-import { useAuth } from "@/contexts/auth-context"
-import { debug } from "@/lib/debug"
-import { NotificationBell } from "@/components/notifications/notification-bell"
+} from "@/components/ui/dropdown-menu";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { useTheme } from "next-themes";
+import {
+  Sheet,
+  SheetContent,
+  SheetTrigger,
+  SheetTitle,
+  SheetDescription,
+} from "@/components/ui/sheet";
+import { Sidebar } from "./sidebar";
+import { useAuth } from "@/contexts/auth-context";
+import { debug } from "@/lib/debug";
+import { NotificationBell } from "@/components/notifications/notification-bell";
 
 export function Header() {
-  const { setTheme, theme } = useTheme()
-  const router = useRouter()
-  const { user, logout } = useAuth()
+  const { setTheme, theme } = useTheme();
+  const router = useRouter();
+  const { user, logout } = useAuth();
 
-  const handleLogout = () => {
-    debug.log('HEADER', 'Logout clicked', { user: user?.email })
-    logout()
-  }
+  const handleLogout = async () => {
+    debug.log("HEADER", "Logout clicked", { user: user?.email });
+    await logout();
+  };
 
   return (
     <header className="flex h-14 items-center gap-4 border-b bg-muted/40 px-4 lg:h-[60px] lg:px-6">
@@ -42,7 +48,9 @@ export function Header() {
         </SheetTrigger>
         <SheetContent side="left" className="p-0 w-[280px]">
           <SheetTitle className="sr-only">Navigation Menu</SheetTitle>
-          <SheetDescription className="sr-only">Access dashboard navigation links</SheetDescription>
+          <SheetDescription className="sr-only">
+            Access dashboard navigation links
+          </SheetDescription>
           <Sidebar />
         </SheetContent>
       </Sheet>
@@ -74,7 +82,10 @@ export function Header() {
         <DropdownMenuTrigger asChild>
           <Button variant="ghost" className="relative h-8 w-8 rounded-full">
             <Avatar className="h-8 w-8">
-              <AvatarImage src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGP8/5+hHgAGgwJ/lqS4VwAAAABJRU5ErkJggg==" alt="User" />
+              <AvatarImage
+                src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGP8/5+hHgAGgwJ/lqS4VwAAAABJRU5ErkJggg=="
+                alt="User"
+              />
               <AvatarFallback>VP</AvatarFallback>
             </Avatar>
           </Button>
@@ -82,14 +93,16 @@ export function Header() {
         <DropdownMenuContent className="w-56" align="end" forceMount>
           <DropdownMenuLabel className="font-normal">
             <div className="flex flex-col space-y-1">
-              <p className="text-sm font-medium leading-none">{user?.full_name || "User"}</p>
+              <p className="text-sm font-medium leading-none">
+                {user?.full_name || "User"}
+              </p>
               <p className="text-xs leading-none text-muted-foreground">
                 {user?.email || "Loading..."}
               </p>
             </div>
           </DropdownMenuLabel>
           <DropdownMenuSeparator />
-          <DropdownMenuItem onClick={() => router.push('/dashboard/settings')}>
+          <DropdownMenuItem onClick={() => router.push("/dashboard/settings")}>
             <User className="mr-2 h-4 w-4" />
             <span>Profile</span>
           </DropdownMenuItem>
@@ -101,5 +114,5 @@ export function Header() {
         </DropdownMenuContent>
       </DropdownMenu>
     </header>
-  )
+  );
 }

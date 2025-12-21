@@ -1,5 +1,4 @@
 // Service Worker for aggressive caching and offline support
-const CACHE_NAME = 'tlp-video-app-v1';
 const STATIC_CACHE = 'tlp-static-v1';
 const DYNAMIC_CACHE = 'tlp-dynamic-v1';
 
@@ -89,8 +88,8 @@ if (typeof window === 'undefined') {
         const data = event.data ? event.data.json() : {};
         const options = {
             body: data.body || 'New notification',
-            icon: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR4nGNgYAAAAAMAAWgmWQ0AAAAASUVORK5CYII=',
-            badge: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR4nGNgYAAAAAMAAWgmWQ0AAAAASUVORK5CYII=',
+            icon: '/icons/icon-192x192.png',
+            badge: '/icons/icon-192x192.png',
             tag: data.tag || 'notification',
             requireInteraction: data.requireInteraction || false,
         };

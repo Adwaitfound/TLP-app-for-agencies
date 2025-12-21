@@ -1,5 +1,5 @@
-'use server'
+"use server";
 
 export async function pingServer() {
-  return { success: true, message: 'Server action works!' }
+  return { success: true, message: "Server action works!" };
 }

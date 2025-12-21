@@ -98,3 +98,10 @@ export function getGoogleDriveEmbedUrl(url: string): string | null {
 
     return `https://drive.google.com/file/d/${fileId}/preview`
 }
+
+export function getGoogleDriveThumbnailUrl(url: string, size = 160): string | null {
+    const fileId = extractGoogleDriveFileId(url)
+    if (!fileId) return null
+
+    return `https://drive.google.com/thumbnail?id=${fileId}&sz=w${size}`
+}

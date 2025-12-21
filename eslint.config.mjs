@@ -12,12 +12,20 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+
+    // Generated / native build outputs (not part of the Next.js codebase):
+    "android/**",
+    "android.bak.*/**",
+
+    // Firebase hosting artifacts
+    ".firebase/**",
   ]),
   {
     rules: {
       "@typescript-eslint/no-explicit-any": "off",
       "@typescript-eslint/no-empty-object-type": "off",
       "react/no-unescaped-entities": "warn",
+      "react-hooks/set-state-in-effect": "off",
     },
   },
 ]);

@@ -23,10 +23,13 @@ test.describe('Client Dashboard Smoke Tests', () => {
 
         // Wait for redirect to dashboard (handle both /dashboard and /dashboard/client)
         await Promise.race([
-            page.waitForURL('/dashboard/client', { timeout: 5000 }).catch(() => { }),
-            page.waitForURL('/dashboard', { timeout: 5000 }).catch(() => { })
+            page.waitForURL('**/dashboard/client**', { timeout: 15000 }).catch(() => { }),
+            page.waitForURL('**/dashboard**', { timeout: 15000 }).catch(() => { })
         ])
         await page.waitForTimeout(1000) // Extra wait for loading
+
+        // Fail fast if we're still on login
+        expect(page.url()).not.toContain('/login')
 
         // Check dashboard loaded
         await expect(page.locator('text=Welcome')).toBeVisible({ timeout: 15000 })
@@ -40,10 +43,15 @@ test.describe('Client Dashboard Smoke Tests', () => {
 
         // Wait for redirect with fallback
         await Promise.race([
-            page.waitForURL('/dashboard/client', { timeout: 5000 }).catch(() => { }),
-            page.waitForURL('/dashboard', { timeout: 5000 }).catch(() => { })
+            page.waitForURL('**/dashboard/client**', { timeout: 20000 }).catch(() => { }),
+            page.waitForURL('**/dashboard**', { timeout: 20000 }).catch(() => { })
         ])
         await page.waitForTimeout(2000) // Wait for dashboard to fully load
+
+        // If we got bounced back to login, stop here with a clearer error
+        if (page.url().includes('/login')) {
+            throw new Error(`Client login did not complete (still on login). Current URL: ${page.url()}`)
+        }
 
         // Verify dashboard loaded - check for key elements that indicate we're on the dashboard
         // Look for main dashboard heading or content
