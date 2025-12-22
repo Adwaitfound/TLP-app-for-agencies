@@ -1,7 +1,7 @@
 "use client";
 
 import { useAuth } from "@/contexts/auth-context";
-import EmployeeDashboard from "./employee-view";
+import { EmployeeDashboardTabs } from "@/components/dashboard/employee-dashboard-tabs";
 
 export default function EmployeeDashboardPage() {
   const { loading: authLoading } = useAuth();
@@ -14,5 +14,5 @@ export default function EmployeeDashboardPage() {
     );
   }
 
-  return <EmployeeDashboard />;
+  return <EmployeeDashboardTabs />;
 }

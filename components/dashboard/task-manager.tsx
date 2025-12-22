@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useAuth } from "@/contexts/auth-context";
 import {
   Card,
   CardContent,
@@ -27,7 +28,16 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
-import { Plus, CheckCircle2, Circle, AlertCircle, Trash2 } from "lucide-react";
+import {
+  Plus,
+  CheckCircle2,
+  Circle,
+  AlertCircle,
+  Trash2,
+  Clock,
+  Zap,
+  Flag,
+} from "lucide-react";
 import {
   createTask,
   updateTask,
@@ -38,11 +48,27 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { createClient } from "@/lib/supabase/client";
 
-const priorityColors = {
-  low: "bg-blue-100 text-blue-800",
-  medium: "bg-yellow-100 text-yellow-800",
-  high: "bg-orange-100 text-orange-800",
-  urgent: "bg-red-100 text-red-800",
+const priorityConfig = {
+  low: {
+    color: "bg-blue-50 border-blue-200 hover:border-blue-300",
+    badge: "bg-blue-100 text-blue-800",
+    icon: "text-blue-600",
+  },
+  medium: {
+    color: "bg-amber-50 border-amber-200 hover:border-amber-300",
+    badge: "bg-amber-100 text-amber-800",
+    icon: "text-amber-600",
+  },
+  high: {
+    color: "bg-orange-50 border-orange-200 hover:border-orange-300",
+    badge: "bg-orange-100 text-orange-800",
+    icon: "text-orange-600",
+  },
+  urgent: {
+    color: "bg-red-50 border-red-200 hover:border-red-300",
+    badge: "bg-red-100 text-red-800",
+    icon: "text-red-600",
+  },
 };
 
 const statusIcons = {
@@ -149,14 +175,18 @@ export function TaskManager() {
       );
       console.log("[TaskManager] Tasks with proposals:", tasksWithProposals);
       console.log("[TaskManager] Setting tasks state with:", todayRes.data);
-      setTasks(todayRes.data);
+      // Filter to only show tasks assigned to current user
+      const userTasks = todayRes.data.filter((t: any) => t.user_id === localStorage.getItem('user_id'));
+      setTasks(userTasks);
     }
     if (overdueRes.data) {
       console.log(
         "[TaskManager] Setting overdue tasks state with:",
         overdueRes.data,
       );
-      setOverdueTasks(overdueRes.data);
+      // Filter to only show tasks assigned to current user
+      const userOverdueTasks = overdueRes.data.filter((t: any) => t.user_id === localStorage.getItem('user_id'));
+      setOverdueTasks(userOverdueTasks);
     }
     setLoading(false);
   }
@@ -456,91 +486,97 @@ export function TaskManager() {
                 task.due_date &&
                 new Date(task.due_date) < new Date() &&
                 task.status !== "completed";
+              const priorityInfo = priorityConfig[task.priority as keyof typeof priorityConfig];
+              const daysUntilDue = task.due_date 
+                ? Math.ceil((new Date(task.due_date).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24))
+                : null;
 
               return (
                 <div
                   key={task.id}
-                  className={`flex items-start gap-3 p-3 border rounded-lg hover:bg-accent transition-colors ${
-                    task.status === "completed" ? "opacity-60" : ""
-                  }`}
+                  className={`relative overflow-hidden border rounded-lg transition-all duration-200 hover:shadow-md hover:-translate-y-0.5 ${
+                    priorityInfo?.color || "bg-slate-50 border-slate-200"
+                  } ${task.status === "completed" ? "opacity-70" : ""}`}
                 >
-                  <button
-                    onClick={() => handleToggleComplete(task)}
-                    className="mt-1"
-                  >
-                    <StatusIcon
-                      className={`h-5 w-5 ${
-                        task.status === "completed"
-                          ? "text-green-600"
-                          : "text-muted-foreground"
-                      }`}
-                    />
-                  </button>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="flex-1">
-                        <p
-                          className={`font-medium ${task.status === "completed" ? "line-through" : ""}`}
-                        >
-                          {task.title}
-                        </p>
-                        {task.description && (
-                          <p className="text-sm text-muted-foreground mt-1 line-clamp-2">
-                            {task.description}
-                          </p>
-                        )}
-                        <div className="flex items-center gap-2 mt-2">
-                          <Badge
-                            className={
-                              priorityColors[
-                                task.priority as keyof typeof priorityColors
-                              ]
-                            }
-                          >
-                            {task.priority}
-                          </Badge>
-                          {task.due_date && (
-                            <span
-                              className={`text-xs ${isOverdue ? "text-red-600 font-medium" : "text-muted-foreground"}`}
+                  {/* Priority indicator bar */}
+                  <div className={`absolute left-0 top-0 bottom-0 w-1 ${
+                    task.priority === 'urgent' ? 'bg-red-600' :
+                    task.priority === 'high' ? 'bg-orange-600' :
+                    task.priority === 'medium' ? 'bg-amber-600' :
+                    'bg-blue-600'
+                  }`}></div>
+
+                  <div className="p-4 pl-4">
+                    <div className="flex items-start gap-3">
+                      <button
+                        onClick={() => handleToggleComplete(task)}
+                        className="mt-1 flex-shrink-0 hover:scale-110 transition-transform"
+                      >
+                        <StatusIcon
+                          className={`h-6 w-6 ${
+                            task.status === "completed"
+                              ? "text-green-600"
+                              : priorityInfo?.icon || "text-slate-400"
+                          }`}
+                        />
+                      </button>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="flex-1">
+                            <p
+                              className={`font-semibold text-base transition-opacity ${
+                                task.status === "completed" ? "line-through opacity-60" : ""
+                              }`}
                             >
-                              {isOverdue ? "Overdue: " : "Due: "}
-                              {new Date(task.due_date).toLocaleDateString()}
-                            </span>
-                          )}
-                          {task.proposed_project_name && (
-                            <Badge variant="outline" className="text-[11px]">
-                              Pending project: {task.proposed_project_name} (
-                              {task.proposed_project_status || "pending"})
-                            </Badge>
-                          )}
-                          {/* Debug: Always show if task has proposal data */}
-                          {(task.proposed_project_name ||
-                            task.proposed_project_status) &&
-                            console.log(
-                              "[TaskManager] Task with proposal:",
-                              task.id,
-                              task.proposed_project_name,
-                              task.proposed_project_status,
+                              {task.title}
+                            </p>
+                            {task.description && (
+                              <p className="text-sm text-muted-foreground mt-1 line-clamp-2">
+                                {task.description}
+                              </p>
                             )}
-                          {task.projects?.name && (
-                            <span className="text-xs text-muted-foreground">
-                              • {task.projects.name}
-                            </span>
+                          </div>
+                          <button
+                            onClick={() => handleDeleteTask(task.id)}
+                            className="flex-shrink-0 text-muted-foreground hover:text-red-600 hover:bg-red-50 p-2 rounded transition-colors"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        </div>
+
+                        {/* Task metadata */}
+                        <div className="flex flex-wrap items-center gap-2 mt-3">
+                          {/* Priority badge */}
+                          <Badge className={priorityInfo?.badge || "bg-slate-100 text-slate-800"}>
+                            {task.priority === 'urgent' && <Zap className="h-3 w-3 mr-1" />}
+                            {task.priority === 'high' && <Flag className="h-3 w-3 mr-1" />}
+                            {task.priority === 'medium' && <Clock className="h-3 w-3 mr-1" />}
+                            {task.priority.charAt(0).toUpperCase() + task.priority.slice(1)} Priority
+                          </Badge>
+
+                          {/* Due date */}
+                          {task.due_date && (
+                            <div className={`flex items-center gap-1 text-xs px-2 py-1 rounded-md ${
+                              isOverdue 
+                                ? 'bg-red-100 text-red-800 font-semibold' 
+                                : 'bg-slate-100 text-slate-600'
+                            }`}>
+                              <Clock className="h-3 w-3" />
+                              {isOverdue 
+                                ? `Overdue ${Math.abs(daysUntilDue || 0)} days`
+                                : `${daysUntilDue === 0 ? 'Today' : `${daysUntilDue} days`}`
+                              }
+                            </div>
+                          )}
+
+                          {/* Proposal badge */}
+                          {task.proposed_project_name && (
+                            <Badge variant="outline" className="text-[10px] bg-amber-50 text-amber-700 border-amber-200">
+                              📋 {task.proposed_project_name}
+                            </Badge>
                           )}
                         </div>
                       </div>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => handleDeleteTask(task.id)}
-                        disabled={deletingTaskId === task.id}
-                      >
-                        {deletingTaskId === task.id ? (
-                          <span className="text-xs">Deleting...</span>
-                        ) : (
-                          <Trash2 className="h-4 w-4 text-muted-foreground" />
-                        )}
-                      </Button>
                     </div>
                   </div>
                 </div>
@@ -548,13 +584,6 @@ export function TaskManager() {
             })}
           </div>
         )}
-        {toast ? (
-          <div
-            className={`fixed bottom-4 right-4 z-50 rounded-md px-4 py-3 shadow-lg text-sm text-white ${toast.type === "success" ? "bg-green-600" : "bg-red-600"}`}
-          >
-            {toast.message}
-          </div>
-        ) : null}
       </CardContent>
     </Card>
   );
