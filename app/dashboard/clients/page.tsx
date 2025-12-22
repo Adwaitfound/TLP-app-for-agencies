@@ -50,12 +50,14 @@ import {
   CheckCircle2,
   Eye,
   Trash2,
+  Key,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import type { Client, Project, Invoice, ServiceType } from "@/types";
 import { SERVICE_TYPES } from "@/types";
 import { createClientAccount } from "@/app/actions/create-client";
 import { deleteClient } from "@/app/actions/delete-client";
+import { resetClientPassword } from "@/app/actions/reset-client-password";
 import { Badge } from "@/components/ui/badge";
 import { debug } from "@/lib/debug";
 
@@ -87,6 +89,8 @@ export default function ClientsPage() {
     clientId: string;
     clientName: string;
   } | null>(null);
+  const [resettingPassword, setResettingPassword] = useState(false);
+  const [resetPasswordEmail, setResetPasswordEmail] = useState<string | null>(null);
 
   // Form state
   const [formData, setFormData] = useState({
@@ -322,6 +326,35 @@ export default function ClientsPage() {
       alert(error?.message || "Failed to delete client");
     } finally {
       setIsDeleting(false);
+    }
+  }
+
+  async function handleResetPassword(email: string) {
+    setResettingPassword(true);
+    try {
+      debug.log("CLIENTS", "Resetting password for client", { email });
+      const result = await resetClientPassword(email);
+
+      if (!result.success) {
+        debug.error("CLIENTS", "Failed to reset password", result.error);
+        alert(result.error || "Failed to reset password");
+        return;
+      }
+
+      debug.success("CLIENTS", "Password reset successfully");
+      setGeneratedCredentials({
+        email: email,
+        password: result.password || "",
+      });
+      setResetPasswordEmail(email);
+      setIsDetailModalOpen(false);
+      setShowCredentials(true);
+    } catch (error: any) {
+      console.error("Error resetting password:", error);
+      debug.error("CLIENTS", "Reset password error", { error: error?.message });
+      alert(error?.message || "Failed to reset password");
+    } finally {
+      setResettingPassword(false);
     }
   }
 
@@ -713,19 +746,34 @@ export default function ClientsPage() {
                       </DialogDescription>
                     </div>
                   </div>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() =>
-                      setDeleteConfirmation({
-                        clientId: selectedClient.id,
-                        clientName: selectedClient.company_name,
-                      })
-                    }
-                    className="text-destructive hover:text-destructive"
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
+                  <div className="flex gap-2">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      disabled={resettingPassword}
+                      onClick={() => handleResetPassword(selectedClient.email)}
+                      className="text-blue-600 hover:text-blue-700"
+                    >
+                      {resettingPassword ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <Key className="h-4 w-4" />
+                      )}
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() =>
+                        setDeleteConfirmation({
+                          clientId: selectedClient.id,
+                          clientName: selectedClient.company_name,
+                        })
+                      }
+                      className="text-destructive hover:text-destructive"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
                 </div>
               </DialogHeader>
 
@@ -892,16 +940,25 @@ export default function ClientsPage() {
       </Dialog>
 
       {/* Credentials Dialog */}
-      <Dialog open={showCredentials} onOpenChange={setShowCredentials}>
+      <Dialog
+        open={showCredentials}
+        onOpenChange={(open) => {
+          setShowCredentials(open);
+          if (!open) {
+            setResetPasswordEmail(null);
+          }
+        }}
+      >
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <CheckCircle2 className="h-5 w-5 text-green-500" />
-              Client Account Created
+              {resetPasswordEmail ? "Password Reset" : "Client Account Created"}
             </DialogTitle>
             <DialogDescription>
-              Share these login credentials with the client. They won&apos;t be
-              shown again.
+              {resetPasswordEmail
+                ? "A new temporary password has been generated. Share this with the client so they can log in."
+                : "Share these login credentials with the client. They won't be shown again."}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
