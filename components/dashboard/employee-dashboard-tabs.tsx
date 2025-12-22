@@ -17,6 +17,7 @@ import { StatCard } from "@/components/shared/stat-card";
 import { StatusBadge } from "@/components/shared/status-badge";
 import { TaskManager } from "@/components/dashboard/task-manager";
 import { AllTasksTab } from "@/components/dashboard/all-tasks-tab";
+import { EmployeeProjectDetailModal } from "@/components/dashboard/employee-project-detail-modal";
 import { createClient } from "@/lib/supabase/client";
 import { useAuth } from "@/contexts/auth-context";
 import {
@@ -206,7 +207,12 @@ export function EmployeeDashboardTabs() {
         </Button>
       </div>
 
-      {/* Project Detail Modal temporarily disabled due to type issues */}
+      {/* Project Detail Modal */}
+      <EmployeeProjectDetailModal
+        projectId={selectedProjectId}
+        open={modalOpen}
+        onOpenChange={setModalOpen}
+      />
 
       {/* Quick Stats */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
