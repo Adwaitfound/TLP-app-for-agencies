@@ -46,12 +46,15 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import type { Project, Client, Invoice, Milestone } from "@/types";
 import { SERVICE_TYPES, type ServiceType } from "@/types";
 import { reviewProjectProposal } from "@/app/actions/employee-tasks";
 import { approveUserAccount } from "@/app/actions/approve-user";
 import { grantAdminByEmail } from "@/app/actions/grant-admin";
 import { forceConfirmEmail } from "@/app/actions/force-confirm-email";
+import { createMilestone } from "@/app/actions/milestones";
+import { Label } from "@/components/ui/label";
 
 type PendingUser = {
   id: string;
@@ -92,6 +95,13 @@ export default function AdminDashboard() {
   const [bannerProcessing, setBannerProcessing] = useState(false);
   const [confirmEmailInput, setConfirmEmailInput] = useState("");
   const [confirmingEmail, setConfirmingEmail] = useState(false);
+  const [isMilestoneDialogOpen, setIsMilestoneDialogOpen] = useState(false);
+  const [milestoneFormData, setMilestoneFormData] = useState({
+    title: "",
+    description: "",
+    due_date: "",
+  });
+  const [milestoneSubmitting, setMilestoneSubmitting] = useState(false);
 
   const userId = user?.id;
 
@@ -311,8 +321,9 @@ export default function AdminDashboard() {
     const filteredProjects = filterByTimePeriod(projects);
     const filteredInvoices = filterByTimePeriod(invoices);
 
+    // Calculate total revenue from ALL paid invoices (not filtered by time)
     const totalRevenue =
-      filteredInvoices
+      invoices
         .filter((inv) => inv.status === "paid")
         .reduce((sum, inv) => sum + (inv.total || 0), 0) || 0;
     const activeProjects =
@@ -476,6 +487,37 @@ export default function AdminDashboard() {
 
   const recentInvoices = invoices.slice(0, 5);
   const recentClients = clients.slice(0, 5);
+
+  const handleAddMilestone = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedProject || milestoneSubmitting) return;
+
+    setMilestoneSubmitting(true);
+    try {
+      const { data, error } = await createMilestone({
+        project_id: selectedProject.id,
+        title: milestoneFormData.title,
+        description: milestoneFormData.description,
+        due_date: milestoneFormData.due_date || null,
+        status: "pending",
+      });
+
+      if (error) throw new Error(error);
+
+      // Reset form and close
+      setMilestoneFormData({ title: "", description: "", due_date: "" });
+      setIsMilestoneDialogOpen(false);
+
+      if (data) {
+        setMilestones((prev) => [data as Milestone, ...prev]);
+      }
+    } catch (error: any) {
+      console.error("Error adding milestone:", error);
+      alert(error?.message || "Failed to add milestone");
+    } finally {
+      setMilestoneSubmitting(false);
+    }
+  };
 
   const getServiceBadgeVariant = (
     serviceType: ServiceType,
@@ -668,20 +710,89 @@ export default function AdminDashboard() {
 
       {/* Stats Grid */}
       <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 auto-rows-max">
+        {/* Highlighted Card: Total Project Amount */}
+        <Card className="p-6 bg-gradient-to-br from-blue-500 to-cyan-600 text-white sm:col-span-2 lg:col-span-1">
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <p className="text-sm font-medium opacity-90">
+                Total Project Amount
+              </p>
+              <TrendingUp className="h-5 w-5 opacity-80" />
+            </div>
+            <p className="text-4xl font-bold">
+              ₹{Math.round(getTotalProjectAmount() / 1000)}k
+            </p>
+            <p className="text-xs opacity-80">
+              {timePeriodFilter === "all"
+                ? "All time"
+                : `This ${timePeriodFilter}`}
+            </p>
+          </div>
+        </Card>
+
+        {/* Highlighted Card: Active Projects */}
+        <Card className="p-6 bg-gradient-to-br from-purple-500 to-pink-600 text-white">
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <p className="text-sm font-medium opacity-90">
+                Active Projects
+              </p>
+              <FolderKanban className="h-5 w-5 opacity-80" />
+            </div>
+            <p className="text-4xl font-bold">
+              {filteredStats.activeProjects}
+            </p>
+            <p className="text-xs opacity-80">
+              {filteredStats.completedProjects} completed {timePeriodFilter !== "all" && `this ${timePeriodFilter}`}
+            </p>
+          </div>
+        </Card>
+
+        {/* Highlighted Card: Avg Project Value */}
+        <Card className="p-6 bg-gradient-to-br from-orange-500 to-red-600 text-white">
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <p className="text-sm font-medium opacity-90">
+                Avg Project Value
+              </p>
+              <IndianRupee className="h-5 w-5 opacity-80" />
+            </div>
+            <p className="text-4xl font-bold">
+              ₹{Math.round(filteredStats.avgProjectValue / 1000)}k
+            </p>
+            <p className="text-xs opacity-80">
+              Per project average
+            </p>
+          </div>
+        </Card>
+
+        {/* Highlighted Card: Completion Rate */}
+        <Card className="p-6 bg-gradient-to-br from-green-500 to-emerald-600 text-white">
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <p className="text-sm font-medium opacity-90">
+                Completion Rate
+              </p>
+              <CheckCircle2 className="h-5 w-5 opacity-80" />
+            </div>
+            <p className="text-4xl font-bold">
+              {filterByTimePeriod(projects).length > 0 ? Math.round((filteredStats.completedProjects / filterByTimePeriod(projects).length) * 100) : 0}%
+            </p>
+            <p className="text-xs opacity-80">
+              {filteredStats.completedProjects}/{filterByTimePeriod(projects).length} projects
+            </p>
+          </div>
+        </Card>
+
+        {/* Total Revenue */}
         <StatCard
           title="Total Revenue"
           value={`₹${filteredStats.totalRevenue.toLocaleString()}`}
-          change="From paid invoices"
+          change="From paid invoices (all time)"
           trend="up"
           icon={IndianRupee}
         />
-        <StatCard
-          title="Active Projects"
-          value={filteredStats.activeProjects.toString()}
-          change={`${filteredStats.completedProjects} completed`}
-          trend="up"
-          icon={FolderKanban}
-        />
+        
         <StatCard
           title="Total Clients"
           value={filteredStats.totalClients.toString()}
@@ -689,21 +800,7 @@ export default function AdminDashboard() {
           trend="up"
           icon={Users}
         />
-        <Card className="p-6 sm:row-span-2 lg:col-span-1">
-          <div className="space-y-2 h-full flex flex-col justify-center">
-            <p className="text-sm font-medium text-muted-foreground">
-              Total Project Amount
-            </p>
-            <p className="text-3xl font-bold">
-              ₹{Math.round(getTotalProjectAmount() / 1000)}k
-            </p>
-            <p className="text-xs text-muted-foreground">
-              {timePeriodFilter === "all"
-                ? "All time"
-                : `This ${timePeriodFilter}`}
-            </p>
-          </div>
-        </Card>
+        
         <StatCard
           title="Pending Invoices"
           value={`₹${filteredStats.pendingInvoices.toLocaleString()}`}
@@ -711,20 +808,7 @@ export default function AdminDashboard() {
           trend={filteredStats.overdueInvoices > 0 ? "down" : "neutral"}
           icon={Receipt}
         />
-        <StatCard
-          title="Avg Project Value"
-          value={`₹${Math.round(filteredStats.avgProjectValue).toLocaleString()}`}
-          change="Per project"
-          trend="up"
-          icon={TrendingUp}
-        />
-        <StatCard
-          title="Completion Rate"
-          value={`${filterByTimePeriod(projects).length > 0 ? Math.round((filteredStats.completedProjects / filterByTimePeriod(projects).length) * 100) : 0}%`}
-          change={`${filteredStats.completedProjects}/${filterByTimePeriod(projects).length} projects`}
-          trend="up"
-          icon={CheckCircle2}
-        />
+        
         <StatCard
           title="Pending Approvals"
           value={pendingUsers.length.toString()}
@@ -1306,9 +1390,26 @@ export default function AdminDashboard() {
       {/* Upcoming Milestones */}
       {milestones.length > 0 && (
         <Card>
-          <CardHeader>
-            <CardTitle>Upcoming Milestones</CardTitle>
-            <CardDescription>Important deadlines to track</CardDescription>
+          <CardHeader className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+            <div>
+              <CardTitle>Upcoming Milestones</CardTitle>
+              <CardDescription>Important deadlines to track</CardDescription>
+            </div>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => {
+                if (!selectedProject) {
+                  alert("Please select a project first");
+                  return;
+                }
+                setIsMilestoneDialogOpen(true);
+              }}
+              className="w-full sm:w-auto"
+            >
+              <Plus className="h-3 w-3 mr-1" />
+              Add Milestone
+            </Button>
           </CardHeader>
           <CardContent>
             <div className="space-y-3">
@@ -1466,6 +1567,79 @@ export default function AdminDashboard() {
               </div>
             </div>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Add Milestone Dialog */}
+      <Dialog open={isMilestoneDialogOpen} onOpenChange={setIsMilestoneDialogOpen}>
+        <DialogContent>
+          <form onSubmit={handleAddMilestone}>
+            <DialogHeader>
+              <DialogTitle>Add Milestone</DialogTitle>
+              <DialogDescription>
+                Create a new milestone for {selectedProject?.name}
+              </DialogDescription>
+            </DialogHeader>
+            <div className="grid gap-4 py-4">
+              <div className="grid gap-2">
+                <Label htmlFor="milestone-title">Title *</Label>
+                <Input
+                  id="milestone-title"
+                  placeholder="e.g., Script completion, Final delivery"
+                  required
+                  value={milestoneFormData.title}
+                  onChange={(e) =>
+                    setMilestoneFormData({
+                      ...milestoneFormData,
+                      title: e.target.value,
+                    })
+                  }
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="milestone-desc">Description</Label>
+                <Textarea
+                  id="milestone-desc"
+                  placeholder="Describe the milestone..."
+                  value={milestoneFormData.description}
+                  onChange={(e) =>
+                    setMilestoneFormData({
+                      ...milestoneFormData,
+                      description: e.target.value,
+                    })
+                  }
+                  rows={3}
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="milestone-date">Due Date</Label>
+                <Input
+                  id="milestone-date"
+                  type="date"
+                  value={milestoneFormData.due_date}
+                  onChange={(e) =>
+                    setMilestoneFormData({
+                      ...milestoneFormData,
+                      due_date: e.target.value,
+                    })
+                  }
+                />
+              </div>
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setIsMilestoneDialogOpen(false)}
+                disabled={milestoneSubmitting}
+              >
+                Cancel
+              </Button>
+              <Button type="submit" disabled={milestoneSubmitting}>
+                {milestoneSubmitting ? "Adding..." : "Add Milestone"}
+              </Button>
+            </div>
+          </form>
         </DialogContent>
       </Dialog>
     </div>

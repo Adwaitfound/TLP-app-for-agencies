@@ -227,7 +227,7 @@ export async function getTasks(filter?: {
 
   let query = supabase
     .from("employee_tasks")
-    .select("*, projects(name)")
+    .select("id,title,description,user_id,project_id,priority,status,due_date,estimated_hours,actual_hours,completed_at,created_at,updated_at,proposed_project_name,proposed_project_status,proposed_project_notes,proposed_project_reviewed_by,proposed_project_reviewed_at,proposed_project_vertical,projects(name)")
     .eq("user_id", user.id)
     .order("created_at", { ascending: false });
 
@@ -279,21 +279,13 @@ export async function getTodayTasks() {
     profileError,
   );
 
-  let query = supabase.from("employee_tasks").select("*, projects(name)");
-
-  // Only filter by user_id if the user is an employee
-  // Admins and clients can see all tasks
-  const isEmployee = profile?.role === "employee";
-  console.log(
-    "[getTodayTasks] Is employee:",
-    isEmployee,
-    "Will filter by user_id:",
-    isEmployee,
-  );
-
-  if (isEmployee) {
-    query = query.eq("user_id", user.id);
-  }
+  // Always scope to the signed-in user for employee dashboard views
+  let query = supabase
+    .from("employee_tasks")
+    .select(
+      "id,title,description,user_id,project_id,priority,status,due_date,estimated_hours,actual_hours,completed_at,created_at,updated_at,proposed_project_name,proposed_project_status,proposed_project_notes,proposed_project_reviewed_by,proposed_project_reviewed_at,proposed_project_vertical,projects(name)",
+    )
+    .eq("user_id", user.id);
 
   // Get active tasks (not completed/cancelled)
   const activeQuery = query
@@ -305,12 +297,9 @@ export async function getTodayTasks() {
   // Also get any tasks with proposals (pending, approved, or rejected) so employees can track them
   let proposalQuery = supabase
     .from("employee_tasks")
-    .select("*, projects(name)")
-    .not("proposed_project_status", "is", null); // Get any task with a proposal status
-
-  if (isEmployee) {
-    proposalQuery = proposalQuery.eq("user_id", user.id);
-  }
+    .select("id,title,description,user_id,project_id,priority,status,due_date,estimated_hours,actual_hours,completed_at,created_at,updated_at,proposed_project_name,proposed_project_status,proposed_project_notes,proposed_project_reviewed_by,proposed_project_reviewed_at,proposed_project_vertical,projects(name)")
+    .not("proposed_project_status", "is", null)
+    .eq("user_id", user.id); // Get any task with a proposal status for this user
 
   const { data: proposalTasks, error: proposalError } = await proposalQuery;
 
@@ -358,28 +347,17 @@ export async function getOverdueTasks() {
     return { error: "Unauthorized" };
   }
 
-  // Get user profile to check role
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("role")
-    .eq("id", user.id)
-    .single();
-
   const today = new Date().toISOString().split("T")[0];
-
-  let query = supabase
+  const query = supabase
     .from("employee_tasks")
-    .select("*, projects(name)")
+    .select(
+      "id,title,description,user_id,project_id,priority,status,due_date,estimated_hours,actual_hours,completed_at,created_at,updated_at,proposed_project_name,proposed_project_status,proposed_project_notes,proposed_project_reviewed_by,proposed_project_reviewed_at,proposed_project_vertical,projects(name)",
+    )
+    .eq("user_id", user.id)
     .lt("due_date", today)
     .neq("status", "completed")
-    .neq("status", "cancelled");
-
-  // Only filter by user_id if the user is an employee
-  if (profile?.role === "employee") {
-    query = query.eq("user_id", user.id);
-  }
-
-  query = query.order("due_date", { ascending: true });
+    .neq("status", "cancelled")
+    .order("due_date", { ascending: true });
 
   const { data, error } = await query;
 

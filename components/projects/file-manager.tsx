@@ -645,21 +645,31 @@ export function FileManager({
     }
   }
 
-  function FileThumb({ file }: { file: ProjectFile }) {
+  function FileThumb({
+    file,
+    display = "inline",
+    size = 48,
+  }: {
+    file: ProjectFile;
+    display?: "inline" | "tile";
+    size?: number;
+  }) {
     const [failed, setFailed] = useState(false);
     const [signedSrc, setSignedSrc] = useState<string | null>(null);
     let src: string | null = null;
-    if (file.file_type === "image") {
+    // Prefer Google Drive thumbnail when source is Drive (works for many file types)
+    if (file.storage_type === "google_drive") {
+      src = getDriveThumbnailUrl(
+        file.file_url,
+        display === "tile" ? 480 : 160,
+      );
+    } else if (file.file_type === "image") {
+      // For Supabase or external images, attempt to show the image directly
       if (file.storage_type === "supabase") {
         src = signedSrc ?? file.file_url; // allow public bucket fallback
       } else {
         src = file.file_url;
       }
-    } else if (
-      file.file_type === "video" &&
-      file.storage_type === "google_drive"
-    ) {
-      src = getDriveThumbnailUrl(file.file_url, 160);
     }
 
     useEffect(() => {
@@ -678,20 +688,51 @@ export function FileManager({
       };
     }, [file.file_url, file.file_type, file.storage_type]);
 
+    const boxStyle =
+      display === "tile"
+        ? { width: "100%", height: "100%" }
+        : { width: size, height: size };
+
     if (!src || failed) {
+      // Fallback: for Google Drive items, attempt to embed the preview iframe
+      if (file.storage_type === "google_drive") {
+        const preview = getDrivePreviewUrl(file.file_url);
+        if (preview) {
+          return (
+            <iframe
+              src={preview}
+              title={file.file_name || "Drive preview"}
+              className={display === "tile" ? "w-full h-full" : "rounded"}
+              style={boxStyle}
+              allow="autoplay"
+              allowFullScreen
+              loading="lazy"
+            />
+          );
+        }
+      }
       return (
-        <div className="flex items-center justify-center h-8 w-8 rounded bg-muted">
+        <div
+          className="flex items-center justify-center rounded bg-muted"
+          style={boxStyle}
+        >
           {getFileIcon(file.file_type)}
         </div>
       );
     }
+
     return (
       // Signed URLs may point to dynamic hosts (Supabase/Drive), so we intentionally use <img>.
       // eslint-disable-next-line @next/next/no-img-element
       <img
         src={src}
         alt={file.file_name || ""}
-        className="h-8 w-8 rounded object-cover"
+        className={
+          display === "tile"
+            ? "w-full h-full object-cover"
+            : "rounded object-cover"
+        }
+        style={boxStyle}
         onError={() => setFailed(true)}
       />
     );
@@ -828,67 +869,78 @@ export function FileManager({
               <CardDescription>{config.description}</CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="space-y-2">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                 {categoryFiles.map((file) => (
-                  <div
-                    key={file.id}
-                    className="flex items-center justify-between p-3 rounded-lg border hover:bg-accent transition-colors"
-                  >
-                    <div className="flex items-center gap-3 flex-1">
-                      <FileThumb file={file} />
-                      <div className="flex-1 min-w-0">
-                        <p className="font-medium truncate">{file.file_name}</p>
-                        <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                          <Badge variant="outline" className="text-xs">
-                            {file.storage_type === "supabase"
-                              ? "Uploaded"
-                              : "Drive Link"}
+                  <Card key={file.id} className="overflow-hidden">
+                    <CardContent className="p-0">
+                      <div className="relative aspect-video bg-muted">
+                        <FileThumb file={file} display="tile" />
+                        <div className="absolute top-2 left-2 flex gap-1">
+                          <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
+                            {file.storage_type === "supabase" ? "Uploaded" : "Drive"}
                           </Badge>
-                          {file.file_size && (
-                            <span>{formatFileSize(file.file_size)}</span>
-                          )}
+                          <Badge variant="outline" className="text-[10px] px-1.5 py-0">
+                            {file.file_type}
+                          </Badge>
                         </div>
-                        {file.description && (
-                          <p className="text-sm text-muted-foreground mt-1">
-                            {file.description}
-                          </p>
-                        )}
+                        <div className="absolute inset-0 bg-black/0 hover:bg-black/10 transition-colors" />
                       </div>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => openPreview(file)}
-                      >
-                        <Eye className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => openFile(file)}
-                      >
-                        <ExternalLink className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        onClick={() =>
-                          handleDeleteFile(
-                            file.id,
-                            file.file_url,
-                            file.storage_type,
-                          )
-                        }
-                        disabled={!!readOnly}
-                      >
-                        <Trash2 className="h-4 w-4 text-destructive" />
-                      </Button>
-                    </div>
-                  </div>
+                      <div className="p-3 space-y-2">
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="flex-1 min-w-0">
+                            <p className="font-medium text-sm line-clamp-2">{file.file_name}</p>
+                            {file.description && (
+                              <p className="text-xs text-muted-foreground line-clamp-2 mt-1">
+                                {file.description}
+                              </p>
+                            )}
+                            <div className="flex flex-wrap gap-2 text-[10px] text-muted-foreground mt-1">
+                              {file.file_size && <span>{formatFileSize(file.file_size)}</span>}
+                              <span>Category: {file.file_category}</span>
+                            </div>
+                          </div>
+                        </div>
+                        <div className="flex items-center justify-between gap-2 text-xs">
+                          <div className="flex gap-2">
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => openPreview(file)}
+                              aria-label="Preview file"
+                            >
+                              <Eye className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => openFile(file)}
+                              aria-label="Open file"
+                            >
+                              <ExternalLink className="h-4 w-4" />
+                            </Button>
+                          </div>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            onClick={() =>
+                              handleDeleteFile(
+                                file.id,
+                                file.file_url,
+                                file.storage_type,
+                              )
+                            }
+                            disabled={!!readOnly}
+                            aria-label="Delete file"
+                          >
+                            <Trash2 className="h-4 w-4 text-destructive" />
+                          </Button>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
                 ))}
               </div>
             </CardContent>
@@ -1165,6 +1217,20 @@ export function FileManager({
                       Generating secure preview link...
                     </div>
                   );
+                }
+                // Always try Google Drive embed for Drive files, regardless of type
+                if (storage === "google_drive") {
+                  const embed = getDrivePreviewUrl(url);
+                  if (embed) {
+                    return (
+                      <iframe
+                        src={embed}
+                        className="w-full h-[70vh] rounded"
+                        allow="autoplay"
+                        allowFullScreen
+                      />
+                    );
+                  }
                 }
                 if (type === "image") {
                   return (

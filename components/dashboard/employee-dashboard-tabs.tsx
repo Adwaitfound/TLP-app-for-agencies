@@ -16,6 +16,7 @@ import { Progress } from "@/components/ui/progress";
 import { StatCard } from "@/components/shared/stat-card";
 import { StatusBadge } from "@/components/shared/status-badge";
 import { TaskManager } from "@/components/dashboard/task-manager";
+import { AllTasksTab } from "@/components/dashboard/all-tasks-tab";
 import { createClient } from "@/lib/supabase/client";
 import { useAuth } from "@/contexts/auth-context";
 import {
@@ -63,17 +64,27 @@ export function EmployeeDashboardTabs() {
   const [loading, setLoading] = useState(true);
   const [projects, setProjects] = useState<ProjectSummary[]>([]);
   const [milestones, setMilestones] = useState<MilestoneSummary[]>([]);
+  const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
+  const [modalOpen, setModalOpen] = useState(false);
   const [overview, setOverview] = useState({
     activeProjects: 0,
     tasksToday: 0,
     overdueTasks: 0,
     upcomingMilestones: 0,
+    completedThisWeek: 0,
   });
+  const [showCongrats, setShowCongrats] = useState(true);
 
   useEffect(() => {
     async function loadDashboard() {
       if (!userId || authLoading) return;
       setLoading(true);
+
+      // Restore congrats banner preference
+      try {
+        const hidden = localStorage.getItem("employee_congrats_hidden");
+        if (hidden === "true") setShowCongrats(false);
+      } catch (_) {}
 
       const supabase = createClient();
       const today = new Date().toISOString().split("T")[0];
@@ -138,11 +149,23 @@ export function EmployeeDashboardTabs() {
 
         // Calculate active projects
         const activeCount = combined.filter(
-          (p) => p.status === "in_progress" || p.status === "active",
+          (p) => p.status === "in_progress" || p.status === "in_review",
         ).length;
+
+        // Completed tasks this week for the current user
+        const sevenDaysAgo = new Date();
+        sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+        const { count: completedThisWeek } = await supabase
+          .from("employee_tasks")
+          .select("id", { count: "exact", head: true })
+          .eq("user_id", userId)
+          .eq("status", "completed")
+          .gte("completed_at", sevenDaysAgo.toISOString());
+
         setOverview((prev) => ({
           ...prev,
           activeProjects: activeCount,
+          completedThisWeek: completedThisWeek || 0,
         }));
       } catch (error) {
         console.error("Error loading dashboard:", error);
@@ -153,6 +176,11 @@ export function EmployeeDashboardTabs() {
 
     loadDashboard();
   }, [userId, authLoading]);
+
+  function openProjectDetail(projectId: string) {
+    setSelectedProjectId(projectId);
+    setModalOpen(true);
+  }
 
   if (authLoading || loading) {
     return (
@@ -177,6 +205,8 @@ export function EmployeeDashboardTabs() {
           New Task
         </Button>
       </div>
+
+      {/* Project Detail Modal temporarily disabled due to type issues */}
 
       {/* Quick Stats */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
@@ -209,10 +239,14 @@ export function EmployeeDashboardTabs() {
         onValueChange={setActiveTab}
         className="space-y-4"
       >
-        <TabsList className="grid w-full grid-cols-3 lg:w-[400px]">
+        <TabsList className="grid w-full grid-cols-4 lg:w-[520px]">
           <TabsTrigger value="overview" className="gap-2">
             <Briefcase className="h-4 w-4" />
             <span className="hidden sm:inline">Overview</span>
+          </TabsTrigger>
+          <TabsTrigger value="tasks" className="gap-2">
+            <ListTodo className="h-4 w-4" />
+            <span className="hidden sm:inline">All Tasks</span>
           </TabsTrigger>
           <TabsTrigger value="projects" className="gap-2">
             <FolderKanban className="h-4 w-4" />
@@ -226,7 +260,35 @@ export function EmployeeDashboardTabs() {
 
         {/* Overview Tab */}
         <TabsContent value="overview" className="space-y-4">
-          <TaskManager />
+          {/* Congrats banner */}
+          <Card className="bg-lime-50 border-lime-200">
+            <CardContent className="py-4 flex flex-col gap-1">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="text-sm font-semibold text-lime-800">
+                    Congratulations! You have completed {overview.completedThisWeek} task{overview.completedThisWeek === 1 ? "" : "s"} this week.
+                  </p>
+                  <p className="text-xs text-lime-700">
+                    Keep up the good work and stay on track!
+                  </p>
+                </div>
+                <button
+                  aria-label="Dismiss"
+                  className="text-xs text-lime-700 hover:text-lime-900"
+                  onClick={() => {
+                    setShowCongrats(false);
+                    try {
+                      localStorage.setItem("employee_congrats_hidden", "true");
+                    } catch (_) {}
+                  }}
+                >
+                  ✕
+                </button>
+              </div>
+            </CardContent>
+          </Card>
+
+          <TaskManager limit={5} onViewAll={() => setActiveTab("tasks")} />
 
           {/* Recent Projects */}
           <Card>
@@ -260,6 +322,7 @@ export function EmployeeDashboardTabs() {
                     <div
                       key={project.id}
                       className="flex items-center justify-between p-4 rounded-lg border hover:bg-accent cursor-pointer transition-colors"
+                      onClick={() => openProjectDetail(project.id)}
                     >
                       <div className="flex-1 min-w-0">
                         <p className="font-medium">{project.name}</p>
@@ -336,6 +399,11 @@ export function EmployeeDashboardTabs() {
           )}
         </TabsContent>
 
+        {/* All Tasks Tab */}
+        <TabsContent value="tasks" className="space-y-4">
+          <AllTasksTab />
+        </TabsContent>
+
         {/* Projects Tab */}
         <TabsContent value="projects" className="space-y-4">
           <Card>
@@ -363,6 +431,7 @@ export function EmployeeDashboardTabs() {
                     <Card
                       key={project.id}
                       className="hover:border-primary/50 transition-colors cursor-pointer"
+                      onClick={() => openProjectDetail(project.id)}
                     >
                       <CardContent className="p-6">
                         <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">

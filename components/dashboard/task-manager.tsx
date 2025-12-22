@@ -79,7 +79,15 @@ const statusIcons = {
   cancelled: Circle,
 };
 
-export function TaskManager() {
+const taskStatuses = ["todo", "in_progress", "blocked", "completed", "cancelled"] as const;
+
+export function TaskManager({
+  limit,
+  onViewAll,
+}: {
+  limit?: number;
+  onViewAll?: () => void;
+}) {
   const [tasks, setTasks] = useState<any[]>([]);
   const [overdueTasks, setOverdueTasks] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -119,6 +127,17 @@ export function TaskManager() {
     console.log("[TaskManager] Tasks state changed:", tasks);
     console.log("[TaskManager] Overdue tasks state changed:", overdueTasks);
   }, [tasks, overdueTasks]);
+
+  // Combined tasks list for simple debug/inspection. Keep hooks unconditional.
+  const allTasks = [...overdueTasks, ...tasks];
+
+  useEffect(() => {
+    if (allTasks.length > 0) {
+      console.log("[TaskManager] First task for inspection:", allTasks[0]);
+      const taskWithDesc = allTasks.find((t) => t.description?.trim());
+      console.log("[TaskManager] First task WITH description:", taskWithDesc);
+    }
+  }, [allTasks]);
 
   async function loadProjects() {
     setProjectLoading(true);
@@ -175,18 +194,23 @@ export function TaskManager() {
       );
       console.log("[TaskManager] Tasks with proposals:", tasksWithProposals);
       console.log("[TaskManager] Setting tasks state with:", todayRes.data);
-      // Filter to only show tasks assigned to current user
-      const userTasks = todayRes.data.filter((t: any) => t.user_id === localStorage.getItem('user_id'));
-      setTasks(userTasks);
+      // Debug: Log description field for each task
+      console.log("[TaskManager] Task descriptions:", todayRes.data.map((t: any) => ({ 
+        id: t.id, 
+        title: t.title, 
+        description: t.description,
+        hasDescription: !!t.description 
+      })));
+      // The server already filters by user, so no need to filter again
+      setTasks(todayRes.data);
     }
     if (overdueRes.data) {
       console.log(
         "[TaskManager] Setting overdue tasks state with:",
         overdueRes.data,
       );
-      // Filter to only show tasks assigned to current user
-      const userOverdueTasks = overdueRes.data.filter((t: any) => t.user_id === localStorage.getItem('user_id'));
-      setOverdueTasks(userOverdueTasks);
+      // The server already filters by user, so no need to filter again
+      setOverdueTasks(overdueRes.data);
     }
     setLoading(false);
   }
@@ -243,6 +267,16 @@ export function TaskManager() {
     }
   }
 
+  async function handleChangeStatus(task: any, status: (typeof taskStatuses)[number]) {
+    if (status === task.status) return;
+    const result = await updateTask(task.id, { status });
+    if (result.error) {
+      alert(result.error);
+    } else {
+      await loadTasks();
+    }
+  }
+
   async function handleDeleteTask(taskId: string) {
     if (!confirm("Delete this task?")) return;
 
@@ -279,7 +313,7 @@ export function TaskManager() {
     );
   }
 
-  const allTasks = [...overdueTasks, ...tasks];
+  
 
   return (
     <Card>
@@ -290,9 +324,19 @@ export function TaskManager() {
             Today&apos;s priorities and overdue items
           </CardDescription>
         </div>
-        <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+        <div className="absolute top-4 right-4 flex items-center gap-2">
+          {limit && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => onViewAll && onViewAll()}
+            >
+              View All
+            </Button>
+          )}
+          <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
           <DialogTrigger asChild>
-            <Button size="sm" className="absolute top-4 right-4">
+            <Button size="sm">
               <Plus className="h-4 w-4 mr-2" />
               Add Task
             </Button>
@@ -470,7 +514,8 @@ export function TaskManager() {
               </div>
             </form>
           </DialogContent>
-        </Dialog>
+          </Dialog>
+        </div>
       </CardHeader>
       <CardContent>
         {allTasks.length === 0 ? (
@@ -479,7 +524,7 @@ export function TaskManager() {
           </p>
         ) : (
           <div className="space-y-3">
-            {allTasks.map((task) => {
+            {(limit ? allTasks.slice(0, limit) : allTasks).map((task) => {
               const StatusIcon =
                 statusIcons[task.status as keyof typeof statusIcons] || Circle;
               const isOverdue =
@@ -490,6 +535,11 @@ export function TaskManager() {
               const daysUntilDue = task.due_date 
                 ? Math.ceil((new Date(task.due_date).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24))
                 : null;
+
+              // Debug log for descriptions
+              if (task.title.includes("Dealers") && task.description) {
+                console.log(`[TaskManager] Task "${task.title}" has description: "${task.description}"`);
+              }
 
               return (
                 <div
@@ -524,24 +574,42 @@ export function TaskManager() {
                         <div className="flex items-start justify-between gap-2">
                           <div className="flex-1">
                             <p
-                              className={`font-semibold text-base transition-opacity ${
+                              className={`font-semibold text-base transition-opacity text-slate-900 ${
                                 task.status === "completed" ? "line-through opacity-60" : ""
                               }`}
                             >
                               {task.title}
                             </p>
-                            {task.description && (
-                              <p className="text-sm text-muted-foreground mt-1 line-clamp-2">
+                            {/* Description display */}
+                            {task.description ? (
+                              <p className="text-sm text-slate-700 mt-1">
                                 {task.description}
                               </p>
-                            )}
+                            ) : null}
                           </div>
-                          <button
-                            onClick={() => handleDeleteTask(task.id)}
-                            className="flex-shrink-0 text-muted-foreground hover:text-red-600 hover:bg-red-50 p-2 rounded transition-colors"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </button>
+                          <div className="flex items-center gap-2 flex-shrink-0">
+                            <Select
+                              value={task.status}
+                              onValueChange={(val) => handleChangeStatus(task, val as any)}
+                            >
+                              <SelectTrigger className="w-[150px]">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {taskStatuses.map((s) => (
+                                  <SelectItem key={s} value={s}>
+                                    {s.replace("_", " ")}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                            <button
+                              onClick={() => handleDeleteTask(task.id)}
+                              className="text-muted-foreground hover:text-red-600 hover:bg-red-50 p-2 rounded transition-colors"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </button>
+                          </div>
                         </div>
 
                         {/* Task metadata */}
