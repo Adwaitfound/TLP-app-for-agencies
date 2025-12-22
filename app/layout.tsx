@@ -7,6 +7,7 @@ import { DebugConsole } from "@/components/debug-console";
 import { GlobalClickTracker } from "@/components/global-click-tracker";
 import { ErrorBoundary } from "@/components/error-boundary";
 import { GlobalErrorListener } from "@/components/global-error-listener";
+import { VersionBadge } from "@/components/version-badge";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -84,6 +85,7 @@ export default function RootLayout({
           <AuthProvider>
             <ErrorBoundary>
               {children}
+              <VersionBadge />
               <GlobalClickTracker />
               <GlobalErrorListener />
               <DebugConsole />
