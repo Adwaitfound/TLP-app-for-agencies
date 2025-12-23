@@ -42,6 +42,10 @@ export function ClientHeader() {
     await logout();
   };
 
+  const handleProfileClick = () => {
+    router.push("/dashboard/client/settings");
+  };
+
   return (
     <header className="flex h-14 items-center gap-4 border-b bg-muted/40 px-4 lg:h-[60px] lg:px-6">
       {/* Mobile Menu */}
@@ -177,7 +181,7 @@ export function ClientHeader() {
             </div>
           </DropdownMenuLabel>
           <DropdownMenuSeparator />
-          <DropdownMenuItem onClick={() => router.push("/dashboard/client/settings")}>
+          <DropdownMenuItem onClick={handleProfileClick}>
             <User className="mr-2 h-4 w-4" />
             <span>Profile</span>
           </DropdownMenuItem>
