@@ -29,10 +29,6 @@ export function EmployeeHeader() {
     .slice(0, 2)
     .toUpperCase();
 
-  const handleLogout = async () => {
-    await logout();
-  };
-
   const handleProfileClick = () => {
     console.log(
       "🔵 Profile clicked - attempting navigation to /dashboard/employee/settings",
@@ -45,6 +41,10 @@ export function EmployeeHeader() {
     } catch (error) {
       console.error("❌ Navigation error:", error);
     }
+  };
+
+  const handleLogout = async () => {
+    await logout();
   };
 
   return (

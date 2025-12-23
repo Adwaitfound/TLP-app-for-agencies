@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import {
   Card,
   CardContent,
@@ -29,13 +30,15 @@ import {
   Lock,
   Loader2,
   CheckCircle2,
+  LogOut,
 } from "lucide-react";
 import { useAuth } from "@/contexts/auth-context";
 import { createClient } from "@/lib/supabase/client";
 import { debug } from "@/lib/debug";
 
 export default function SettingsPage() {
-  const { user, loading: authLoading, setUser } = useAuth();
+  const { user, loading: authLoading, setUser, logout } = useAuth();
+  const router = useRouter();
   const [saving, setSaving] = useState(false);
   const [savedMessage, setSavedMessage] = useState("");
   const [passwordData, setPasswordData] = useState({
@@ -200,6 +203,11 @@ export default function SettingsPage() {
     } finally {
       setSaving(false);
     }
+  }
+
+  async function handleLogout() {
+    debug.log("SETTINGS", "Logout initiated");
+    await logout();
   }
 
   if (authLoading || !user) {
@@ -560,6 +568,25 @@ export default function SettingsPage() {
                   </Button>
                 </div>
               </form>
+            </CardContent>
+          </Card>
+
+          <Card className="border-red-200 dark:border-red-900">
+            <CardHeader>
+              <CardTitle className="text-red-600 dark:text-red-400">Sign Out</CardTitle>
+              <CardDescription>
+                Log out of your account on this device
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Button
+                onClick={handleLogout}
+                variant="destructive"
+                className="gap-2"
+              >
+                <LogOut className="h-4 w-4" />
+                Sign Out
+              </Button>
             </CardContent>
           </Card>
         </TabsContent>

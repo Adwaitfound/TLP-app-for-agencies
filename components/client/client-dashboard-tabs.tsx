@@ -255,10 +255,9 @@ export default function ClientDashboardTabs() {
         supabase
           .from("invoices")
           .select(
-            "id,project_id,client_id,status,total,invoice_number,created_at,due_date,shared_with_client",
+            "id,project_id,client_id,status,total,invoice_number,created_at,due_date,issue_date,invoice_file_url,shared_with_client",
           )
           .eq("client_id", clientId)
-          .eq("status", "sent")
           .eq("shared_with_client", true)
           .order("created_at", { ascending: false }),
       ]);
@@ -291,10 +290,9 @@ export default function ClientDashboardTabs() {
             supabase
               .from("invoices")
               .select(
-                "id,project_id,client_id,status,total,invoice_number,created_at,due_date,shared_with_client",
+                "id,project_id,client_id,status,total,invoice_number,created_at,due_date,issue_date,invoice_file_url,shared_with_client",
               )
               .in("project_id", projectIds)
-              .eq("status", "sent")
               .eq("shared_with_client", true)
               .order("created_at", { ascending: false }),
             supabase
@@ -367,6 +365,13 @@ export default function ClientDashboardTabs() {
       setFiles(filesData);
       setComments(commentsData);
       setSubProjects(subProjectsData);
+      
+      console.log("📊 Client Dashboard Data Loaded:");
+      console.log("  - Client ID:", clientId);
+      console.log("  - Invoices Count:", invoicesData?.length || 0);
+      console.log("  - Invoices Data:", invoicesData);
+      console.log("  - Invoices by Client:", invoicesByClient);
+      console.log("  - Invoices by Project:", invoicesByProject);
     } catch (err: any) {
       const errorDetails = {
         message: err?.message || "Unknown error",
@@ -390,6 +395,102 @@ export default function ClientDashboardTabs() {
     fetchClientData();
   }, [fetchClientData]);
 
+  // Subscribe to real-time updates for all client data
+  useEffect(() => {
+    if (!clientData?.id || !projects.length) return;
+
+    const supabase = createClient();
+    const projectIds = projects.map(p => p.id);
+    
+    console.log("🔔 Setting up real-time subscriptions for client:", clientData.id);
+    
+    // Subscribe to all relevant tables for real-time updates
+    const channel = supabase
+      .channel(`client-dashboard-${clientData.id}`)
+      // Invoices
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "invoices",
+          filter: `client_id=eq.${clientData.id}`,
+        },
+        (payload: any) => {
+          console.log("📡 Invoice change:", payload.eventType);
+          fetchClientData();
+        }
+      )
+      // Projects
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "projects",
+          filter: `client_id=eq.${clientData.id}`,
+        },
+        (payload: any) => {
+          console.log("📡 Project change:", payload.eventType);
+          fetchClientData();
+        }
+      )
+      // Project Files
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "project_files",
+        },
+        (payload: any) => {
+          // Check if file belongs to client's projects
+          if (projectIds.includes(payload.new?.project_id || payload.old?.project_id)) {
+            console.log("📡 File change:", payload.eventType);
+            fetchClientData();
+          }
+        }
+      )
+      // Comments
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "project_comments",
+        },
+        (payload: any) => {
+          if (projectIds.includes(payload.new?.project_id || payload.old?.project_id)) {
+            console.log("📡 Comment change:", payload.eventType);
+            fetchClientData();
+          }
+        }
+      )
+      // Sub-projects
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "sub_projects",
+        },
+        (payload: any) => {
+          if (projectIds.includes(payload.new?.project_id || payload.old?.project_id)) {
+            console.log("📡 Sub-project change:", payload.eventType);
+            fetchClientData();
+          }
+        }
+      )
+      .subscribe((status) => {
+        console.log("📡 Realtime subscription status:", status);
+      });
+
+    return () => {
+      console.log("🔕 Removing all subscriptions");
+      supabase.removeChannel(channel);
+    };
+  }, [clientData?.id, projects, fetchClientData]);
+
   const stats = useMemo(() => {
     const activeCount = projects.filter(
       (p) => p.status === "in_progress" || p.status === "in_review",
@@ -400,9 +501,22 @@ export default function ClientDashboardTabs() {
     const pendingInvoicesCount = invoices.filter(
       (inv) => inv.status === "sent" || inv.status === "overdue",
     ).length;
-    const totalSpent = invoices
-      .filter((inv) => inv.status === "paid")
-      .reduce((sum, inv) => sum + (inv.total || 0), 0);
+    const paidInvoices = invoices.filter((inv) => inv.status === "paid");
+    const totalSpent = paidInvoices.reduce((sum, inv) => sum + (inv.total || 0), 0);
+
+    console.log("📊 Stats calculated:", {
+      totalInvoices: invoices.length,
+      paidInvoicesCount: paidInvoices.length,
+      paidInvoices: paidInvoices.map(inv => ({ 
+        id: inv.id, 
+        number: inv.invoice_number, 
+        total: inv.total,
+        amount: inv.amount,
+        status: inv.status,
+        allFields: Object.keys(inv)
+      })),
+      totalSpent,
+    });
 
     return {
       activeProjects: activeCount,
@@ -931,10 +1045,12 @@ export default function ClientDashboardTabs() {
                         <StatusBadge status={invoice.status} />
                       </div>
                       <div className="grid grid-cols-2 gap-2 text-sm text-muted-foreground">
-                        <div>
-                          Issue Date:{" "}
-                          {new Date(invoice.issue_date).toLocaleDateString()}
-                        </div>
+                        {invoice.issue_date && (
+                          <div>
+                            Issue Date:{" "}
+                            {new Date(invoice.issue_date).toLocaleDateString()}
+                          </div>
+                        )}
                         {invoice.due_date && (
                           <div>
                             Due:{" "}

@@ -93,6 +93,12 @@ export default function InvoicesPage() {
   const [selectedClientId, setSelectedClientId] = useState("");
   const [selectedProjectId, setSelectedProjectId] = useState("");
   const [invoiceNumber, setInvoiceNumber] = useState("");
+  const [invoiceTotal, setInvoiceTotal] = useState("");
+  const [invoiceDueDate, setInvoiceDueDate] = useState("");
+  const [invoiceIssueDate, setInvoiceIssueDate] = useState("");
+  const [invoiceTotal, setInvoiceTotal] = useState("");
+  const [invoiceDueDate, setInvoiceDueDate] = useState("");
+  const [invoiceIssueDate, setInvoiceIssueDate] = useState("");
 
   const isAdwait = user?.email === "adwait@thelostproject.in";
 
@@ -176,6 +182,10 @@ export default function InvoicesPage() {
       alert("Please fill in all required fields");
       return;
     }
+    if (invoiceTotal && (isNaN(parseFloat(invoiceTotal)) || parseFloat(invoiceTotal) < 0)) {
+      alert("Please enter a valid total amount");
+      return;
+    }
     if (!selectedFile.name.toLowerCase().endsWith(".pdf")) {
       alert("Please upload a PDF file");
       return;
@@ -206,8 +216,9 @@ export default function InvoicesPage() {
           project_id: selectedProjectId || null,
           invoice_number: invoiceNumber,
           invoice_file_url: publicUrl,
-          issue_date: today,
-          due_date: today,
+          issue_date: invoiceIssueDate || today,
+          due_date: invoiceDueDate || today,
+          total: invoiceTotal ? parseFloat(invoiceTotal) : null,
           status: "draft",
         })
         .select("*, clients(company_name), projects(name)")
@@ -226,6 +237,9 @@ export default function InvoicesPage() {
       setSelectedClientId("");
       setSelectedProjectId("");
       setInvoiceNumber("");
+      setInvoiceTotal("");
+      setInvoiceDueDate("");
+      setInvoiceIssueDate("");
     } catch (error: any) {
       console.error("Error uploading invoice:", error);
       showToast(error.message || "Failed to upload invoice", "error");
@@ -500,6 +514,71 @@ export default function InvoicesPage() {
                   className="mt-1"
                   placeholder="INV-2024-001"
                   required
+                />
+              </div>
+
+              <div>                <Label>Total Amount (₹)</Label>
+                <Input
+                  type="number"
+                  value={invoiceTotal}
+                  onChange={(e) => setInvoiceTotal(e.target.value)}
+                  className="mt-1"
+                  placeholder="50000"
+                  min="0"
+                  step="0.01"
+                />
+              </div>
+
+              <div>
+                <Label>Issue Date</Label>
+                <Input
+                  type="date"
+                  value={invoiceIssueDate}
+                  onChange={(e) => setInvoiceIssueDate(e.target.value)}
+                  className="mt-1"
+                />
+              </div>
+
+              <div>
+                <Label>Due Date</Label>
+                <Input
+                  type="date"
+                  value={invoiceDueDate}
+                  onChange={(e) => setInvoiceDueDate(e.target.value)}
+                  className="mt-1"
+                />
+              </div>
+
+              <div>                <Label>Total Amount (₹) *</Label>
+                <Input
+                  type="number"
+                  value={invoiceTotal}
+                  onChange={(e) => setInvoiceTotal(e.target.value)}
+                  className="mt-1"
+                  placeholder="50000"
+                  min="0"
+                  step="0.01"
+                  required
+                />
+              </div>
+
+              <div>
+                <Label>Issue Date</Label>
+                <Input
+                  type="date"
+                  value={invoiceIssueDate}
+                  onChange={(e) => setInvoiceIssueDate(e.target.value)}
+                  className="mt-1"
+                />
+              </div>
+
+              <div>
+                <Label>Due Date</Label>
+                <Input
+                  type="date"
+                  value={invoiceDueDate}
+                  onChange={(e) => setInvoiceDueDate(e.target.value)}
+                  className="mt-1"
                 />
               </div>
 

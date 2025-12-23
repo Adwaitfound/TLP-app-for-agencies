@@ -38,12 +38,12 @@ export function ClientHeader() {
   const { user, logout } = useAuth();
   const router = useRouter();
 
-  const handleLogout = async () => {
-    await logout();
-  };
-
   const handleProfileClick = () => {
     router.push("/dashboard/client/settings");
+  };
+
+  const handleLogout = async () => {
+    await logout();
   };
 
   return (
