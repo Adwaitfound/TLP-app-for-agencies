@@ -33,6 +33,7 @@ import {
   MessageSquare,
   Clock,
   Star,
+  ExternalLink,
 } from "lucide-react";
 import {
   Select,
@@ -47,7 +48,8 @@ import { createClient } from "@/lib/supabase/client";
 import { useAuth } from "@/contexts/auth-context";
 import { Progress } from "@/components/ui/progress";
 import { debug } from "@/lib/debug";
-import { getFileType, getGoogleDriveThumbnailUrl } from "@/lib/file-upload";
+import { getFileType, getGoogleDriveThumbnailUrl, FILE_CATEGORIES } from "@/lib/file-upload";
+import { getSignedProjectFileUrl } from "@/app/actions/project-file-operations";
 
 export default function ClientDashboardTabs() {
   const { user, loading: authLoading } = useAuth();
@@ -71,6 +73,72 @@ export default function ClientDashboardTabs() {
   const [newCommentFileId, setNewCommentFileId] = useState<string | null>(null);
   const [newCommentTimestamp, setNewCommentTimestamp] = useState<string>("");
   const [submittingComment, setSubmittingComment] = useState<boolean>(false);
+  const [isPreviewOpen, setIsPreviewOpen] = useState(false);
+  const [previewFile, setPreviewFile] = useState<any | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  function getDrivePreviewUrl(url: string): string | null {
+    try {
+      const u = new URL(url);
+      const pathParts = u.pathname.split("/");
+      const idx = pathParts.findIndex((p) => p === "d");
+      const id = idx >= 0 ? pathParts[idx + 1] : null;
+      if (id) return `https://drive.google.com/file/d/${id}/preview`;
+      const ucId = u.searchParams.get("id");
+      if (ucId) return `https://drive.google.com/file/d/${ucId}/preview`;
+    } catch {}
+    return null;
+  }
+
+  function FileThumb({ file }: { file: any }) {
+    const type = file.file_type || getFileType(file.file_name || "");
+    const [failed, setFailed] = useState(false);
+    const [signedSrc, setSignedSrc] = useState<string | null>(null);
+    let src: string | null = null;
+    if (file.storage_type === "google_drive") {
+      src = getGoogleDriveThumbnailUrl(file.file_url, 480);
+    } else if (type === "image") {
+      src = file.storage_type === "supabase" ? signedSrc ?? file.file_url : file.file_url;
+    }
+    useEffect(() => {
+      let cancelled = false;
+      async function run() {
+        if (type === "image" && file.storage_type === "supabase") {
+          const res = await getSignedProjectFileUrl(file.file_url, 300);
+          if (!cancelled && !res.error && res.signedUrl) setSignedSrc(res.signedUrl);
+          if (!cancelled && res.error) setSignedSrc(null);
+        }
+      }
+      run();
+      return () => {
+        cancelled = true;
+      };
+    }, [file.file_url, type, file.storage_type]);
+
+    if (!src || failed) {
+      if (file.storage_type === "google_drive") {
+        const preview = getDrivePreviewUrl(file.file_url);
+        if (preview) {
+          return (
+            <iframe
+              src={preview}
+              title={file.file_name || "Drive preview"}
+              className="w-full h-full"
+              allow="autoplay"
+              allowFullScreen
+              loading="lazy"
+            />
+          );
+        }
+      }
+      return (
+        <div className="flex items-center justify-center w-full h-full bg-muted">
+          <FileText className="h-6 w-6 opacity-60" />
+        </div>
+      );
+    }
+    // eslint-disable-next-line @next/next/no-img-element
+    return <img src={src} alt={file.file_name || "File"} className="w-full h-full object-cover" onError={() => setFailed(true)} />;
+  }
 
   const userId = user?.id;
 
@@ -139,13 +207,29 @@ export default function ClientDashboardTabs() {
       console.debug("[1/6] Clients query OK");
       setClientData(clientRecord);
 
-      // Fetch projects for this client
-      const { data: projectsData, error: projectsError } = await supabase
-        .from("projects")
-        .select("*, clients(company_name)")
-        .eq("client_id", clientRecord.id)
-        .order("created_at", { ascending: false });
+      const clientId = clientRecord.id;
 
+      // Fetch projects and invoices (by client) in parallel to cut load time
+      const [projectsRes, invoicesByClientRes] = await Promise.all([
+        supabase
+          .from("projects")
+          .select(
+            "id,name,status,description,created_at,client_id,clients(company_name)",
+          )
+          .eq("client_id", clientId)
+          .order("created_at", { ascending: false }),
+        supabase
+          .from("invoices")
+          .select(
+            "id,project_id,client_id,status,total,invoice_number,created_at,due_date,shared_with_client",
+          )
+          .eq("client_id", clientId)
+          .eq("status", "sent")
+          .eq("shared_with_client", true)
+          .order("created_at", { ascending: false }),
+      ]);
+
+      const { data: projectsData, error: projectsError } = projectsRes;
       if (projectsError) {
         console.error("[2/6] Projects query failed:", projectsError);
         throw projectsError;
@@ -154,17 +238,8 @@ export default function ClientDashboardTabs() {
 
       const projectIds = projectsData?.map((p) => p.id) || [];
 
-      // Fetch invoices for this client.
-      // Some older records may be linked via project_id but have an unexpected/missing client_id.
       const { data: invoicesByClient, error: invoicesByClientError } =
-        await supabase
-          .from("invoices")
-          .select("*")
-          .eq("client_id", clientRecord.id)
-          .eq("status", "sent")
-          .eq("shared_with_client", true)
-          .order("created_at", { ascending: false });
-
+        invoicesByClientRes;
       if (invoicesByClientError) {
         console.error("[3/6] Invoices (by client) query failed:", invoicesByClientError);
         throw invoicesByClientError;
@@ -172,22 +247,78 @@ export default function ClientDashboardTabs() {
       console.debug("[3/6] Invoices (by client) query OK:", invoicesByClient?.length);
 
       let invoicesByProject: any[] = [];
-      if (projectIds.length > 0) {
-        const { data: fetchedInvoices, error: invoicesByProjectError } =
-          await supabase
-            .from("invoices")
-            .select("*")
-            .in("project_id", projectIds)
-            .eq("status", "sent")
-            .eq("shared_with_client", true)
-            .order("created_at", { ascending: false });
+      let filesData: any[] = [];
+      let commentsData: any[] = [];
+      let subProjectsData: any[] = [];
 
+      if (projectIds.length > 0) {
+        const [invoicesByProjectRes, filesRes, commentsRes, subProjectsRes] =
+          await Promise.all([
+            supabase
+              .from("invoices")
+              .select(
+                "id,project_id,client_id,status,total,invoice_number,created_at,due_date,shared_with_client",
+              )
+              .in("project_id", projectIds)
+              .eq("status", "sent")
+              .eq("shared_with_client", true)
+              .order("created_at", { ascending: false }),
+            supabase
+              .from("project_files")
+              .select("id,project_id,file_name,file_url,file_type,storage_type,created_at,projects(name)")
+              .in("project_id", projectIds)
+              .order("created_at", { ascending: false }),
+            supabase
+              .from("project_comments")
+              .select(
+                "id,project_id,comment_text,file_id,timestamp_seconds,created_at,projects(name),user:users!user_id(full_name,email)",
+              )
+              .in("project_id", projectIds)
+              .order("created_at", { ascending: false }),
+            supabase
+              .from("sub_projects")
+              .select("id,project_id,title,status,due_date,created_at")
+              .in("project_id", projectIds)
+              .order("created_at", { ascending: false }),
+          ]);
+
+        const { data: fetchedInvoices, error: invoicesByProjectError } =
+          invoicesByProjectRes;
         if (invoicesByProjectError) {
           console.error("[4/6] Invoices (by project) query failed:", invoicesByProjectError);
           throw invoicesByProjectError;
         }
         console.debug("[4/6] Invoices (by project) query OK:", fetchedInvoices?.length);
         invoicesByProject = fetchedInvoices || [];
+
+        const { data: fetchedFiles, error: filesError } = filesRes;
+        if (filesError) {
+          console.error("[5a/6] Files query failed:", filesError);
+          throw filesError;
+        }
+        console.debug("[5a/6] Files query OK:", fetchedFiles?.length);
+        filesData = fetchedFiles || [];
+
+        const { data: fetchedComments, error: commentsError } = commentsRes;
+        if (commentsError) {
+          console.error("[5b/6] Comments query failed:", commentsError);
+          throw commentsError;
+        }
+        console.debug("[5b/6] Comments query OK:", fetchedComments?.length);
+        commentsData = fetchedComments || [];
+
+        const { data: fetchedSubProjects, error: subProjectsError } = subProjectsRes;
+        if (subProjectsError) {
+          // Not all clients may have visibility to sub_projects under RLS; proceed without blocking.
+          console.warn(
+            "[6/6] sub_projects fetch skipped due to permissions:",
+            subProjectsError,
+          );
+          subProjectsData = [];
+        } else {
+          console.debug("[6/6] Sub-projects query OK:", fetchedSubProjects?.length);
+          subProjectsData = fetchedSubProjects || [];
+        }
       }
 
       const invoicesData = (() => {
@@ -196,53 +327,6 @@ export default function ClientDashboardTabs() {
         for (const inv of invoicesByProject || []) byId.set(inv.id, inv);
         return Array.from(byId.values());
       })();
-
-      // If there are no projects yet, short-circuit file/comment queries to avoid empty IN errors
-      let filesData: any[] = [];
-      let commentsData: any[] = [];
-      let subProjectsData: any[] = [];
-      if (projectIds.length > 0) {
-        const { data: fetchedFiles, error: filesError } = await supabase
-          .from("project_files")
-          .select("*, projects(name)")
-          .in("project_id", projectIds)
-          .order("created_at", { ascending: false });
-
-        if (filesError) {
-          console.error("[5a/6] Files query failed:", filesError);
-          throw filesError;
-        }
-        console.debug("[5a/6] Files query OK:", fetchedFiles?.length);
-        filesData = fetchedFiles || [];
-
-        const { data: fetchedComments, error: commentsError } = await supabase
-          .from("project_comments")
-          .select("*, projects(name), user:users!user_id(full_name, email)")
-          .in("project_id", projectIds)
-          .order("created_at", { ascending: false });
-
-        if (commentsError) {
-          console.error("[5b/6] Comments query failed:", commentsError);
-          throw commentsError;
-        }
-        console.debug("[5b/6] Comments query OK:", fetchedComments?.length);
-        commentsData = fetchedComments || [];
-
-        const { data: fetchedSubProjects, error: subProjectsError } = await supabase
-          .from("sub_projects")
-          .select("*")
-          .in("project_id", projectIds)
-          .order("created_at", { ascending: false });
-
-        if (subProjectsError) {
-          // Not all clients may have visibility to sub_projects under RLS; proceed without blocking.
-          console.warn("[6/6] sub_projects fetch skipped due to permissions:", subProjectsError);
-          subProjectsData = [];
-        } else {
-          console.debug("[6/6] Sub-projects query OK:", fetchedSubProjects?.length);
-          subProjectsData = fetchedSubProjects || [];
-        }
-      }
 
       setProjects(projectsData || []);
       setInvoices(invoicesData || []);
@@ -357,6 +441,38 @@ export default function ClientDashboardTabs() {
     () => files.filter((f) => f.project_id === selectedProjectId),
     [files, selectedProjectId],
   );
+
+  const filesByCategory = useMemo(() => {
+    const acc: Record<string, any[]> = {};
+    for (const f of selectedFiles) {
+      const type = f.file_type || getFileType(f.file_name || "");
+      let cat = f.file_category as string | undefined;
+      // Align with admin: videos appear under Deliverables
+      if (!cat || cat === "other") {
+        cat = type === "video" ? "deliverables" : (cat || "other");
+      }
+      if (!acc[cat]) acc[cat] = [];
+      acc[cat].push(f);
+    }
+    return acc;
+  }, [selectedFiles]);
+
+  const openPreview = async (file: any) => {
+    setPreviewFile(file);
+    setPreviewUrl(null);
+    setIsPreviewOpen(true);
+    if (file.storage_type === "supabase") {
+      const res = await getSignedProjectFileUrl(file.file_url);
+      if (!res.error && res.signedUrl) setPreviewUrl(res.signedUrl);
+      else setPreviewUrl(file.file_url);
+    } else {
+      setPreviewUrl(file.file_url);
+    }
+  };
+  const openFile = (file: any) => {
+    if (!file?.file_url) return;
+    window.open(file.file_url, "_blank", "noopener,noreferrer");
+  };
 
   const selectedComments = useMemo(
     () => comments.filter((c) => c.project_id === selectedProjectId),
@@ -529,13 +645,13 @@ export default function ClientDashboardTabs() {
                     <div
                       key={project.id}
                       className="p-3 rounded-lg border hover:bg-accent cursor-pointer transition-colors"
-                        onClick={() => {
-                          debug.log("CLIENT_DASHBOARD", "Recent project clicked", {
-                            projectId: project.id,
-                            projectName: project.name,
-                          });
-                          setSelectedProjectId(project.id);
-                        }}
+                      onClick={() => {
+                        debug.log("CLIENT_DASHBOARD", "Recent project clicked", {
+                          projectId: project.id,
+                          projectName: project.name,
+                        });
+                        setSelectedProjectId(project.id);
+                      }}
                     >
                       <div className="flex items-center justify-between mb-2">
                         <p className="font-medium">{project.name}</p>
@@ -889,6 +1005,88 @@ export default function ClientDashboardTabs() {
         </TabsContent>
       </Tabs>
 
+      {/* File preview dialog (image/video/Drive) */}
+      <Dialog
+        open={isPreviewOpen}
+        onOpenChange={(open) => {
+          setIsPreviewOpen(open);
+          if (!open) {
+            setPreviewFile(null);
+            setPreviewUrl(null);
+          }
+        }}
+      >
+        <DialogContent className="w-[95vw] max-w-3xl p-0">
+          <DialogHeader className="px-4 py-3 border-b">
+            <DialogTitle className="flex flex-wrap items-center gap-2">
+              <span>{previewFile?.file_name || "Preview"}</span>
+              {previewFile?.file_category ? (
+                <Badge variant="outline" className="text-[11px]">
+                  {previewFile.file_category}
+                </Badge>
+              ) : null}
+              {previewFile?.file_type ? (
+                <Badge variant="secondary" className="text-[11px]">
+                  {previewFile.file_type}
+                </Badge>
+              ) : null}
+            </DialogTitle>
+            <DialogDescription>
+              {previewFile?.description || "Preview this file or open it in a new tab."}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="p-4 space-y-4">
+            {(() => {
+              const type = previewFile?.file_type || getFileType(previewFile?.file_name || "");
+              const isImage = type === "image";
+              const isVideo = type === "video";
+              const drivePreview = previewFile?.file_url ? getDrivePreviewUrl(previewFile.file_url) : null;
+
+              if (isImage && previewUrl) {
+                // eslint-disable-next-line @next/next/no-img-element
+                return <img src={previewUrl} alt={previewFile?.file_name || "File"} className="w-full h-auto rounded" />;
+              }
+
+              if (isVideo && previewUrl) {
+                return (
+                  <video
+                    src={previewUrl}
+                    controls
+                    playsInline
+                    controlsList="nodownload"
+                    className="w-full rounded"
+                  />
+                );
+              }
+
+              if (drivePreview) {
+                return (
+                  <iframe
+                    src={drivePreview}
+                    title={previewFile?.file_name || "Drive preview"}
+                    className="w-full aspect-video rounded"
+                    allow="autoplay; fullscreen; picture-in-picture"
+                    allowFullScreen
+                  />
+                );
+              }
+
+              return <div className="text-sm text-muted-foreground">Preview unavailable. Use Open to view the file.</div>;
+            })()}
+
+            {previewFile?.file_url ? (
+              <div className="flex justify-end">
+                <Button type="button" onClick={() => openFile(previewFile)} className="gap-2">
+                  <ExternalLink className="h-4 w-4" />
+                  Open
+                </Button>
+              </div>
+            ) : null}
+          </div>
+        </DialogContent>
+      </Dialog>
+
       <Dialog
         open={!!selectedProjectId}
         onOpenChange={(open) => {
@@ -994,7 +1192,7 @@ export default function ClientDashboardTabs() {
                   </CardContent>
                 </Card>
 
-                <div className="grid gap-4 lg:grid-cols-2">
+                <div className="grid gap-4">
                   <Card>
                     <CardHeader>
                       <CardTitle>Milestones</CardTitle>
@@ -1024,61 +1222,84 @@ export default function ClientDashboardTabs() {
                     </CardContent>
                   </Card>
 
-                  <Card>
-                    <CardHeader>
-                      <CardTitle>Files</CardTitle>
-                      <CardDescription>Latest uploads</CardDescription>
-                    </CardHeader>
-                    <CardContent className="space-y-2">
-                      {selectedFiles.length ? (
-                        <ul className="space-y-2 text-sm">
-                          {selectedFiles.map((f: any) => (
-                            <li key={f.id} className="flex items-center justify-between gap-3 rounded-md border p-3">
-                              <div className="flex items-center gap-3 min-w-0">
-                                {(() => {
-                                  const type = f.file_type || getFileType(f.file_name || "");
-                                  const isImage = type === "image";
-                                  const isVideo = type === "video";
-                                  const thumb =
-                                    f.thumbnail_url ||
-                                    (f.storage_type === "gdrive" ? getGoogleDriveThumbnailUrl(f.file_url, 160) : null) ||
-                                    (isImage ? f.file_url : null) ||
-                                    (isVideo && f.video_thumbnail_url ? f.video_thumbnail_url : null);
-                                  return thumb ? (
-                                    <img src={thumb} alt={f.file_name || "File"} className="h-10 w-10 rounded object-cover flex-shrink-0" />
-                                  ) : (
-                                    <FileText className="h-5 w-5 text-muted-foreground flex-shrink-0" />
-                                  );
-                                })()}
-                                <div className="min-w-0">
-                                  <div className="font-medium truncate">{f.file_name ?? f.name ?? "File"}</div>
-                                  {f.created_at ? (
-                                    <div className="text-xs text-muted-foreground">
-                                      {new Date(f.created_at).toLocaleString()}
+                  {/* Files by Category - mirror admin/employee tile layout */}
+                  {Object.entries(FILE_CATEGORIES).map(([category, config]) => {
+                    const categoryFiles = filesByCategory[category] || [];
+                    if (categoryFiles.length === 0) return null;
+                    return (
+                      <Card key={category}>
+                        <CardHeader>
+                          <CardTitle className="text-lg">{config.label}</CardTitle>
+                          <CardDescription>{config.description}</CardDescription>
+                        </CardHeader>
+                        <CardContent>
+                          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                            {categoryFiles.map((f: any) => {
+                              const type = f.file_type || getFileType(f.file_name || "");
+
+                              return (
+                                <Card key={f.id} className="overflow-hidden">
+                                  <CardContent className="p-0">
+                                    <div className="relative aspect-video bg-muted">
+                                      <FileThumb file={f} />
+                                      <div className="absolute top-2 left-2 flex gap-1">
+                                        <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
+                                          {f.storage_type === "supabase" ? "Uploaded" : "Drive"}
+                                        </Badge>
+                                        <Badge variant="outline" className="text-[10px] px-1.5 py-0">
+                                          {type}
+                                        </Badge>
+                                      </div>
+                                      <div className="absolute inset-0 bg-black/0 hover:bg-black/10 transition-colors" />
                                     </div>
-                                  ) : null}
-                                </div>
-                              </div>
-                              {f.file_url ? (
-                                <a
-                                  href={f.file_url}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="text-xs text-muted-foreground hover:text-foreground transition-colors"
-                                >
-                                  Open
-                                </a>
-                              ) : (
-                                <span className="text-xs text-muted-foreground">No link</span>
-                              )}
-                            </li>
-                          ))}
-                        </ul>
-                      ) : (
-                        <div className="text-sm text-muted-foreground">No files uploaded yet.</div>
-                      )}
-                    </CardContent>
-                  </Card>
+                                    <div className="p-3 space-y-2">
+                                      <div className="flex items-start justify-between gap-2">
+                                        <div className="flex-1 min-w-0">
+                                          <p className="font-medium text-sm line-clamp-2">{f.file_name ?? f.name ?? "File"}</p>
+                                          {f.description && (
+                                            <p className="text-xs text-muted-foreground line-clamp-2 mt-1">{f.description}</p>
+                                          )}
+                                          <div className="flex flex-wrap gap-2 text-[10px] text-muted-foreground mt-1">
+                                            <span>Category: {f.file_category || category}</span>
+                                            {f.created_at ? (
+                                              <span>{new Date(f.created_at).toLocaleString()}</span>
+                                            ) : null}
+                                          </div>
+                                        </div>
+                                      </div>
+                                      <div className="flex items-center justify-between gap-2 text-xs">
+                                        <div className="flex gap-2">
+                                          <Button
+                                            type="button"
+                                            variant="ghost"
+                                            size="icon"
+                                            onClick={() => openPreview(f)}
+                                            aria-label="Preview file"
+                                          >
+                                            <Eye className="h-4 w-4" />
+                                          </Button>
+                                          <Button
+                                            type="button"
+                                            variant="ghost"
+                                            size="icon"
+                                            onClick={() => openFile(f)}
+                                            aria-label="Open file"
+                                          >
+                                            <ExternalLink className="h-4 w-4" />
+                                          </Button>
+                                        </div>
+                                        {/* No delete for client view */}
+                                      </div>
+                                    </div>
+                                  </CardContent>
+                                </Card>
+                              );
+                            })}
+                          </div>
+                        </CardContent>
+                      </Card>
+                    );
+                  })}
                 </div>
 
                 <Card>

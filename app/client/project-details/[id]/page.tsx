@@ -5,7 +5,7 @@ import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Button } from "@/components/ui/button";
-import { Calendar, FolderKanban, FileText, MessageSquare, Clock, Plus } from "lucide-react";
+import { Calendar, FolderKanban, FileText, MessageSquare, Clock, Plus, ExternalLink } from "lucide-react";
 import { getFileType, getGoogleDriveThumbnailUrl } from "@/lib/file-upload";
 
 type PageProps = {
@@ -307,51 +307,76 @@ export default async function ClientProjectDetailsStandalonePage({ params }: Pag
             <CardTitle>Files</CardTitle>
             <CardDescription>Latest uploads</CardDescription>
           </CardHeader>
-          <CardContent className="space-y-2">
+          <CardContent>
             {files.length ? (
-              <ul className="space-y-2 text-sm">
-                {files.map((f: any) => (
-                  <li key={f.id} className="flex items-center justify-between gap-3 rounded-md border p-3">
-                    <div className="flex items-center gap-3 min-w-0">
-                      {(() => {
-                        const type = f.file_type || getFileType(f.file_name || "");
-                        const isImage = type === "image";
-                        const isVideo = type === "video";
-                        const thumb =
-                          f.thumbnail_url ||
-                          (f.storage_type === "gdrive" ? getGoogleDriveThumbnailUrl(f.file_url, 160) : null) ||
-                          (isImage ? f.file_url : null) ||
-                          (isVideo && f.video_thumbnail_url ? f.video_thumbnail_url : null);
-                        return thumb ? (
-                          <img src={thumb} alt={f.file_name || "File"} className="h-10 w-10 rounded object-cover flex-shrink-0" />
-                        ) : (
-                          <FileText className="h-5 w-5 text-muted-foreground flex-shrink-0" />
-                        );
-                      })()}
-                      <div className="min-w-0">
-                        <div className="font-medium truncate">{f.file_name ?? f.name ?? "File"}</div>
-                        {f.created_at ? (
-                          <div className="text-xs text-muted-foreground">
-                            {new Date(f.created_at).toLocaleString()}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                {files.map((f: any) => {
+                  const type = f.file_type || getFileType(f.file_name || "");
+                  const isImage = type === "image";
+                  const isVideo = type === "video";
+                  const thumb =
+                    f.thumbnail_url ||
+                    (f.storage_type === "gdrive" ? getGoogleDriveThumbnailUrl(f.file_url, 480) : null) ||
+                    (isImage ? f.file_url : null) ||
+                    (isVideo && f.video_thumbnail_url ? f.video_thumbnail_url : null);
+
+                  return (
+                    <Card key={f.id} className="overflow-hidden">
+                      <CardContent className="p-0">
+                        <div className="relative aspect-video bg-muted">
+                          {thumb ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img src={thumb} alt={f.file_name || "File"} className="w-full h-full object-cover" />
+                          ) : (
+                            <div className="flex h-full w-full items-center justify-center text-muted-foreground">
+                              <FileText className="h-6 w-6 opacity-60" />
+                            </div>
+                          )}
+                          <div className="absolute top-2 left-2 flex gap-1">
+                            <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
+                              {f.storage_type === "supabase" ? "Uploaded" : "Drive"}
+                            </Badge>
+                            <Badge variant="outline" className="text-[10px] px-1.5 py-0">
+                              {type}
+                            </Badge>
                           </div>
-                        ) : null}
-                      </div>
-                    </div>
-                    {f.file_url ? (
-                      <a
-                        href={f.file_url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-xs text-muted-foreground hover:text-foreground transition-colors"
-                      >
-                        Open
-                      </a>
-                    ) : (
-                      <span className="text-xs text-muted-foreground">No link</span>
-                    )}
-                  </li>
-                ))}
-              </ul>
+                          <div className="absolute inset-0 bg-black/0 hover:bg-black/10 transition-colors" />
+                        </div>
+                        <div className="p-3 space-y-2">
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="flex-1 min-w-0">
+                              <p className="font-medium text-sm line-clamp-2">{f.file_name ?? f.name ?? "File"}</p>
+                              {f.description && (
+                                <p className="text-xs text-muted-foreground line-clamp-2 mt-1">{f.description}</p>
+                              )}
+                              {f.created_at ? (
+                                <div className="text-[10px] text-muted-foreground mt-1">
+                                  {new Date(f.created_at).toLocaleString()}
+                                </div>
+                              ) : null}
+                            </div>
+                          </div>
+                          <div className="flex items-center justify-between gap-2 text-xs">
+                            {f.file_url ? (
+                              <a
+                                href={f.file_url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="inline-flex items-center gap-1 text-muted-foreground hover:text-foreground transition-colors"
+                              >
+                                <ExternalLink className="h-4 w-4" />
+                                Open
+                              </a>
+                            ) : (
+                              <span className="text-muted-foreground">No link</span>
+                            )}
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  );
+                })}
+              </div>
             ) : (
               <div className="text-sm text-muted-foreground">No files uploaded yet.</div>
             )}

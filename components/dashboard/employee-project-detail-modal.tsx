@@ -48,6 +48,7 @@ import {
   Clock,
   TrendingUp,
   CheckSquare,
+  FileText,
 } from "lucide-react";
 
 type Props = {

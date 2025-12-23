@@ -40,7 +40,7 @@ export function createClient() {
         process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
         {
             global: {
-                fetch: createFetchWithTimeout(15000),
+                fetch: createFetchWithTimeout(30000),
             },
         }
     )

@@ -48,8 +48,8 @@ export default function LoginPage() {
     setPassword("");
   }, []);
 
-  const handleLogin = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleLogin = async (e?: React.FormEvent) => {
+    if (e && typeof e.preventDefault === "function") e.preventDefault();
     setLoading(true);
     setError(null);
 
@@ -77,7 +77,7 @@ export default function LoginPage() {
         authenticatedEmail: authData?.user?.email,
       });
 
-      if (authError) {
+        if (authError) {
         // Auto-confirm email if required, then retry once
         if ((authError as any)?.code === "email_not_confirmed") {
           debug.warn(
@@ -111,40 +111,11 @@ export default function LoginPage() {
         throw new Error("No user returned from authentication");
       }
 
-      // Ensure session is established and SIGNED_IN fired before proceeding
-      const waitForSignedIn = async (ms: number) => {
-        return new Promise<void>(async (resolve) => {
-          let resolved = false;
-          const timer = setTimeout(() => {
-            if (!resolved) {
-              debug.warn(
-                "LOGIN",
-                "Proceeding without SIGNED_IN event (timeout)",
-              );
-              resolved = true;
-              resolve();
-            }
-          }, ms);
-          // Quick check if session already present
-          const { data } = await supabase.auth.getSession();
-          if (data.session?.user && !resolved) {
-            clearTimeout(timer);
-            resolved = true;
-            return resolve();
-          }
-          const { data: sub } = supabase.auth.onAuthStateChange(
-            (event, session) => {
-              if (event === "SIGNED_IN" && session?.user && !resolved) {
-                clearTimeout(timer);
-                sub.subscription?.unsubscribe();
-                resolved = true;
-                resolve();
-              }
-            },
-          );
-        });
-      };
-      await waitForSignedIn(8000);
+      // Fast session sanity check (no extra waiting)
+      const sessionCheck = await supabase.auth.getSession();
+      if (!sessionCheck.data.session?.user) {
+        debug.warn("LOGIN", "Session missing immediately after signIn");
+      }
 
       console.log("Step 3: User authenticated:", authData.user.id);
       debug.success("LOGIN", "User authenticated", {
@@ -153,15 +124,16 @@ export default function LoginPage() {
 
       // Fetch user data from users table (optimized)
       console.log("Step 4: Fetching user profile...");
+      const profileColumns = "id,email,role,status,full_name,company_name";
       const userQueryResult = await withTimeout(
         (async () => {
           return await supabase
             .from("users")
-            .select("*")
+            .select(profileColumns)
             .eq("id", authData.user.id)
             .maybeSingle();
         })(),
-        15000,
+        12000,
         new Error("Profile fetch timed out"),
       );
       const { data, error: userError } = userQueryResult as {
@@ -193,7 +165,7 @@ export default function LoginPage() {
           (async () => {
             return await supabase
               .from("users")
-              .select("*")
+              .select(profileColumns)
               .eq("email", authData.user.email!)
               .limit(1);
           })(),
@@ -313,20 +285,7 @@ export default function LoginPage() {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <form onSubmit={handleLogin} className="space-y-4" autoComplete="off">
-            {/* Hidden dummy fields to prevent autofill */}
-            <input
-              type="text"
-              style={{ display: "none" }}
-              tabIndex={-1}
-              autoComplete="off"
-            />
-            <input
-              type="password"
-              style={{ display: "none" }}
-              tabIndex={-1}
-              autoComplete="off"
-            />
+          <div className="space-y-4">
 
             {error && (
               <div className="p-3 text-sm text-red-500 bg-red-50 dark:bg-red-900/20 rounded-md">
@@ -359,6 +318,12 @@ export default function LoginPage() {
                 placeholder="••••••••"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !loading) {
+                    // eslint-disable-next-line @typescript-eslint/no-floating-promises
+                    handleLogin();
+                  }
+                }}
                 autoComplete="new-password"
                 data-lpignore="true"
                 data-form-type="other"
@@ -366,7 +331,7 @@ export default function LoginPage() {
               />
             </div>
 
-            <Button type="submit" className="w-full" disabled={loading}>
+            <Button type="button" onClick={() => handleLogin()} className="w-full" disabled={loading}>
               {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               {loading ? "Signing in..." : "Sign In"}
             </Button>
@@ -394,7 +359,7 @@ export default function LoginPage() {
                 </Button>
               </div>
             </div>
-          </form>
+          </div>
         </CardContent>
       </Card>
     </div>

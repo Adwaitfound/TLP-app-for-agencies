@@ -42,7 +42,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const router = useRouter()
     const supabase = useMemo(() => createClient(), [])
 
-    const withTimeout = async <T,>(label: string, promise: Promise<T>, timeoutMs = 15000): Promise<T> => {
+    const withTimeout = async <T,>(label: string, promise: Promise<T>, timeoutMs = 30000): Promise<T> => {
         return await Promise.race([
             promise,
             new Promise<T>((_, reject) => {
@@ -127,11 +127,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const initAuth = async () => {
             try {
                 debug.log('AUTH', 'Initializing auth context...')
-                const { data: { session }, error: sessionError } = await withTimeout(
-                    'auth.getSession',
-                    supabase.auth.getSession(),
-                    15000,
-                )
+
+                let session: any = null
+                let sessionError: any = null
+                try {
+                    const res = await withTimeout(
+                        'auth.getSession',
+                        supabase.auth.getSession(),
+                        8000,
+                    )
+                    session = res.data.session
+                    sessionError = res.error
+                } catch (e: any) {
+                    console.warn('Auth context: getSession timed out, proceeding without blocking')
+                }
                 if (sessionError) {
                     debug.error('AUTH', 'Failed to fetch session', { message: sessionError.message, code: sessionError.code })
                 }
@@ -144,7 +153,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                         const profile = await withTimeout(
                             'ensureUserProfile',
                             ensureUserProfile(session.user),
-                            15000,
+                            12000,
                         )
                         if (profile) {
                             setUser(profile)
@@ -182,7 +191,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                         const profile = await withTimeout(
                             'ensureUserProfile(onAuthStateChange)',
                             ensureUserProfile(session.user),
-                            15000,
+                            12000,
                         )
 
                         if (profile) {
