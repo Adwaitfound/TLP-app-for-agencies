@@ -31,11 +31,11 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
 import { StatusBadge } from "@/components/shared/status-badge";
+import { FileManager } from "@/components/projects/file-manager";
 import {
   getProjectDetailForEmployee,
   updateTaskStatusForEmployee,
   updateMilestoneStatusForEmployee,
-  addProjectFileForEmployee,
 } from "@/app/actions/employee-projects";
 import type { Project, ProjectFile, Milestone, ServiceType } from "@/types";
 import { SERVICE_TYPES } from "@/types";
@@ -48,13 +48,6 @@ import {
   Clock,
   TrendingUp,
   CheckSquare,
-  FileText,
-  Plus,
-  Trash2,
-  FileText as FileIcon,
-  Image as ImageIcon,
-  Video as VideoIcon,
-  FileArchive,
 } from "lucide-react";
 
 type Props = {
@@ -102,69 +95,27 @@ function getServiceBadgeVariant(serviceType?: ServiceType) {
   return (SERVICE_TYPES[serviceType]?.variant || "default") as const;
 }
 
-function getFileIcon(fileType: ProjectFile["file_type"]) {
-  switch (fileType) {
-    case "image":
-      return ImageIcon;
-    case "video":
-      return VideoIcon;
-    case "document":
-      return FileIcon;
-    default:
-      return FileArchive;
-  }
-}
-
-function isGoogleDriveLink(url: string) {
-  return url.includes("drive.google.com") || url.includes("docs.google.com");
-}
-
-function getGoogleDriveThumbnail(url: string): string | null {
-  const match = url.match(/\/d\/([a-zA-Z0-9_-]+)/);
-  if (match?.[1]) {
-    return `https://drive.google.com/thumbnail?id=${match[1]}&sz=w200`;
-  }
-  return null;
-}
-
-function isImageUrl(url: string) {
-  return /\.(jpg|jpeg|png|gif|webp|svg)$/i.test(url);
-}
-
-function isVideoUrl(url: string) {
-  return /\.(mp4|webm|ogg|mov)$/i.test(url);
-}
-
 export function EmployeeProjectDetailModal({ projectId, open, onOpenChange }: Props) {
   const [project, setProject] = useState<ProjectDetail | null>(null);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [milestones, setMilestones] = useState<Milestone[]>([]);
-  const [files, setFiles] = useState<ProjectFile[]>([]);
   const [loading, setLoading] = useState(false);
   const [savingTaskId, setSavingTaskId] = useState<string | null>(null);
   const [savingMilestoneId, setSavingMilestoneId] = useState<string | null>(null);
-  const [submittingFile, setSubmittingFile] = useState(false);
-  const [fileForm, setFileForm] = useState({
-    file_name: "",
-    file_url: "",
-    file_type: "document" as ProjectFile["file_type"],
-    file_category: "other" as ProjectFile["file_category"],
-    description: "",
-  });
+
+  async function loadData() {
+    if (!open || !projectId) return;
+    setLoading(true);
+    const result = await getProjectDetailForEmployee(projectId);
+    if (!("error" in result) && result.project) {
+      setProject(result.project as ProjectDetail);
+      setTasks(result.tasks as Task[]);
+      setMilestones(result.milestones as Milestone[]);
+    }
+    setLoading(false);
+  }
 
   useEffect(() => {
-    async function loadData() {
-      if (!open || !projectId) return;
-      setLoading(true);
-      const result = await getProjectDetailForEmployee(projectId);
-      if (!("error" in result) && result.project) {
-        setProject(result.project as ProjectDetail);
-        setTasks(result.tasks as Task[]);
-        setMilestones(result.milestones as Milestone[]);
-        setFiles(result.files as ProjectFile[]);
-      }
-      setLoading(false);
-    }
     loadData();
   }, [open, projectId]);
 
@@ -184,27 +135,6 @@ export function EmployeeProjectDetailModal({ projectId, open, onOpenChange }: Pr
       setMilestones((prev) => prev.map((m) => (m.id === id ? { ...m, status } : m)));
     }
     setSavingMilestoneId(null);
-  }
-
-  async function handleAddFile(e: React.FormEvent) {
-    e.preventDefault();
-    if (!projectId) return;
-    setSubmittingFile(true);
-    const result = await addProjectFileForEmployee({
-      project_id: projectId,
-      ...fileForm,
-    });
-    if (!("error" in result) && result.data) {
-      setFiles((prev) => [result.data as ProjectFile, ...prev]);
-      setFileForm({
-        file_name: "",
-        file_url: "",
-        file_type: "document",
-        file_category: "other",
-        description: "",
-      });
-    }
-    setSubmittingFile(false);
   }
 
   if (!open) return null;
@@ -446,194 +376,17 @@ export function EmployeeProjectDetailModal({ projectId, open, onOpenChange }: Pr
                     <h3 className="text-base sm:text-lg font-semibold">Files & Documents</h3>
                   </div>
 
-                  {/* Add File Form */}
-                  <Card className="mb-4">
-                    <CardContent className="pt-6">
-                      <form onSubmit={handleAddFile} className="space-y-4">
-                        <div className="text-sm sm:text-base font-medium">Add New File</div>
-                        <div className="grid gap-3 sm:grid-cols-2">
-                          <div className="space-y-2">
-                            <Label htmlFor="file_name">File name</Label>
-                            <Input
-                              id="file_name"
-                              value={fileForm.file_name}
-                              onChange={(e) => setFileForm((prev) => ({ ...prev, file_name: e.target.value }))}
-                              required
-                            />
-                          </div>
-                          <div className="space-y-2">
-                            <Label htmlFor="file_url">File URL</Label>
-                            <Input
-                              id="file_url"
-                              value={fileForm.file_url}
-                              onChange={(e) => setFileForm((prev) => ({ ...prev, file_url: e.target.value }))}
-                              required
-                            />
-                          </div>
-                          <div className="space-y-2">
-                            <Label>Type</Label>
-                            <Select
-                              value={fileForm.file_type}
-                              onValueChange={(val) =>
-                                setFileForm((prev) => ({ ...prev, file_type: val as ProjectFile["file_type"] }))
-                              }
-                            >
-                              <SelectTrigger>
-                                <SelectValue />
-                              </SelectTrigger>
-                              <SelectContent>
-                                {fileTypes.map((type) => (
-                                  <SelectItem key={type} value={type}>
-                                    {type}
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                          </div>
-                          <div className="space-y-2">
-                            <Label>Category</Label>
-                            <Select
-                              value={fileForm.file_category}
-                              onValueChange={(val) =>
-                                setFileForm((prev) => ({ ...prev, file_category: val as ProjectFile["file_category"] }))
-                              }
-                            >
-                              <SelectTrigger>
-                                <SelectValue />
-                              </SelectTrigger>
-                              <SelectContent>
-                                {fileCategories.map((cat) => (
-                                  <SelectItem key={cat} value={cat}>
-                                    {cat}
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                          </div>
-                          <div className="space-y-2 sm:col-span-2">
-                            <Label className="text-sm">Description (optional)</Label>
-                            <Textarea
-                              value={fileForm.description}
-                              onChange={(e) => setFileForm((prev) => ({ ...prev, description: e.target.value }))}
-                              rows={2}
-                            />
-                          </div>
-                        </div>
-                        <Button type="submit" disabled={submittingFile} size="sm" variant="outline">
-                          {submittingFile ? (
-                            <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                          ) : (
-                            <Plus className="h-3 w-3 mr-1" />
-                          )}
-                          Add File
-                        </Button>
-                      </form>
-                    </CardContent>
-                  </Card>
-
-                  {/* Files List */}
-                  {files.length === 0 ? (
-                    <Card>
-                      <CardContent className="pt-6">
-                        <div className="text-center py-8 text-muted-foreground text-sm">
-                          <FileText className="h-8 w-8 mx-auto mb-2 opacity-50" />
-                          No files yet.
-                        </div>
-                      </CardContent>
-                    </Card>
-                  ) : (
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                      {files.map((file) => {
-                        const FileIconComponent = getFileIcon(file.file_type);
-                        const isDriveLink = isGoogleDriveLink(file.file_url);
-                        const driveThumbnail = isDriveLink ? getGoogleDriveThumbnail(file.file_url) : null;
-                        const imageLink = isImageUrl(file.file_url);
-                        const videoLink = isVideoUrl(file.file_url);
-
-                        return (
-                          <Card key={file.id}>
-                            <CardContent className="p-0 overflow-hidden">
-                              <a
-                                href={file.file_url}
-                                target="_blank"
-                                rel="noreferrer"
-                                className="block group"
-                              >
-                                {/* Thumbnail Section */}
-                                <div className="relative bg-muted h-32 sm:h-40 flex items-center justify-center overflow-hidden">
-                                  {driveThumbnail ? (
-                                    <img
-                                      src={driveThumbnail}
-                                      alt={file.file_name}
-                                      className="w-full h-full object-cover group-hover:scale-105 transition-transform"
-                                      onError={(e) => {
-                                        e.currentTarget.style.display = "none";
-                                        const fallback = e.currentTarget.parentElement?.querySelector(".fallback-icon");
-                                        if (fallback) fallback.classList.remove("hidden");
-                                      }}
-                                    />
-                                  ) : imageLink ? (
-                                    <img
-                                      src={file.file_url}
-                                      alt={file.file_name}
-                                      className="w-full h-full object-cover group-hover:scale-105 transition-transform"
-                                      onError={(e) => {
-                                        e.currentTarget.style.display = "none";
-                                        const fallback = e.currentTarget.parentElement?.querySelector(".fallback-icon");
-                                        if (fallback) fallback.classList.remove("hidden");
-                                      }}
-                                    />
-                                  ) : videoLink ? (
-                                    <div className="relative w-full h-full bg-black/80 flex items-center justify-center">
-                                      <VideoIcon className="h-12 w-12 text-white/70" />
-                                      <div className="absolute bottom-2 right-2 bg-black/60 text-white text-xs px-2 py-1 rounded">
-                                        Video
-                                      </div>
-                                    </div>
-                                  ) : null}
-
-                                  {/* Fallback Icon (hidden when image loads) */}
-                                  <FileIconComponent
-                                    className={`h-12 w-12 text-muted-foreground/50 fallback-icon ${
-                                      driveThumbnail || imageLink ? "hidden" : ""
-                                    }`}
-                                  />
-
-                                  {/* Hover Overlay */}
-                                  <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors flex items-center justify-center">
-                                    <ExternalLink className="h-6 w-6 text-white opacity-0 group-hover:opacity-100 transition-opacity drop-shadow-lg" />
-                                  </div>
-                                </div>
-
-                                {/* Content Section */}
-                                <div className="p-3">
-                                  <p className="font-medium text-sm line-clamp-2 mb-2 group-hover:text-primary transition-colors">
-                                    {file.file_name}
-                                  </p>
-                                  {file.description && (
-                                    <p className="text-xs text-muted-foreground line-clamp-2 mb-2">
-                                      {file.description}
-                                    </p>
-                                  )}
-                                  <div className="flex flex-wrap gap-1.5">
-                                    <Badge variant="outline" className="text-[10px] px-1.5 py-0">
-                                      {file.file_type}
-                                    </Badge>
-                                    <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
-                                      {file.file_category}
-                                    </Badge>
-                                  </div>
-                                  {file.uploaded_by && (
-                                    <p className="text-[10px] text-muted-foreground mt-2">By {file.uploaded_by}</p>
-                                  )}
-                                </div>
-                              </a>
-                            </CardContent>
-                          </Card>
-                        );
-                      })}
-                    </div>
-                  )}
+                  {/* Use FileManager Component */}
+                  <FileManager
+                    projectId={projectId || ""}
+                    driveFolderUrl={(project as any)?.drive_folder_url}
+                    onDriveFolderUpdate={() => {
+                      // Reload files after drive folder update
+                      if (projectId) {
+                        loadData();
+                      }
+                    }}
+                  />
                 </div>
               </div>
 
