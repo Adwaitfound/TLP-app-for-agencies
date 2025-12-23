@@ -77,6 +77,7 @@ export default function ClientDashboardTabs() {
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
   const [previewFile, setPreviewFile] = useState<any | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
   function getDrivePreviewUrl(url: string): string | null {
     try {
       const u = new URL(url);
@@ -468,12 +469,25 @@ export default function ClientDashboardTabs() {
     setPreviewFile(file);
     setPreviewUrl(null);
     setIsPreviewOpen(true);
-    if (file.storage_type === "supabase") {
-      const res = await getSignedProjectFileUrl(file.file_url);
-      if (!res.error && res.signedUrl) setPreviewUrl(res.signedUrl);
-      else setPreviewUrl(file.file_url);
-    } else {
+    setPreviewLoading(true);
+    
+    try {
+      if (file.storage_type === "supabase") {
+        const res = await getSignedProjectFileUrl(file.file_url, 300);
+        if (!res.error && res.signedUrl) {
+          setPreviewUrl(res.signedUrl);
+        } else {
+          // Fallback to direct URL if signing fails
+          setPreviewUrl(file.file_url);
+        }
+      } else {
+        setPreviewUrl(file.file_url);
+      }
+    } catch (err) {
+      console.error("Preview error:", err);
       setPreviewUrl(file.file_url);
+    } finally {
+      setPreviewLoading(false);
     }
   };
   const openFile = (file: any) => {
@@ -1020,6 +1034,7 @@ export default function ClientDashboardTabs() {
           if (!open) {
             setPreviewFile(null);
             setPreviewUrl(null);
+            setPreviewLoading(false);
           }
         }}
       >
@@ -1044,7 +1059,12 @@ export default function ClientDashboardTabs() {
           </DialogHeader>
 
           <div className="p-4 space-y-4">
-            {(() => {
+            {previewLoading ? (
+              <div className="flex flex-col items-center justify-center py-12 text-sm text-muted-foreground">
+                <div className="animate-spin mb-2">⟳</div>
+                Loading preview...
+              </div>
+            ) : (() => {
               const type = previewFile?.file_type || getFileType(previewFile?.file_name || "");
               const isImage = type === "image";
               const isVideo = type === "video";
