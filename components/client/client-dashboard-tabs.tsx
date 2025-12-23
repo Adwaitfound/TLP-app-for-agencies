@@ -34,6 +34,7 @@ import {
   Clock,
   Star,
   ExternalLink,
+  Play,
 } from "lucide-react";
 import {
   Select,
@@ -98,6 +99,10 @@ export default function ClientDashboardTabs() {
       src = getGoogleDriveThumbnailUrl(file.file_url, 480);
     } else if (type === "image") {
       src = file.storage_type === "supabase" ? signedSrc ?? file.file_url : file.file_url;
+    } else if (type === "video") {
+      // For videos, we can't show a thumbnail in the client view, 
+      // but we'll show a video icon placeholder
+      src = null; // Force fallback to show video icon
     }
     useEffect(() => {
       let cancelled = false;
@@ -130,9 +135,11 @@ export default function ClientDashboardTabs() {
           );
         }
       }
+      // Show appropriate icon based on file type
+      const IconComponent = type === "video" ? Play : FileText;
       return (
-        <div className="flex items-center justify-center w-full h-full bg-muted">
-          <FileText className="h-6 w-6 opacity-60" />
+        <div className="flex items-center justify-center w-full h-full bg-gradient-to-br from-muted to-muted/80">
+          <IconComponent className="h-8 w-8 opacity-60" />
         </div>
       );
     }
@@ -265,7 +272,7 @@ export default function ClientDashboardTabs() {
               .order("created_at", { ascending: false }),
             supabase
               .from("project_files")
-              .select("id,project_id,file_name,file_url,file_type,storage_type,created_at,projects(name)")
+              .select("id,project_id,file_name,file_url,file_type,file_category,storage_type,created_at,description,file_size,projects(name)")
               .in("project_id", projectIds)
               .order("created_at", { ascending: false }),
             supabase
