@@ -96,9 +96,6 @@ export default function InvoicesPage() {
   const [invoiceTotal, setInvoiceTotal] = useState("");
   const [invoiceDueDate, setInvoiceDueDate] = useState("");
   const [invoiceIssueDate, setInvoiceIssueDate] = useState("");
-  const [invoiceTotal, setInvoiceTotal] = useState("");
-  const [invoiceDueDate, setInvoiceDueDate] = useState("");
-  const [invoiceIssueDate, setInvoiceIssueDate] = useState("");
 
   const isAdwait = user?.email === "adwait@thelostproject.in";
 
