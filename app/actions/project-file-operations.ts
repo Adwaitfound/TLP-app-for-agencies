@@ -35,12 +35,6 @@ function extractStoragePath(
   return { bucket: fallbackBucket, path };
 }
 
-function ensureAuthEmail(userEmail?: string) {
-  if (!userEmail) throw new Error("Unauthorized");
-  if (userEmail !== "adwait@thelostproject.in")
-    throw new Error("Access restricted");
-}
-
 export async function getSignedProjectFileUrl(
   fileUrl: string,
   expiresInSeconds = 3600,
@@ -54,7 +48,7 @@ export async function getSignedProjectFileUrl(
   } = await supabase.auth.getUser();
   if (authError || !user) return { error: "Unauthorized" };
   try {
-    ensureAuthEmail(user.email || undefined);
+    // Removed email restriction - all authenticated users can access signed URLs
     const { bucket, path } = extractStoragePath(fileUrl);
     const { data, error } = await service.storage
       .from(bucket)
