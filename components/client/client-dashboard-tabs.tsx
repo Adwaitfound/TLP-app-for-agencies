@@ -95,16 +95,18 @@ export default function ClientDashboardTabs() {
     const type = file.file_type || getFileType(file.file_name || "");
     const [failed, setFailed] = useState(false);
     const [signedSrc, setSignedSrc] = useState<string | null>(null);
+    const [videoThumbnail, setVideoThumbnail] = useState<string | null>(null);
     let src: string | null = null;
+    
     if (file.storage_type === "google_drive") {
       src = getGoogleDriveThumbnailUrl(file.file_url, 480);
     } else if (type === "image") {
       src = file.storage_type === "supabase" ? signedSrc ?? file.file_url : file.file_url;
     } else if (type === "video") {
-      // For videos, we can't show a thumbnail in the client view, 
-      // but we'll show a video icon placeholder
-      src = null; // Force fallback to show video icon
+      // For videos, try to load the signed URL and then extract thumbnail
+      src = videoThumbnail || (file.storage_type === "supabase" ? signedSrc : file.file_url);
     }
+    
     useEffect(() => {
       let cancelled = false;
       async function run() {
@@ -112,13 +114,20 @@ export default function ClientDashboardTabs() {
           const res = await getSignedProjectFileUrl(file.file_url, 300);
           if (!cancelled && !res.error && res.signedUrl) setSignedSrc(res.signedUrl);
           if (!cancelled && res.error) setSignedSrc(null);
+        } else if (type === "video" && file.storage_type === "supabase" && !videoThumbnail) {
+          const res = await getSignedProjectFileUrl(file.file_url, 300);
+          if (!cancelled && !res.error && res.signedUrl) {
+            setSignedSrc(res.signedUrl);
+            // Note: Can't extract video thumbnail without video element or FFmpeg
+            // Just use the signed URL for now
+          }
         }
       }
       run();
       return () => {
         cancelled = true;
       };
-    }, [file.file_url, type, file.storage_type]);
+    }, [file.file_url, type, file.storage_type, videoThumbnail]);
 
     if (!src || failed) {
       if (file.storage_type === "google_drive") {
@@ -139,11 +148,28 @@ export default function ClientDashboardTabs() {
       // Show appropriate icon based on file type
       const IconComponent = type === "video" ? Play : FileText;
       return (
-        <div className="flex items-center justify-center w-full h-full bg-gradient-to-br from-muted to-muted/80">
-          <IconComponent className="h-8 w-8 opacity-60" />
+        <div className="flex flex-col items-center justify-center w-full h-full bg-gradient-to-br from-muted to-muted/80">
+          <IconComponent className="h-8 w-8 opacity-60 mb-2" />
+          <span className="text-[10px] opacity-60">{type === "video" ? "Video" : "File"}</span>
         </div>
       );
     }
+    
+    // For videos, render as a video element which shows the browser's native video preview
+    if (type === "video" && src) {
+      return (
+        <video
+          src={src}
+          className="w-full h-full object-cover bg-black/20"
+          preload="metadata"
+          playsInline
+          muted
+          onError={() => setFailed(true)}
+        />
+      );
+    }
+    
+    // For images, render as img
     // eslint-disable-next-line @next/next/no-img-element
     return <img src={src} alt={file.file_name || "File"} className="w-full h-full object-cover" onError={() => setFailed(true)} />;
   }
