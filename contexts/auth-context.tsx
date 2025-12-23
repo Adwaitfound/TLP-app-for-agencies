@@ -262,8 +262,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         } catch (err: any) {
             debug.error('AUTH', 'Supabase signOut error', { message: err?.message })
         }
-        router.push("/")
-        debug.log('AUTH', 'Redirected to home')
+        router.push("/login")
+        debug.log('AUTH', 'Redirected to login')
     }
 
     return (
