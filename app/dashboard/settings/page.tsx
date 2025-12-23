@@ -232,7 +232,7 @@ export default function SettingsPage() {
       </div>
 
       <Tabs defaultValue="profile" className="space-y-4">
-        <TabsList className="grid w-full grid-cols-2 md:grid-cols-4">
+        <TabsList className={`grid w-full ${user.role === "admin" || user.role === "project_manager" ? "grid-cols-2 md:grid-cols-4" : "grid-cols-3"}`}>
           <TabsTrigger value="profile" className="text-xs md:text-sm">
             <User className="h-4 w-4 md:mr-2" />
             <span className="hidden md:inline">Profile</span>
