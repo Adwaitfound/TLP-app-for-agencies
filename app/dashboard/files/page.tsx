@@ -20,6 +20,13 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog";
+import {
   Table,
   TableBody,
   TableCell,
@@ -36,9 +43,8 @@ import {
   Eye,
   Search,
   Filter,
-  Calendar,
-  User,
   FolderKanban,
+  ExternalLink,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { useAuth } from "@/contexts/auth-context";
@@ -66,6 +72,8 @@ export default function AllFilesPage() {
   const [fileTypeFilter, setFileTypeFilter] = useState<string>("all");
   const [categoryFilter, setCategoryFilter] = useState<string>("all");
   const [storageTypeFilter, setStorageTypeFilter] = useState<string>("all");
+  const [viewerOpen, setViewerOpen] = useState(false);
+  const [selectedFile, setSelectedFile] = useState<FileWithProject | null>(null);
 
   useEffect(() => {
     if (!user) return;
@@ -133,6 +141,45 @@ export default function AllFilesPage() {
       .join(" ");
   }
 
+  function openFileViewer(file: FileWithProject) {
+    setSelectedFile(file);
+    setViewerOpen(true);
+  }
+
+  function renderThumbnail(file: FileWithProject) {
+    if (file.file_type === "image") {
+      return (
+        <div className="relative w-16 h-16 rounded overflow-hidden bg-muted">
+          <img
+            src={file.file_url}
+            alt={file.file_name}
+            className="w-full h-full object-cover"
+            loading="lazy"
+          />
+        </div>
+      );
+    }
+    if (file.file_type === "video") {
+      return (
+        <div className="relative w-16 h-16 rounded overflow-hidden bg-muted">
+          <video
+            src={file.file_url}
+            className="w-full h-full object-cover"
+            muted
+          />
+          <div className="absolute inset-0 flex items-center justify-center bg-black/30">
+            <Video className="h-6 w-6 text-white" />
+          </div>
+        </div>
+      );
+    }
+    return (
+      <div className="w-16 h-16 rounded bg-muted flex items-center justify-center">
+        {getFileIcon(file.file_type)}
+      </div>
+    );
+  }
+
   const filteredFiles = files.filter((file) => {
     const matchesSearch =
       searchQuery === "" ||
@@ -170,6 +217,139 @@ export default function AllFilesPage() {
 
   return (
     <div className="flex flex-col gap-6">
+      {/* File Viewer Modal */}
+      {selectedFile && (
+        <Dialog open={viewerOpen} onOpenChange={setViewerOpen}>
+          <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                {getFileIcon(selectedFile.file_type)}
+                {selectedFile.file_name}
+              </DialogTitle>
+              <DialogDescription>
+                {selectedFile.projects?.name} - {selectedFile.projects?.clients?.company_name}
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="space-y-4">
+              {/* File Preview */}
+              <div className="rounded-lg border bg-muted/50 overflow-hidden">
+                {selectedFile.file_type === "image" && (
+                  <img
+                    src={selectedFile.file_url}
+                    alt={selectedFile.file_name}
+                    className="w-full h-auto max-h-[60vh] object-contain mx-auto"
+                  />
+                )}
+                {selectedFile.file_type === "video" && (
+                  <video
+                    src={selectedFile.file_url}
+                    controls
+                    className="w-full h-auto max-h-[60vh]"
+                  >
+                    Your browser does not support the video tag.
+                  </video>
+                )}
+                {selectedFile.file_type === "pdf" && (
+                  <iframe
+                    src={selectedFile.file_url}
+                    className="w-full h-[60vh]"
+                    title={selectedFile.file_name}
+                  />
+                )}
+                {(selectedFile.file_type === "document" || selectedFile.file_type === "other") && (
+                  <div className="flex flex-col items-center justify-center py-12">
+                    <FileText className="h-16 w-16 text-muted-foreground mb-4" />
+                    <p className="text-muted-foreground mb-4">
+                      Preview not available for this file type
+                    </p>
+                    <Button
+                      onClick={() => window.open(selectedFile.file_url, "_blank")}
+                    >
+                      <ExternalLink className="h-4 w-4 mr-2" />
+                      Open in New Tab
+                    </Button>
+                  </div>
+                )}
+              </div>
+
+              {/* File Details */}
+              <div className="grid grid-cols-2 gap-4 text-sm">
+                <div>
+                  <span className="font-medium">Category:</span>{" "}
+                  <Badge variant="outline">
+                    {formatCategory(selectedFile.file_category)}
+                  </Badge>
+                </div>
+                <div>
+                  <span className="font-medium">Size:</span>{" "}
+                  {formatFileSize(selectedFile.file_size)}
+                </div>
+                <div>
+                  <span className="font-medium">Storage:</span>{" "}
+                  <Badge
+                    variant={
+                      selectedFile.storage_type === "supabase"
+                        ? "default"
+                        : "secondary"
+                    }
+                  >
+                    {selectedFile.storage_type === "supabase" ? "Supabase" : "Drive"}
+                  </Badge>
+                </div>
+                <div>
+                  <span className="font-medium">Uploaded:</span>{" "}
+                  {new Date(selectedFile.created_at).toLocaleDateString()}
+                </div>
+                {selectedFile.uploader && (
+                  <div className="col-span-2">
+                    <span className="font-medium">Uploaded by:</span>{" "}
+                    {selectedFile.uploader.full_name || selectedFile.uploader.email}
+                  </div>
+                )}
+                {selectedFile.description && (
+                  <div className="col-span-2">
+                    <span className="font-medium">Description:</span>{" "}
+                    {selectedFile.description}
+                  </div>
+                )}
+              </div>
+
+              {/* Actions */}
+              <div className="flex gap-2 justify-end border-t pt-4">
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    const a = document.createElement("a");
+                    a.href = selectedFile.file_url;
+                    a.download = selectedFile.file_name;
+                    a.click();
+                  }}
+                >
+                  <Download className="h-4 w-4 mr-2" />
+                  Download
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => window.open(selectedFile.file_url, "_blank")}
+                >
+                  <ExternalLink className="h-4 w-4 mr-2" />
+                  Open in New Tab
+                </Button>
+                <Button
+                  onClick={() =>
+                    router.push(`/dashboard/projects?id=${selectedFile.project_id}`)
+                  }
+                >
+                  <FolderKanban className="h-4 w-4 mr-2" />
+                  View Project
+                </Button>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
+      )}
+
       {/* Header */}
       <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
         <div>
@@ -259,7 +439,7 @@ export default function AllFilesPage() {
         <CardHeader>
           <CardTitle>Files</CardTitle>
           <CardDescription>
-            All files from all projects
+            All files from all projects - Click on any row to preview
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -277,7 +457,7 @@ export default function AllFilesPage() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Type</TableHead>
+                    <TableHead>Preview</TableHead>
                     <TableHead>File Name</TableHead>
                     <TableHead>Project</TableHead>
                     <TableHead>Client</TableHead>
@@ -290,8 +470,14 @@ export default function AllFilesPage() {
                 </TableHeader>
                 <TableBody>
                   {filteredFiles.map((file) => (
-                    <TableRow key={file.id}>
-                      <TableCell>{getFileIcon(file.file_type)}</TableCell>
+                    <TableRow 
+                      key={file.id}
+                      className="cursor-pointer hover:bg-muted/50"
+                      onClick={() => openFileViewer(file)}
+                    >
+                      <TableCell>
+                        {renderThumbnail(file)}
+                      </TableCell>
                       <TableCell>
                         <div className="flex flex-col">
                           <span className="font-medium">{file.file_name}</span>
@@ -306,9 +492,10 @@ export default function AllFilesPage() {
                         <Button
                           variant="link"
                           className="p-0 h-auto font-normal"
-                          onClick={() =>
-                            router.push(`/dashboard/projects?id=${file.project_id}`)
-                          }
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            router.push(`/dashboard/projects?id=${file.project_id}`);
+                          }}
                         >
                           <FolderKanban className="h-3 w-3 mr-1" />
                           {file.projects?.name || "Unknown"}
@@ -351,14 +538,18 @@ export default function AllFilesPage() {
                           <Button
                             variant="ghost"
                             size="sm"
-                            onClick={() => window.open(file.file_url, "_blank")}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              openFileViewer(file);
+                            }}
                           >
                             <Eye className="h-4 w-4" />
                           </Button>
                           <Button
                             variant="ghost"
                             size="sm"
-                            onClick={() => {
+                            onClick={(e) => {
+                              e.stopPropagation();
                               const a = document.createElement("a");
                               a.href = file.file_url;
                               a.download = file.file_name;
