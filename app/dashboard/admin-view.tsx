@@ -117,7 +117,7 @@ export default function AdminDashboard() {
 
   useEffect(() => {
     async function fetchDashboardData() {
-      if (!userId || authLoading) return;
+      if (!userId) return;
       setError(null);
       setLoading(true);
 
@@ -260,7 +260,7 @@ export default function AdminDashboard() {
     }
 
     fetchDashboardData();
-  }, [userId, authLoading]);
+  }, [userId]);
 
   // Calculate total project amount based on time period
   const filterByTimePeriod = (

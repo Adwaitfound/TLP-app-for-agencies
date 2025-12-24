@@ -118,10 +118,10 @@ export function EmployeeHeader() {
               <DropdownMenuLabel className="font-normal">
                 <div className="flex flex-col space-y-1 px-2 py-1.5">
                   <p className="text-sm font-semibold leading-none">
-                    {user?.full_name || "Employee User"}
+                    {user?.full_name || "User"}
                   </p>
                   <p className="text-xs leading-none text-muted-foreground mt-1">
-                    {user?.email || "employee@videoproduction.com"}
+                    {user?.email || ""}
                   </p>
                 </div>
               </DropdownMenuLabel>
