@@ -54,7 +54,6 @@ export default function Home() {
                   preload="none"
                   controlsList="nodownload noplaybackrate noremoteplayback"
                   disablePictureInPicture
-                  loading="lazy"
                 />
               </div>
             </div>

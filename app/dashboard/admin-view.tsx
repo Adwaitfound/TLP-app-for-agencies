@@ -133,22 +133,22 @@ export default function AdminDashboard() {
         ] = await Promise.all([
           supabase
             .from("projects")
-            .select("id,name,status,budget,deadline,clients(company_name)")
+            .select("*, clients(company_name,contact_person,email)")
             .order("created_at", { ascending: false })
             .limit(100),
           supabase
             .from("invoices")
-            .select("id,invoice_number,amount,status,due_date,clients(company_name)")
+            .select("*, clients(company_name,contact_person,email)")
             .order("created_at", { ascending: false })
             .limit(100),
           supabase
             .from("clients")
-            .select("id,company_name,email,status")
+            .select("*")
             .order("created_at", { ascending: false })
             .limit(100),
           supabase
             .from("milestones")
-            .select("id,title,due_date,status,project_id,projects(name)")
+            .select("*, projects(name)")
             .in("status", ["pending", "in_progress"])
             .order("due_date", { ascending: true })
             .limit(5),
