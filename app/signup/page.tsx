@@ -308,14 +308,16 @@ function SignupForm() {
                   Sign In
                 </Link>
               </div>
-              <div>
-                <Link
-                  href="/auth/select-role"
-                  className="text-primary hover:underline"
-                >
-                  ← Choose a different role
-                </Link>
-              </div>
+              {role !== "client" && (
+                <div>
+                  <Link
+                    href="/auth/select-role"
+                    className="text-primary hover:underline"
+                  >
+                    ← Choose a different role
+                  </Link>
+                </div>
+              )}
             </div>
           </form>
         </CardContent>
