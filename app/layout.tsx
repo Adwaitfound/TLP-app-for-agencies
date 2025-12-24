@@ -8,6 +8,7 @@ import { GlobalClickTracker } from "@/components/global-click-tracker";
 import { ErrorBoundary } from "@/components/error-boundary";
 import { GlobalErrorListener } from "@/components/global-error-listener";
 import { VersionBadge } from "@/components/version-badge";
+import { SwUpdateBanner } from "@/components/sw-update-banner";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -86,6 +87,7 @@ export default function RootLayout({
             <ErrorBoundary>
               {children}
               <VersionBadge />
+              <SwUpdateBanner />
               <GlobalClickTracker />
               <GlobalErrorListener />
               <DebugConsole />

@@ -41,6 +41,12 @@ if (typeof window === 'undefined') {
         // Skip non-GET requests
         if (request.method !== 'GET') return;
 
+        // Skip HTML/document and Next.js data to avoid serving stale shells
+        const accept = request.headers.get('accept') || '';
+        const isHTML = request.destination === 'document' || accept.includes('text/html');
+        const isNextData = url.pathname.startsWith('/_next/data');
+        if (isHTML || isNextData) return;
+
         // Skip Supabase API calls and external resources
         if (url.origin.includes('supabase') ||
             url.origin.includes('google') ||
