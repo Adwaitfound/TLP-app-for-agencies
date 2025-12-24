@@ -97,7 +97,7 @@ export default function InvoicesPage() {
   const [invoiceDueDate, setInvoiceDueDate] = useState("");
   const [invoiceIssueDate, setInvoiceIssueDate] = useState("");
 
-  const isAdwait = user?.email === "adwait@thelostproject.in";
+  const isAdmin = user?.role === "admin";
 
   const showToast = useCallback(
     (message: string, type: "success" | "error" = "success") => {
@@ -129,12 +129,12 @@ export default function InvoicesPage() {
 
   useEffect(() => {
     if (authLoading) return;
-    if (!isAdwait) {
+    if (!isAdmin) {
       setLoading(false);
       return;
     }
     void fetchData();
-  }, [authLoading, isAdwait, fetchData]);
+  }, [authLoading, isAdmin, fetchData]);
 
   const filteredProjects = projects.filter(
     (project) => !selectedClientId || project.client_id === selectedClientId,
@@ -165,8 +165,8 @@ export default function InvoicesPage() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
 
-    if (!isAdwait) {
-      alert("Access restricted to adwait@thelostproject.in");
+    if (!isAdmin) {
+      alert("Access restricted to admins");
       return;
     }
 
@@ -270,13 +270,13 @@ export default function InvoicesPage() {
     );
   }
 
-  if (!isAdwait) {
+  if (!isAdmin) {
     return (
       <div className="flex h-96 items-center justify-center">
         <div className="max-w-md space-y-2 text-center">
           <h2 className="text-xl font-semibold">Access restricted</h2>
           <p className="text-muted-foreground text-sm">
-            Only adwait@thelostproject.in can manage invoices here.
+            Only admins can manage invoices here.
           </p>
         </div>
       </div>
@@ -511,38 +511,6 @@ export default function InvoicesPage() {
                   className="mt-1"
                   placeholder="INV-2024-001"
                   required
-                />
-              </div>
-
-              <div>                <Label>Total Amount (₹)</Label>
-                <Input
-                  type="number"
-                  value={invoiceTotal}
-                  onChange={(e) => setInvoiceTotal(e.target.value)}
-                  className="mt-1"
-                  placeholder="50000"
-                  min="0"
-                  step="0.01"
-                />
-              </div>
-
-              <div>
-                <Label>Issue Date</Label>
-                <Input
-                  type="date"
-                  value={invoiceIssueDate}
-                  onChange={(e) => setInvoiceIssueDate(e.target.value)}
-                  className="mt-1"
-                />
-              </div>
-
-              <div>
-                <Label>Due Date</Label>
-                <Input
-                  type="date"
-                  value={invoiceDueDate}
-                  onChange={(e) => setInvoiceDueDate(e.target.value)}
-                  className="mt-1"
                 />
               </div>
 
