@@ -73,13 +73,13 @@ export default function Home() {
                   The Lost Project
                 </div>
                 <h1 className="text-4xl font-semibold tracking-tight sm:text-5xl md:text-6xl md:leading-[1.05]">
-                  Production, without the{" "}
+                  Every brand has a{" "}
                   <span className="bg-gradient-to-r from-primary via-primary/70 to-primary/40 bg-clip-text text-transparent">
-                    chaos
+                    unique journey
                   </span>
                 </h1>
                 <p className="mx-auto max-w-[700px] text-base leading-relaxed text-muted-foreground sm:text-lg md:text-xl">
-                  One place for projects, client feedback, milestones, files, and invoices — built for real production teams.
+                  We're your partners in shaping that story. Through innovation and collaboration, we'll create a digital narrative that captivates and inspires. Video-first agency obsessed with crafting content that's as captivating as it is impactful.
                 </p>
               </div>
 
@@ -111,49 +111,49 @@ export default function Home() {
           <div className="container px-4 md:px-6">
             <div className="mx-auto mb-12 max-w-3xl text-center">
               <h2 className="text-3xl font-bold tracking-tight sm:text-4xl md:text-5xl">
-                Everything You Need
+                Our Services
               </h2>
               <p className="mt-4 text-lg text-muted-foreground">
-                Powerful features designed for video production professionals
+                Powerful solutions designed to elevate your brand
               </p>
             </div>
 
             <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
               {[
                 {
+                  title: "Video Production",
+                  description:
+                    "From pre-production to post, we craft narratives that resonate. Our production process is a seamless blend of innovation, precision, and passion.",
+                  icon: FolderKanban,
+                },
+                {
+                  title: "Branding & Design",
+                  description:
+                    "Packaging and branding wizards obsessed with creating designs that pop. From concept to shelf, we craft designs that connect with your audience.",
+                  icon: Users,
+                },
+                {
+                  title: "Digital Marketing",
+                  description:
+                    "Strategic social media consulting aligned with digital platforms. Data-driven insights that optimize your online presence and achieve marketing objectives.",
+                  icon: FileText,
+                },
+                {
                   title: "Project Management",
                   description:
-                    "Track all your video projects from planning to completion with intuitive dashboards and progress tracking.",
-                  icon: FolderKanban,
+                    "Track all your projects from planning to completion with intuitive dashboards, real-time progress tracking, and seamless team collaboration.",
+                  icon: BarChart3,
                 },
                 {
                   title: "Client Collaboration",
                   description:
-                    "Share files, collect feedback, and communicate seamlessly with clients in real-time.",
-                  icon: Users,
-                },
-                {
-                  title: "Invoicing & Billing",
-                  description:
-                    "Create professional invoices, track payments, and manage your finances effortlessly.",
-                  icon: FileText,
-                },
-                {
-                  title: "Analytics & Reports",
-                  description:
-                    "Gain insights into your business with comprehensive analytics and visual reports.",
-                  icon: BarChart3,
-                },
-                {
-                  title: "Milestone Tracking",
-                  description:
-                    "Set and track project milestones to keep everyone aligned and on schedule.",
+                    "Share files, collect feedback, and communicate seamlessly with clients in real-time through our dedicated collaboration platform.",
                   icon: CheckCircle,
                 },
                 {
-                  title: "Automated Workflows",
+                  title: "Influencer Marketing",
                   description:
-                    "Automate repetitive tasks and focus on what matters – creating amazing content.",
+                    "Partner with influential individuals to exponentially increase your digital reach. We excel at identifying perfect influencers to amplify your brand's message.",
                   icon: Zap,
                 },
               ].map((feature) => (
@@ -179,10 +179,10 @@ export default function Home() {
             <Card className="border border-primary/20 bg-card/40 text-card-foreground">
               <CardContent className="flex flex-col items-center space-y-6 p-8 text-center sm:p-10 md:p-12">
                 <h2 className="text-3xl font-bold tracking-tight sm:text-4xl md:text-5xl">
-                  Ready to Get Started?
+                  Feeling a little LOST?
                 </h2>
                 <p className="max-w-[720px] text-lg text-muted-foreground">
-                  Join thousands of video professionals who trust our platform to manage their projects.
+                  Join brands who trust The Lost Project to bring their visions to life. With over 10+ years of experience, we're ready to redefine your brand's presence.
                 </p>
                 <Button
                   size="lg"
@@ -202,15 +202,15 @@ export default function Home() {
 
       <footer className="w-full border-t bg-background py-6">
         <div className="container flex flex-col items-center justify-between gap-4 px-4 text-sm text-muted-foreground md:flex-row md:px-6">
-          <div>© 2025 VideoProduction App. All rights reserved.</div>
+          <div>© 2025 The Lost Project. All rights reserved.</div>
           <div className="flex items-center gap-6">
-            <Link href="#privacy" className="hover:text-foreground">
-              Privacy
+            <Link href="https://www.instagram.com/thelostprojectt/" target="_blank" className="hover:text-foreground">
+              Instagram
             </Link>
-            <Link href="#terms" className="hover:text-foreground">
-              Terms
+            <Link href="https://in.linkedin.com/company/thelostproject" target="_blank" className="hover:text-foreground">
+              LinkedIn
             </Link>
-            <Link href="#contact" className="hover:text-foreground">
+            <Link href="https://www.thelostproject.xyz/applicationform" target="_blank" className="hover:text-foreground">
               Contact
             </Link>
           </div>
