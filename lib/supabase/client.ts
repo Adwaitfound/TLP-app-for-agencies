@@ -44,7 +44,7 @@ export function createClient() {
                 flowType: 'pkce',
             },
             global: {
-                fetch: createFetchWithTimeout(45000),
+                fetch: createFetchWithTimeout(20000),
             },
         }
     )

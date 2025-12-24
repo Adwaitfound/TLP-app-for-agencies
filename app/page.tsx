@@ -51,9 +51,10 @@ export default function Home() {
                   loop
                   playsInline
                   controls
-                  preload="metadata"
+                  preload="none"
                   controlsList="nodownload noplaybackrate noremoteplayback"
                   disablePictureInPicture
+                  loading="lazy"
                 />
               </div>
             </div>

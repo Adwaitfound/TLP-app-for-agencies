@@ -228,7 +228,7 @@ export default function ClientDashboardTabs() {
       // Get client record
       const { data: clientRecord, error: clientError } = await supabase
         .from("clients")
-        .select("*")
+        .select("id,user_id,company_name,email,status")
         .eq("user_id", userId)
         .single();
 
