@@ -78,7 +78,7 @@ export function EmployeeDashboardTabs() {
 
   useEffect(() => {
     async function loadDashboard() {
-      if (!userId || authLoading) return;
+      if (!userId) return;
       setLoading(true);
 
       // Restore congrats banner preference
@@ -176,7 +176,7 @@ export function EmployeeDashboardTabs() {
     }
 
     loadDashboard();
-  }, [userId, authLoading]);
+  }, [userId]);
 
   function openProjectDetail(projectId: string) {
     setSelectedProjectId(projectId);

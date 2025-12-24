@@ -124,49 +124,36 @@ export default function AdminDashboard() {
       const supabase = createClient();
 
       try {
-        // Fetch projects
-        const { data: projectsData, error: projectsError } = await supabase
-          .from("projects")
-          .select("*, clients(company_name)")
-          .order("created_at", { ascending: false });
+        // Fetch all data in parallel for faster loading
+        const [
+          { data: projectsData, error: projectsError },
+          { data: invoicesData, error: invoicesError },
+          { data: clientsData, error: clientsError },
+          { data: milestonesData, error: milestonesError },
+        ] = await Promise.all([
+          supabase
+            .from("projects")
+            .select("*, clients(company_name)")
+            .order("created_at", { ascending: false }),
+          supabase
+            .from("invoices")
+            .select("*, clients(company_name)")
+            .order("created_at", { ascending: false }),
+          supabase
+            .from("clients")
+            .select("*")
+            .order("created_at", { ascending: false }),
+          supabase
+            .from("milestones")
+            .select("*, projects(name)")
+            .in("status", ["pending", "in_progress"])
+            .order("due_date", { ascending: true })
+            .limit(5),
+        ]);
 
-        if (projectsError) {
-          setError("Unable to load projects right now. Please retry.");
-          return;
-        }
-
-        // Fetch invoices
-        const { data: invoicesData, error: invoicesError } = await supabase
-          .from("invoices")
-          .select("*, clients(company_name)")
-          .order("created_at", { ascending: false });
-
-        if (invoicesError) {
-          setError("Unable to load invoices right now. Please retry.");
-          return;
-        }
-
-        // Fetch clients
-        const { data: clientsData, error: clientsError } = await supabase
-          .from("clients")
-          .select("*")
-          .order("created_at", { ascending: false });
-
-        if (clientsError) {
-          setError("Unable to load clients right now. Please retry.");
-          return;
-        }
-
-        // Fetch upcoming milestones
-        const { data: milestonesData, error: milestonesError } = await supabase
-          .from("milestones")
-          .select("*, projects(name)")
-          .in("status", ["pending", "in_progress"])
-          .order("due_date", { ascending: true })
-          .limit(5);
-
-        if (milestonesError) {
-          setError("Unable to load milestones right now. Please retry.");
+        if (projectsError || invoicesError || clientsError || milestonesError) {
+          setError("Unable to load dashboard data. Please retry.");
+          setLoading(false);
           return;
         }
 
@@ -218,32 +205,35 @@ export default function AdminDashboard() {
           avgProjectValue,
         });
 
-        // Fetch pending project proposals
+        // Fetch proposals and pending users in parallel
         setProposalLoading(true);
-        const { data: proposalData, error: proposalError } = await supabase
-          .from("employee_tasks")
-          .select(
-            "id, title, proposed_project_name, proposed_project_status, proposed_project_notes, user_id, created_at, projects(name), users:users!employee_tasks_user_id_fkey(full_name, email)",
-          )
-          .not("proposed_project_name", "is", null)
-          .eq("proposed_project_status", "pending")
-          .order("created_at", { ascending: false });
-
-        if (!proposalError) {
-          setProposals(proposalData || []);
-        }
-        setProposalLoading(false);
-
-        // Fetch pending users awaiting approval
         setPendingUsersLoading(true);
-        const { data: pendingUsersData, error: pendingUsersError } =
-          await supabase
+        
+        const [
+          { data: proposalData, error: proposalError },
+          { data: pendingUsersData, error: pendingUsersError },
+        ] = await Promise.all([
+          supabase
+            .from("employee_tasks")
+            .select(
+              "id, title, proposed_project_name, proposed_project_status, proposed_project_notes, user_id, created_at, projects(name), users:users!employee_tasks_user_id_fkey(full_name, email)",
+            )
+            .not("proposed_project_name", "is", null)
+            .eq("proposed_project_status", "pending")
+            .order("created_at", { ascending: false }),
+          supabase
             .from("users")
             .select(
               "id, email, full_name, role, company_name, created_at, status",
             )
             .eq("status", "pending")
-            .order("created_at", { ascending: true });
+            .order("created_at", { ascending: true }),
+        ]);
+
+        if (!proposalError) {
+          setProposals(proposalData || []);
+        }
+        setProposalLoading(false);
 
         if (!pendingUsersError) {
           setPendingUsers(pendingUsersData || []);

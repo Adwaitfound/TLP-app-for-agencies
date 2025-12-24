@@ -209,16 +209,14 @@ export default function ClientDashboardTabs() {
   };
 
   const fetchClientData = useCallback(async () => {
-    // Guard when auth still initializing
-    if (!userId || authLoading) {
-      if (!userId && !authLoading) {
-        setClientData(null);
-        setProjects([]);
-        setInvoices([]);
-        setFiles([]);
-        setComments([]);
-        setLoading(false);
-      }
+    // Guard when no user
+    if (!userId) {
+      setClientData(null);
+      setProjects([]);
+      setInvoices([]);
+      setFiles([]);
+      setComments([]);
+      setLoading(false);
       return;
     }
 
@@ -389,7 +387,7 @@ export default function ClientDashboardTabs() {
     } finally {
       setLoading(false);
     }
-  }, [userId, authLoading]);
+  }, [userId]);
 
   useEffect(() => {
     fetchClientData();
