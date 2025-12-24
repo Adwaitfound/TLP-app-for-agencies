@@ -25,39 +25,21 @@ export default function SelectRolePage() {
       color: "from-blue-500 to-cyan-500",
       signupRoute: "/signup?role=client",
     },
-    {
-      type: "employee",
-      title: "Employee",
-      description:
-        "Manage assigned projects, track time, and collaborate with team members",
-      icon: Briefcase,
-      color: "from-purple-500 to-pink-500",
-      signupRoute: "/signup?role=employee",
-    },
-    {
-      type: "admin",
-      title: "Admin",
-      description:
-        "Full access to manage projects, clients, employees, and analytics",
-      icon: Shield,
-      color: "from-orange-500 to-red-500",
-      signupRoute: "/signup?role=admin",
-    },
   ];
 
   return (
     <div className="flex min-h-screen flex-col items-center justify-center bg-gradient-to-b from-background to-muted/20 p-4">
-      <div className="w-full max-w-5xl space-y-8">
+      <div className="w-full max-w-md space-y-8">
         <div className="text-center space-y-2">
           <h1 className="text-3xl md:text-4xl font-bold tracking-tight">
-            Welcome to VideoProduction
+            Welcome to The Lost Project
           </h1>
           <p className="text-muted-foreground text-lg">
             Select your role to get started
           </p>
         </div>
 
-        <div className="grid gap-6 md:grid-cols-3">
+        <div className="grid gap-6">
           {roles.map((role) => {
             const Icon = role.icon;
             return (
