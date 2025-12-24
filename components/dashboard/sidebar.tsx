@@ -14,6 +14,7 @@ import {
   MessageSquare,
   Bell,
   Wallet,
+  Files,
 } from "lucide-react";
 import { useAuth } from "@/contexts/auth-context";
 
@@ -49,6 +50,11 @@ const adminRoutes = [
     href: "/dashboard/team",
   },
   {
+    label: "All Files",
+    icon: Files,
+    href: "/dashboard/files",
+  },
+  {
     label: "Payments & Vendors",
     icon: Wallet,
     href: "/dashboard/payments",
@@ -80,6 +86,11 @@ const employeeRoutes = [
     label: "My Projects",
     icon: FolderKanban,
     href: "/dashboard/projects",
+  },
+  {
+    label: "All Files",
+    icon: Files,
+    href: "/dashboard/files",
   },
   {
     label: "Comments",
