@@ -2,6 +2,17 @@
 
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 
+async function ensureAdmin(supabase: Awaited<ReturnType<typeof createClient>>, userId: string) {
+  const { data, error } = await (await supabase)
+    .from("users")
+    .select("role")
+    .eq("id", userId)
+    .single();
+  if (error) return { error: "Failed to verify role" } as const;
+  if (!data || data.role !== "admin") return { error: "Access restricted to admins" } as const;
+  return { ok: true } as const;
+}
+
 function extractStoragePath(fileUrl: string) {
   const marker = "project-files/";
   const idx = fileUrl.indexOf(marker);
@@ -21,9 +32,10 @@ export async function fetchInvoicesData() {
     return { error: "Unauthorized" };
   }
 
-  // Verify user is adwait
-  if (user.email !== "adwait@thelostproject.in") {
-    return { error: "Access restricted to adwait@thelostproject.in" };
+  // Verify user is admin
+  {
+    const check = await ensureAdmin(supabase, user.id);
+    if ((check as any).error) return check as any;
   }
 
   try {
@@ -74,9 +86,10 @@ export async function updateInvoiceStatus(invoiceId: string, status: string) {
     return { error: "Unauthorized" };
   }
 
-  // Verify user is adwait
-  if (user.email !== "adwait@thelostproject.in") {
-    return { error: "Access restricted to adwait@thelostproject.in" };
+  // Verify user is admin
+  {
+    const check = await ensureAdmin(supabase, user.id);
+    if ((check as any).error) return check as any;
   }
 
   try {
@@ -108,9 +121,10 @@ export async function updateInvoiceSharedStatus(invoiceId: string, shared_with_c
     return { error: "Unauthorized" };
   }
 
-  // Verify user is adwait
-  if (user.email !== "adwait@thelostproject.in") {
-    return { error: "Access restricted to adwait@thelostproject.in" };
+  // Verify user is admin
+  {
+    const check = await ensureAdmin(supabase, user.id);
+    if ((check as any).error) return check as any;
   }
 
   try {
@@ -143,9 +157,10 @@ export async function deleteInvoice(invoiceId: string, fileUrl: string) {
     return { error: "Unauthorized" };
   }
 
-  // Verify user is adwait
-  if (user.email !== "adwait@thelostproject.in") {
-    return { error: "Access restricted to adwait@thelostproject.in" };
+  // Verify user is admin
+  {
+    const check = await ensureAdmin(supabase, user.id);
+    if ((check as any).error) return check as any;
   }
 
   try {
@@ -176,8 +191,10 @@ export async function getSignedInvoiceUrl(fileUrl: string) {
     error: authError,
   } = await supabase.auth.getUser();
   if (authError || !user) return { error: "Unauthorized" };
-  if (user.email !== "adwait@thelostproject.in")
-    return { error: "Access restricted to adwait@thelostproject.in" };
+  {
+    const check = await ensureAdmin(supabase, user.id);
+    if ((check as any).error) return check as any;
+  }
 
   try {
     const path = extractStoragePath(fileUrl);

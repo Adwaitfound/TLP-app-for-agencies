@@ -12,13 +12,11 @@ function createFetchWithTimeout(timeoutMs: number): typeof fetch {
 
         try {
             return await fetch(input, { ...init, signal: controller.signal })
-        } catch (err) {
-            // Useful during dev: helps diagnose "stuck" Supabase calls.
-            if (process.env.NODE_ENV === 'development') {
+        } catch (err: any) {
+            // Only log in development to avoid console spam
+            if (process.env.NODE_ENV === 'development' && err?.name === 'AbortError') {
                 const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : (input as Request)?.url
-                if (url && url.includes('supabase')) {
-                    console.warn('[Supabase] fetch failed/aborted', { url, timeoutMs })
-                }
+                console.warn('[Supabase] Request timeout', { url, timeoutMs })
             }
             throw err
         } finally {
@@ -39,8 +37,14 @@ export function createClient() {
         process.env.NEXT_PUBLIC_SUPABASE_URL!,
         process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
         {
+            auth: {
+                persistSession: true,
+                autoRefreshToken: true,
+                detectSessionInUrl: true,
+                flowType: 'pkce',
+            },
             global: {
-                fetch: createFetchWithTimeout(30000),
+                fetch: createFetchWithTimeout(45000),
             },
         }
     )

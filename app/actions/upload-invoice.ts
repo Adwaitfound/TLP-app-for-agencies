@@ -15,9 +15,15 @@ export async function uploadInvoiceFile(formData: FormData) {
     return { error: "Unauthorized" };
   }
 
-  // Verify user is adwait
-  if (user.email !== "adwait@thelostproject.in") {
-    return { error: "Access restricted to adwait@thelostproject.in" };
+  // Verify user is admin
+  {
+    const { data, error } = await supabase
+      .from("users")
+      .select("role")
+      .eq("id", user.id)
+      .single();
+    if (error) return { error: "Failed to verify role" };
+    if (!data || data.role !== "admin") return { error: "Access restricted to admins" };
   }
 
   const file = formData.get("file") as File;

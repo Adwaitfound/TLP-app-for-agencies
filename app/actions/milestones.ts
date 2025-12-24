@@ -3,10 +3,15 @@
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import type { MilestoneStatus } from "@/types";
 
-function ensureAuthEmail(userEmail?: string) {
-  if (!userEmail) throw new Error("Unauthorized");
-  if (userEmail !== "adwait@thelostproject.in")
-    throw new Error("Access restricted");
+async function ensureAdminRole(supabase: Awaited<ReturnType<typeof createClient>>, userId?: string) {
+  if (!userId) throw new Error("Unauthorized");
+  const { data, error } = await (await supabase)
+    .from("users")
+    .select("role")
+    .eq("id", userId)
+    .single();
+  if (error) throw new Error("Failed to verify role");
+  if (!data || data.role !== "admin") throw new Error("Access restricted");
 }
 
 export async function createMilestone(payload: {
@@ -23,7 +28,7 @@ export async function createMilestone(payload: {
   } = await supabase.auth.getUser();
   if (authError || !user) return { error: "Unauthorized" };
   try {
-    ensureAuthEmail(user.email || undefined);
+    await ensureAdminRole(supabase, user.id);
     const service = createServiceClient();
     const { data, error } = await service
       .from("milestones")
@@ -55,7 +60,7 @@ export async function updateMilestoneStatus(
   } = await supabase.auth.getUser();
   if (authError || !user) return { error: "Unauthorized" };
   try {
-    ensureAuthEmail(user.email || undefined);
+    await ensureAdminRole(supabase, user.id);
     const service = createServiceClient();
     const { data, error } = await service
       .from("milestones")
@@ -78,7 +83,7 @@ export async function deleteMilestone(id: string) {
   } = await supabase.auth.getUser();
   if (authError || !user) return { error: "Unauthorized" };
   try {
-    ensureAuthEmail(user.email || undefined);
+    await ensureAdminRole(supabase, user.id);
     const service = createServiceClient();
     const { error } = await service.from("milestones").delete().eq("id", id);
     if (error) throw error;
@@ -99,7 +104,7 @@ export async function reorderMilestones(
   } = await supabase.auth.getUser();
   if (authError || !user) return { error: "Unauthorized" };
   try {
-    ensureAuthEmail(user.email || undefined);
+    await ensureAdminRole(supabase, user.id);
     const service = createServiceClient();
     const updates = orderedIds.map((id, idx) => ({
       id,

@@ -42,17 +42,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const router = useRouter()
     const supabase = useMemo(() => createClient(), [])
 
-    const withTimeout = async <T,>(label: string, promise: Promise<T>, timeoutMs = 30000): Promise<T> => {
-        return await Promise.race([
-            promise,
-            new Promise<T>((_, reject) => {
-                const id = setTimeout(() => {
-                    clearTimeout(id)
-                    reject(new Error(`${label} timed out after ${timeoutMs}ms`))
-                }, timeoutMs)
-            }),
-        ])
-    }
+    // Removed aggressive timeouts to prevent auth loops in slow networks
 
     const ensureUserProfile = async (sessionUser: SupabaseUser) => {
         // Check cache first
@@ -128,42 +118,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             try {
                 debug.log('AUTH', 'Initializing auth context...')
 
-                let session: any = null
-                let sessionError: any = null
-                try {
-                    const res = await withTimeout(
-                        'auth.getSession',
-                        supabase.auth.getSession(),
-                        8000,
-                    )
-                    session = res.data.session
-                    sessionError = res.error
-                } catch (e: any) {
-                    console.warn('Auth context: getSession timed out, proceeding without blocking')
-                }
+                const { data: { session }, error: sessionError } = await supabase.auth.getSession()
+                
                 if (sessionError) {
                     debug.error('AUTH', 'Failed to fetch session', { message: sessionError.message, code: sessionError.code })
                 }
+                
                 console.log('Auth context init: session user:', session?.user?.email)
                 debug.log('AUTH', 'Session fetched', { email: session?.user?.email, userId: session?.user?.id })
 
                 if (session?.user) {
                     setSupabaseUser(session.user)
-                    try {
-                        const profile = await withTimeout(
-                            'ensureUserProfile',
-                            ensureUserProfile(session.user),
-                            12000,
-                        )
-                        if (profile) {
-                            setUser(profile)
-                        }
-                    } catch (e: any) {
-                        debug.error('AUTH', 'Profile load timed out/failed; continuing without profile', {
-                            message: e?.message,
-                        })
-                        // Allow app to continue; downstream pages can still use supabaseUser id.
-                        setUser(null)
+                    const profile = await ensureUserProfile(session.user)
+                    if (profile) {
+                        setUser(profile)
                     }
                 } else {
                     debug.log('AUTH', 'No active session found')
@@ -179,36 +147,34 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
         initAuth()
 
-        // Listen for changes on auth state
+        // Listen for changes on auth state (throttled to prevent multi-tab conflicts)
+        let lastEventTime = 0
         const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+            // Throttle rapid auth changes (can happen with multiple tabs)
+            const now = Date.now()
+            if (now - lastEventTime < 500 && event !== 'SIGNED_OUT') {
+                debug.log('AUTH', 'Throttled duplicate auth event', { event })
+                return
+            }
+            lastEventTime = now
+
             console.log('Auth state change event:', event, 'user:', session?.user?.email)
             debug.log('AUTH', 'Auth state changed', { event, email: session?.user?.email, userId: session?.user?.id })
 
             try {
                 if (session?.user) {
                     setSupabaseUser(session.user)
-                    try {
-                        const profile = await withTimeout(
-                            'ensureUserProfile(onAuthStateChange)',
-                            ensureUserProfile(session.user),
-                            12000,
-                        )
-
-                        if (profile) {
-                            setUser(profile)
-                        } else {
-                            setUser(null)
-                        }
-                    } catch (e: any) {
-                        debug.error('AUTH', 'Profile load timed out/failed on auth change', {
-                            message: e?.message,
-                        })
+                    const profile = await ensureUserProfile(session.user)
+                    if (profile) {
+                        setUser(profile)
+                    } else {
                         setUser(null)
                     }
-                } else {
+                } else if (event === 'SIGNED_OUT') {
                     debug.log('AUTH', 'Session cleared, setting user to null')
                     setSupabaseUser(null)
                     setUser(null)
+                    setProfileCache(new Map())
                 }
             } finally {
                 setLoading(false)
@@ -257,8 +223,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setProfileCache(new Map())
         debug.log('AUTH', 'User state cleared')
         try {
-            await supabase.auth.signOut()
-            debug.success('AUTH', 'Supabase signOut complete')
+            await supabase.auth.signOut({ scope: 'local' })
+            debug.success('AUTH', 'Supabase signOut complete (local scope)')
         } catch (err: any) {
             debug.error('AUTH', 'Supabase signOut error', { message: err?.message })
         }
