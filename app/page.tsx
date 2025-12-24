@@ -184,16 +184,40 @@ export default function Home() {
                 <p className="max-w-[720px] text-lg text-muted-foreground">
                   Join brands who trust The Lost Project to bring their visions to life. With over 10+ years of experience, we're ready to redefine your brand's presence.
                 </p>
-                <Button
-                  size="lg"
-                  asChild
-                  className="gap-2 rounded-full bg-primary px-8 text-primary-foreground hover:bg-primary/90"
-                >
-                  <Link href="/signup?role=client">
-                    Get Started
-                    <ArrowRight className="h-5 w-5" />
-                  </Link>
-                </Button>
+                <div className="flex flex-col sm:flex-row gap-4 justify-center">
+                  <Button
+                    size="lg"
+                    asChild
+                    className="gap-2 rounded-full bg-primary px-8 text-primary-foreground hover:bg-primary/90"
+                  >
+                    <Link href="/signup?role=client">
+                      Get Started
+                      <ArrowRight className="h-5 w-5" />
+                    </Link>
+                  </Button>
+                  <Button
+                    size="lg"
+                    variant="outline"
+                    asChild
+                    className="gap-2 rounded-full px-8"
+                  >
+                    <Link href="https://www.thelostproject.xyz" target="_blank">
+                      See Our Work
+                      <ArrowRight className="h-5 w-5" />
+                    </Link>
+                  </Button>
+                  <Button
+                    size="lg"
+                    variant="outline"
+                    asChild
+                    className="gap-2 rounded-full px-8"
+                  >
+                    <Link href="https://www.thelostproject.in" target="_blank">
+                      Book Services
+                      <ArrowRight className="h-5 w-5" />
+                    </Link>
+                  </Button>
+                </div>
               </CardContent>
             </Card>
           </div>
