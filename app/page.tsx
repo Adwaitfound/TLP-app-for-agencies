@@ -31,9 +31,8 @@ export default function Home() {
           </Link>
 
           <Button asChild className="gap-2 rounded-full bg-primary px-6 text-primary-foreground hover:bg-primary/90">
-            <Link href="/auth/select-role">
-              Get Started
-              <ArrowRight className="h-4 w-4" />
+            <Link href="/login">
+              Login
             </Link>
           </Button>
         </div>
@@ -90,7 +89,7 @@ export default function Home() {
                   asChild
                   className="w-full gap-2 rounded-full bg-primary px-8 text-primary-foreground hover:bg-primary/90 sm:w-auto"
                 >
-                  <Link href="/auth/select-role">
+                  <Link href="/signup?role=client">
                     Get Started
                     <ArrowRight className="h-5 w-5" />
                   </Link>
@@ -101,7 +100,7 @@ export default function Home() {
                   asChild
                   className="w-full rounded-full bg-transparent px-8 sm:w-auto"
                 >
-                  <Link href="/auth/select-role">Login</Link>
+                  <Link href="/login">Login</Link>
                 </Button>
               </div>
             </div>
@@ -190,7 +189,7 @@ export default function Home() {
                   asChild
                   className="gap-2 rounded-full bg-primary px-8 text-primary-foreground hover:bg-primary/90"
                 >
-                  <Link href="/auth/select-role">
+                  <Link href="/signup?role=client">
                     Get Started
                     <ArrowRight className="h-5 w-5" />
                   </Link>
