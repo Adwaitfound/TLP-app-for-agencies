@@ -74,6 +74,7 @@ export default function AllFilesPage() {
   const [storageTypeFilter, setStorageTypeFilter] = useState<string>("all");
   const [viewerOpen, setViewerOpen] = useState(false);
   const [selectedFile, setSelectedFile] = useState<FileWithProject | null>(null);
+  const [previewUrls, setPreviewUrls] = useState<Record<string, string>>({});
 
   useEffect(() => {
     if (!user) return;
@@ -112,6 +113,56 @@ export default function AllFilesPage() {
     }
   }
 
+  // Generate signed preview URLs for Supabase files so thumbnails work on private buckets
+  useEffect(() => {
+    async function buildPreviewUrls() {
+      if (!files.length) {
+        setPreviewUrls({});
+        return;
+      }
+
+      const supabase = createClient();
+      const urlMap: Record<string, string> = {};
+
+      await Promise.all(
+        files.map(async (file) => {
+          // Use direct URL for non-supabase storage
+          if (file.storage_type !== "supabase" || !file.file_url) {
+            urlMap[file.id] = file.file_url || "";
+            return;
+          }
+
+          // Try to derive storage path from public URL and request a signed URL
+          const parts = file.file_url.split("/project-files/");
+          const path = parts[1]?.split("?")[0];
+          if (!path) {
+            urlMap[file.id] = file.file_url;
+            return;
+          }
+
+          const { data, error } = await supabase.storage
+            .from("project-files")
+            .createSignedUrl(path, 60 * 60); // 1 hour
+
+          if (error || !data?.signedUrl) {
+            urlMap[file.id] = file.file_url;
+            return;
+          }
+
+          urlMap[file.id] = data.signedUrl;
+        }),
+      );
+
+      setPreviewUrls(urlMap);
+    }
+
+    buildPreviewUrls();
+  }, [files]);
+
+  function getPreviewUrl(file: FileWithProject) {
+    return previewUrls[file.id] || file.file_url;
+  }
+
   function getFileIcon(fileType: FileType) {
     switch (fileType) {
       case "image":
@@ -147,11 +198,12 @@ export default function AllFilesPage() {
   }
 
   function renderThumbnail(file: FileWithProject) {
+    const url = getPreviewUrl(file);
     if (file.file_type === "image") {
       return (
         <div className="relative w-16 h-16 rounded overflow-hidden bg-muted">
           <img
-            src={file.file_url}
+            src={url}
             alt={file.file_name}
             className="w-full h-full object-cover"
             loading="lazy"
@@ -163,7 +215,7 @@ export default function AllFilesPage() {
       return (
         <div className="relative w-16 h-16 rounded overflow-hidden bg-muted">
           <video
-            src={file.file_url}
+            src={url}
             className="w-full h-full object-cover"
             muted
           />
@@ -236,14 +288,14 @@ export default function AllFilesPage() {
               <div className="rounded-lg border bg-muted/50 overflow-hidden">
                 {selectedFile.file_type === "image" && (
                   <img
-                    src={selectedFile.file_url}
+                    src={getPreviewUrl(selectedFile)}
                     alt={selectedFile.file_name}
                     className="w-full h-auto max-h-[60vh] object-contain mx-auto"
                   />
                 )}
                 {selectedFile.file_type === "video" && (
                   <video
-                    src={selectedFile.file_url}
+                    src={getPreviewUrl(selectedFile)}
                     controls
                     className="w-full h-auto max-h-[60vh]"
                   >
@@ -252,7 +304,7 @@ export default function AllFilesPage() {
                 )}
                 {selectedFile.file_type === "pdf" && (
                   <iframe
-                    src={selectedFile.file_url}
+                    src={getPreviewUrl(selectedFile)}
                     className="w-full h-[60vh]"
                     title={selectedFile.file_name}
                   />

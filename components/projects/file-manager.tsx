@@ -223,6 +223,16 @@ export function FileManager({
 
     if (!selectedFile) return;
 
+    if (!projectId) {
+      showToast("Missing project. Open a project before uploading.", "error");
+      return;
+    }
+
+    if (!user?.id) {
+      showToast("Missing user session. Please log in again.", "error");
+      return;
+    }
+
     const validation = validateFileSize(selectedFile);
     if (!validation.valid) {
       showToast(validation.error || "File validation failed", "error");
@@ -274,7 +284,7 @@ export function FileManager({
           file_url: publicUrl,
           file_size: selectedFile.size,
           description: uploadDescription,
-          uploaded_by: user?.id,
+          uploaded_by: user.id,
         })
         .select()
         .single();
@@ -385,7 +395,8 @@ export function FileManager({
 
       // Validate input one more time before submitting
       if (!projectId || !user?.id) {
-        throw new Error("Missing projectId or userId");
+        showToast("Missing project or user. Reopen the project and try again.", "error");
+        return;
       }
 
       // ========== INSERT TO DATABASE ==========
