@@ -53,13 +53,18 @@ export function EmployeeHeader() {
         {/* Left Section: Logo */}
         <Link
           href="/dashboard/employee"
-          className="flex items-center gap-2 font-semibold mr-6"
+          className="flex items-center gap-3 font-semibold mr-6"
         >
-          <div className="h-9 w-9 rounded-lg bg-primary flex items-center justify-center shadow-sm">
-            <Video className="h-5 w-5 text-primary-foreground" />
+          <div className="h-9 flex items-center">
+            <img
+              src="https://www.thelostproject.in/cdn/shop/files/TLP_logo_for_Backlit-01-white.png?height=72&v=1760209067"
+              alt="The Lost Project"
+              className="h-8 w-auto"
+              loading="eager"
+            />
           </div>
-          <span className="text-lg font-bold hidden sm:inline bg-gradient-to-r from-foreground to-foreground/70 bg-clip-text">
-            VideoProduction
+          <span className="text-lg font-bold hidden sm:inline">
+            The Lost Project
           </span>
         </Link>
 

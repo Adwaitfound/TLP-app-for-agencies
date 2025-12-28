@@ -9,6 +9,7 @@ import {
   useDeferredValue,
   Suspense,
   useCallback,
+  useRef,
 } from "react";
 import { useSearchParams } from "next/navigation";
 import {
@@ -119,6 +120,7 @@ function ProjectsPageContent() {
   const [projectTeamRoles, setProjectTeamRoles] = useState<
     Record<string, Record<string, string>>
   >({});
+  const lastOpenedProjectId = useRef<string | null>(null);
   const [availableUsers, setAvailableUsers] = useState<User[]>([]);
   const [selectedUserId, setSelectedUserId] = useState("");
   const [teamRole, setTeamRole] = useState("");
@@ -1124,6 +1126,20 @@ function ProjectsPageContent() {
     });
   }, [projects, deferredSearchQuery, statusFilter, serviceFilter]);
 
+  // Open detail modal automatically when navigated with a project id query param
+  useEffect(() => {
+    const projectId = searchParams.get("id");
+    if (!projectId || projects.length === 0) return;
+    if (lastOpenedProjectId.current === projectId && isDetailModalOpen) return;
+
+    const target = projects.find((p) => p.id === projectId);
+    if (target) {
+      lastOpenedProjectId.current = projectId;
+      openProjectDetails(target);
+      fetchProjectTeamMembers(target.id);
+    }
+  }, [searchParams, projects]);
+
   // Calculate project stats
   const projectStats = {
     total: projects.length,
@@ -1710,6 +1726,7 @@ function ProjectsPageContent() {
             alert(err.message || "Upload failed");
           } finally {
             setUploading(false);
+            // Reset the file input
             e.target.value = "";
           }
         },
@@ -1809,9 +1826,12 @@ function ProjectsPageContent() {
               />
               <div className="flex items-center gap-2">
                 <input
+                  id="calendar-file-upload"
                   type="file"
                   onChange={handleFileUpload}
                   accept="image/*,video/*,.pdf,.doc,.docx,.txt"
+                  disabled={uploading}
+                  className="text-sm"
                 />
                 {uploading && (
                   <span className="text-xs text-muted-foreground">
@@ -2181,7 +2201,7 @@ function ProjectsPageContent() {
       )}
 
       {/* Service Type Filter Cards */}
-      <div className="grid gap-4 grid-cols-1 md:grid-cols-3">
+      <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
         {Object.values(SERVICE_TYPES).map((service) => {
           const serviceProjects = projects.filter(
             (p) => p.service_type === service.value,
@@ -2199,13 +2219,13 @@ function ProjectsPageContent() {
                 className={`pb-3 bg-gradient-to-br ${service.color} text-white rounded-t-lg`}
               >
                 <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="text-3xl">{service.icon}</div>
-                    <div>
-                      <CardTitle className="text-lg text-white">
+                  <div className="flex items-center gap-2 sm:gap-3">
+                    <div className="text-2xl sm:text-3xl">{service.icon}</div>
+                    <div className="min-w-0">
+                      <CardTitle className="text-base sm:text-lg text-white truncate">
                         {service.label}
                       </CardTitle>
-                      <CardDescription className="text-white/90 text-xs">
+                      <CardDescription className="text-white/90 text-xs line-clamp-1">
                         {service.description}
                       </CardDescription>
                     </div>
@@ -2215,13 +2235,13 @@ function ProjectsPageContent() {
               <CardContent className="pt-4">
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-2xl font-bold">
+                    <p className="text-xl sm:text-2xl font-bold">
                       {serviceProjects.length}
                     </p>
                     <p className="text-xs text-muted-foreground">Projects</p>
                   </div>
                   <div className="text-right">
-                    <p className="text-sm font-semibold text-green-600">
+                    <p className="text-xs sm:text-sm font-semibold text-green-600">
                       {
                         serviceProjects.filter((p) => p.status === "completed")
                           .length
@@ -2362,28 +2382,29 @@ function ProjectsPageContent() {
                     )}
 
                     <div className="flex-1 space-y-3">
-                      <div className="flex items-start justify-between">
+                      <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-3">
                         <div
                           className="flex-1 cursor-pointer"
                           onClick={() => openProjectDetails(project)}
                         >
                           <div className="flex items-center gap-2 mb-1">
-                            <CardTitle>{project.name}</CardTitle>
+                            <CardTitle className="text-lg md:text-xl">{project.name}</CardTitle>
                           </div>
                           <CardDescription className="mt-1">
                             {project.clients?.company_name || "No client"}
                           </CardDescription>
                         </div>
-                        <div className="flex items-center gap-2">
+                        <div className="flex flex-wrap items-center gap-2">
                           <Badge
                             variant={getServiceBadgeVariant(
                               project.service_type,
                             )}
+                            className="text-xs"
                           >
                             <span className="mr-1">
                               {getServiceIcon(project.service_type)}
                             </span>
-                            {getServiceLabel(project.service_type)}
+                            <span className="hidden sm:inline">{getServiceLabel(project.service_type)}</span>
                           </Badge>
                           <StatusBadge status={project.status} />
                         </div>
@@ -2475,32 +2496,35 @@ function ProjectsPageContent() {
                       />
                     </div>
                   </div>
-                  <div className="flex gap-2">
+                  <div className="flex gap-2 overflow-x-auto pb-2 -mx-2 px-2">
                     <Button
                       variant="secondary"
                       size="sm"
+                      className="flex-shrink-0"
                       onClick={(e) => {
                         e.stopPropagation();
                         openProjectDetails(project);
                       }}
                     >
                       <Eye className="h-3 w-3 mr-1" />
-                      View
+                      <span className="hidden sm:inline">View</span>
                     </Button>
                     <Button
                       variant="ghost"
                       size="sm"
+                      className="flex-shrink-0"
                       onClick={(e) => {
                         e.stopPropagation();
                         openEditDialog(project);
                       }}
                     >
                       <Edit className="h-3 w-3 mr-1" />
-                      Edit
+                      <span className="hidden sm:inline">Edit</span>
                     </Button>
                     <Button
                       variant="ghost"
                       size="sm"
+                      className="flex-shrink-0"
                       onClick={(e) => {
                         e.stopPropagation();
                         openTeamDialog(project);

@@ -27,14 +27,6 @@ import {
   DialogDescription,
 } from "@/components/ui/dialog";
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import {
   FileText,
   Image,
   Video,
@@ -160,7 +152,32 @@ export default function AllFilesPage() {
   }, [files]);
 
   function getPreviewUrl(file: FileWithProject) {
+    // Prefer signed Supabase URLs, otherwise drive thumbnails or raw URL
+    if (file.storage_type === "supabase") {
+      return previewUrls[file.id] || file.file_url;
+    }
+
+    const driveId = getDriveId(file.file_url);
+    if (driveId) {
+      return `https://drive.google.com/thumbnail?id=${driveId}`;
+    }
+
     return previewUrls[file.id] || file.file_url;
+  }
+
+  function getDriveId(url?: string | null) {
+    if (!url) return null;
+    const fileIdMatch = url.match(/\/file\/d\/([^/]+)/);
+    if (fileIdMatch?.[1]) return fileIdMatch[1];
+    const queryIdMatch = url.match(/[?&]id=([^&#]+)/);
+    if (queryIdMatch?.[1]) return queryIdMatch[1];
+    return null;
+  }
+
+  function getDrivePreviewEmbedUrl(file: FileWithProject) {
+    const driveId = getDriveId(file.file_url);
+    if (!driveId) return null;
+    return `https://drive.google.com/file/d/${driveId}/preview`;
   }
 
   function getFileIcon(fileType: FileType) {
@@ -195,41 +212,6 @@ export default function AllFilesPage() {
   function openFileViewer(file: FileWithProject) {
     setSelectedFile(file);
     setViewerOpen(true);
-  }
-
-  function renderThumbnail(file: FileWithProject) {
-    const url = getPreviewUrl(file);
-    if (file.file_type === "image") {
-      return (
-        <div className="relative w-16 h-16 rounded overflow-hidden bg-muted">
-          <img
-            src={url}
-            alt={file.file_name}
-            className="w-full h-full object-cover"
-            loading="lazy"
-          />
-        </div>
-      );
-    }
-    if (file.file_type === "video") {
-      return (
-        <div className="relative w-16 h-16 rounded overflow-hidden bg-muted">
-          <video
-            src={url}
-            className="w-full h-full object-cover"
-            muted
-          />
-          <div className="absolute inset-0 flex items-center justify-center bg-black/30">
-            <Video className="h-6 w-6 text-white" />
-          </div>
-        </div>
-      );
-    }
-    return (
-      <div className="w-16 h-16 rounded bg-muted flex items-center justify-center">
-        {getFileIcon(file.file_type)}
-      </div>
-    );
   }
 
   const filteredFiles = files.filter((file) => {
@@ -286,43 +268,63 @@ export default function AllFilesPage() {
             <div className="space-y-4">
               {/* File Preview */}
               <div className="rounded-lg border bg-muted/50 overflow-hidden">
-                {selectedFile.file_type === "image" && (
-                  <img
-                    src={getPreviewUrl(selectedFile)}
-                    alt={selectedFile.file_name}
-                    className="w-full h-auto max-h-[60vh] object-contain mx-auto"
-                  />
-                )}
-                {selectedFile.file_type === "video" && (
-                  <video
-                    src={getPreviewUrl(selectedFile)}
-                    controls
-                    className="w-full h-auto max-h-[60vh]"
-                  >
-                    Your browser does not support the video tag.
-                  </video>
-                )}
-                {selectedFile.file_type === "pdf" && (
-                  <iframe
-                    src={getPreviewUrl(selectedFile)}
-                    className="w-full h-[60vh]"
-                    title={selectedFile.file_name}
-                  />
-                )}
-                {(selectedFile.file_type === "document" || selectedFile.file_type === "other") && (
-                  <div className="flex flex-col items-center justify-center py-12">
-                    <FileText className="h-16 w-16 text-muted-foreground mb-4" />
-                    <p className="text-muted-foreground mb-4">
-                      Preview not available for this file type
-                    </p>
-                    <Button
-                      onClick={() => window.open(selectedFile.file_url, "_blank")}
-                    >
-                      <ExternalLink className="h-4 w-4 mr-2" />
-                      Open in New Tab
-                    </Button>
-                  </div>
-                )}
+                {(() => {
+                  const driveEmbed = getDrivePreviewEmbedUrl(selectedFile);
+                  if (selectedFile.storage_type !== "supabase" && driveEmbed) {
+                    return (
+                      <iframe
+                        src={driveEmbed}
+                        className="w-full h-[60vh]"
+                        title={selectedFile.file_name}
+                        allow="autoplay; fullscreen"
+                      />
+                    );
+                  }
+
+                  if (selectedFile.file_type === "image") {
+                    return (
+                      <img
+                        src={getPreviewUrl(selectedFile)}
+                        alt={selectedFile.file_name}
+                        className="w-full h-auto max-h-[60vh] object-contain mx-auto"
+                      />
+                    );
+                  }
+                  if (selectedFile.file_type === "video") {
+                    return (
+                      <video
+                        src={getPreviewUrl(selectedFile)}
+                        controls
+                        className="w-full h-auto max-h-[60vh]"
+                      >
+                        Your browser does not support the video tag.
+                      </video>
+                    );
+                  }
+                  if (selectedFile.file_type === "pdf") {
+                    return (
+                      <iframe
+                        src={getPreviewUrl(selectedFile)}
+                        className="w-full h-[60vh]"
+                        title={selectedFile.file_name}
+                      />
+                    );
+                  }
+                  return (
+                    <div className="flex flex-col items-center justify-center py-12">
+                      <FileText className="h-16 w-16 text-muted-foreground mb-4" />
+                      <p className="text-muted-foreground mb-4">
+                        Preview not available for this file type
+                      </p>
+                      <Button
+                        onClick={() => window.open(selectedFile.file_url, "_blank")}
+                      >
+                        <ExternalLink className="h-4 w-4 mr-2" />
+                        Open in New Tab
+                      </Button>
+                    </div>
+                  );
+                })()}
               </div>
 
               {/* File Details */}
@@ -486,12 +488,12 @@ export default function AllFilesPage() {
         </CardContent>
       </Card>
 
-      {/* Files Table */}
+      {/* Files Grid */}
       <Card>
         <CardHeader>
           <CardTitle>Files</CardTitle>
           <CardDescription>
-            All files from all projects - Click on any row to preview
+            All files from all projects — click any card to preview
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -499,107 +501,174 @@ export default function AllFilesPage() {
             <div className="text-center py-12">
               <FileText className="h-16 w-16 mx-auto text-muted-foreground mb-4 opacity-50" />
               <p className="text-muted-foreground">
-                {searchQuery || fileTypeFilter !== "all" || categoryFilter !== "all"
+                {searchQuery ||
+                fileTypeFilter !== "all" ||
+                categoryFilter !== "all"
                   ? "No files match your filters"
                   : "No files found"}
               </p>
             </div>
           ) : (
-            <div className="overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Preview</TableHead>
-                    <TableHead>File Name</TableHead>
-                    <TableHead>Project</TableHead>
-                    <TableHead>Client</TableHead>
-                    <TableHead>Category</TableHead>
-                    <TableHead>Size</TableHead>
-                    <TableHead>Storage</TableHead>
-                    <TableHead>Uploaded</TableHead>
-                    <TableHead className="text-right">Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filteredFiles.map((file) => (
-                    <TableRow 
-                      key={file.id}
-                      className="cursor-pointer hover:bg-muted/50"
-                      onClick={() => openFileViewer(file)}
-                    >
-                      <TableCell>
-                        {renderThumbnail(file)}
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex flex-col">
-                          <span className="font-medium">{file.file_name}</span>
-                          {file.description && (
-                            <span className="text-xs text-muted-foreground">
-                              {file.description}
-                            </span>
-                          )}
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <Button
-                          variant="link"
-                          className="p-0 h-auto font-normal"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            router.push(`/dashboard/projects?id=${file.project_id}`);
-                          }}
-                        >
-                          <FolderKanban className="h-3 w-3 mr-1" />
-                          {file.projects?.name || "Unknown"}
-                        </Button>
-                      </TableCell>
-                      <TableCell>
-                        {file.projects?.clients?.company_name || "N/A"}
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant="outline">
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+              {filteredFiles.map((file) => {
+                const url = getPreviewUrl(file);
+                const isImage = file.file_type === "image";
+                const isVideo = file.file_type === "video";
+                const driveEmbed = getDrivePreviewEmbedUrl(file);
+
+                return (
+                  <div
+                    key={file.id}
+                    className="group rounded-xl border bg-card/80 backdrop-blur supports-[backdrop-filter]:backdrop-blur-lg overflow-hidden shadow-sm hover:shadow-md transition-all cursor-pointer"
+                    onClick={() => openFileViewer(file)}
+                  >
+                    <div className="relative h-60 w-full bg-black flex items-center justify-center overflow-hidden">
+                      {(() => {
+                        const previewSrc = driveEmbed ? getPreviewUrl(file) : url;
+                        if (isImage) {
+                          return (
+                            <img
+                              src={previewSrc}
+                              alt={file.file_name}
+                              className="max-h-full max-w-full object-contain"
+                              loading="lazy"
+                            />
+                          );
+                        }
+                        if (isVideo && file.storage_type === "supabase") {
+                          return (
+                            <video
+                              src={url}
+                              className="max-h-full max-w-full object-contain"
+                              muted
+                              playsInline
+                            />
+                          );
+                        }
+                        return (
+                          <img
+                            src={previewSrc}
+                            alt={file.file_name}
+                            className="max-h-full max-w-full object-contain"
+                            loading="lazy"
+                          />
+                        );
+                      })()}
+
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none" />
+
+                      <div className="absolute top-2 left-2 flex flex-wrap gap-2">
+                        <Badge variant="outline" className="bg-background/80 backdrop-blur">
                           {formatCategory(file.file_category)}
                         </Badge>
-                      </TableCell>
-                      <TableCell className="text-sm text-muted-foreground">
-                        {formatFileSize(file.file_size)}
-                      </TableCell>
-                      <TableCell>
                         <Badge
-                          variant={
-                            file.storage_type === "supabase"
-                              ? "default"
-                              : "secondary"
-                          }
+                          variant={file.storage_type === "supabase" ? "default" : "secondary"}
+                          className="bg-background/80 backdrop-blur"
                         >
                           {file.storage_type === "supabase" ? "Supabase" : "Drive"}
                         </Badge>
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex flex-col">
-                          <span className="text-sm">
-                            {new Date(file.created_at).toLocaleDateString()}
-                          </span>
-                          <span className="text-xs text-muted-foreground">
-                            {file.uploader?.full_name || "Unknown"}
+                      </div>
+
+                      <div className="absolute bottom-2 left-2 right-2 flex items-center justify-between gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <Button
+                          size="sm"
+                          variant="secondary"
+                          className="h-8 px-3"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            openFileViewer(file);
+                          }}
+                        >
+                          <Eye className="h-4 w-4 mr-1" />
+                          Preview
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="secondary"
+                          className="h-8 px-3"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            const a = document.createElement("a");
+                            a.href = file.file_url;
+                            a.download = file.file_name;
+                            a.click();
+                          }}
+                        >
+                          <Download className="h-4 w-4 mr-1" />
+                          Download
+                        </Button>
+                      </div>
+                    </div>
+
+                    <div className="p-4 space-y-3">
+                      <div className="space-y-1">
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="flex-1 min-w-0">
+                            <p className="font-semibold truncate">
+                              {file.file_name}
+                            </p>
+                            {file.description && (
+                              <p className="text-xs text-muted-foreground line-clamp-2">
+                                {file.description}
+                              </p>
+                            )}
+                          </div>
+                          <Badge variant="outline" className="flex-shrink-0">
+                            {formatFileSize(file.file_size)}
+                          </Badge>
+                        </div>
+                        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                          <FolderKanban className="h-3 w-3" />
+                          <button
+                            className="underline-offset-2 hover:underline"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              router.push(`/dashboard/projects?id=${file.project_id}`);
+                            }}
+                          >
+                            {file.projects?.name || "Unknown"}
+                          </button>
+                        </div>
+                        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                          <span>{file.projects?.clients?.company_name || "N/A"}</span>
+                          <span className="h-1 w-1 rounded-full bg-muted-foreground/40" aria-hidden />
+                          <span>
+                            Uploaded {new Date(file.created_at).toLocaleDateString()}
                           </span>
                         </div>
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <div className="flex items-center justify-end gap-2">
+                      </div>
+
+                      <div className="flex items-center justify-between text-xs text-muted-foreground">
+                        <span>By {file.uploader?.full_name || file.uploader?.email || "Unknown"}</span>
+                        <div className="flex gap-2">
                           <Button
                             variant="ghost"
-                            size="sm"
+                            size="icon"
+                            className="h-8 w-8"
                             onClick={(e) => {
                               e.stopPropagation();
                               openFileViewer(file);
                             }}
+                            aria-label="Preview file"
                           >
                             <Eye className="h-4 w-4" />
                           </Button>
                           <Button
                             variant="ghost"
-                            size="sm"
+                            size="icon"
+                            className="h-8 w-8"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              router.push(`/dashboard/projects?id=${file.project_id}`);
+                            }}
+                            aria-label="View project"
+                          >
+                            <FolderKanban className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8"
                             onClick={(e) => {
                               e.stopPropagation();
                               const a = document.createElement("a");
@@ -607,15 +676,16 @@ export default function AllFilesPage() {
                               a.download = file.file_name;
                               a.click();
                             }}
+                            aria-label="Download file"
                           >
                             <Download className="h-4 w-4" />
                           </Button>
                         </div>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           )}
         </CardContent>

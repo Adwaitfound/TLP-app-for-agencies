@@ -64,12 +64,17 @@ export function ClientHeader() {
           <nav className="grid gap-4 py-6">
             <Link
               href="/dashboard/client"
-              className="flex items-center gap-2 text-lg font-semibold"
+              className="flex items-center gap-3 text-lg font-semibold"
             >
-              <div className="h-8 w-8 rounded-lg bg-primary flex items-center justify-center">
-                <Video className="h-5 w-5 text-primary-foreground" />
+              <div className="h-9 flex items-center">
+                <img
+                  src="https://www.thelostproject.in/cdn/shop/files/TLP_logo_for_Backlit-01-white.png?height=72&v=1760209067"
+                  alt="The Lost Project"
+                  className="h-8 w-auto"
+                  loading="eager"
+                />
               </div>
-              <span>VideoProduction</span>
+              <span>The Lost Project</span>
             </Link>
             <Link
               href="/dashboard/client?tab=dashboard"

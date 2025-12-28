@@ -78,6 +78,10 @@ export default function ClientDashboardTabs() {
   const [previewFile, setPreviewFile] = useState<any | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
+  // Pagination states
+  const [filesPaginationPage, setFilesPaginationPage] = useState(1);
+  const [commentsPaginationPage, setCommentsPaginationPage] = useState(1);
+  const ITEMS_PER_PAGE = 20;
   function getDrivePreviewUrl(url: string): string | null {
     try {
       const u = new URL(url);
@@ -96,6 +100,7 @@ export default function ClientDashboardTabs() {
     const [failed, setFailed] = useState(false);
     const [signedSrc, setSignedSrc] = useState<string | null>(null);
     const [videoThumbnail, setVideoThumbnail] = useState<string | null>(null);
+    const [isInView, setIsInView] = useState(false);
     let src: string | null = null;
     
     if (file.storage_type === "google_drive") {
@@ -107,7 +112,10 @@ export default function ClientDashboardTabs() {
       src = videoThumbnail || (file.storage_type === "supabase" ? signedSrc : file.file_url);
     }
     
+    // Only fetch signed URLs when element is visible
     useEffect(() => {
+      if (!isInView) return;
+      
       let cancelled = false;
       async function run() {
         if (type === "image" && file.storage_type === "supabase") {
@@ -118,8 +126,6 @@ export default function ClientDashboardTabs() {
           const res = await getSignedProjectFileUrl(file.file_url, 300);
           if (!cancelled && !res.error && res.signedUrl) {
             setSignedSrc(res.signedUrl);
-            // Note: Can't extract video thumbnail without video element or FFmpeg
-            // Just use the signed URL for now
           }
         }
       }
@@ -127,7 +133,27 @@ export default function ClientDashboardTabs() {
       return () => {
         cancelled = true;
       };
-    }, [file.file_url, type, file.storage_type, videoThumbnail]);
+    }, [file.file_url, type, file.storage_type, videoThumbnail, isInView]);
+
+    // Intersection Observer for lazy loading
+    useEffect(() => {
+      const observer = new IntersectionObserver(
+        entries => {
+          if (entries[0].isIntersecting) {
+            setIsInView(true);
+            observer.disconnect();
+          }
+        },
+        { rootMargin: '50px' }
+      );
+
+      const ref = document.getElementById(`file-thumb-${file.id}`);
+      if (ref) {
+        observer.observe(ref);
+      }
+
+      return () => observer.disconnect();
+    }, [file.id]);
 
     if (!src || failed) {
       if (file.storage_type === "google_drive") {
@@ -169,9 +195,9 @@ export default function ClientDashboardTabs() {
       );
     }
     
-    // For images, render as img
+    // For images, render as img with native lazy loading
     // eslint-disable-next-line @next/next/no-img-element
-    return <img src={src} alt={file.file_name || "File"} className="w-full h-full object-cover" onError={() => setFailed(true)} />;
+    return <img src={src} alt={file.file_name || "File"} className="w-full h-full object-cover" loading="lazy" onError={() => setFailed(true)} />;
   }
 
   const userId = user?.id;
@@ -283,34 +309,23 @@ export default function ClientDashboardTabs() {
       let subProjectsData: any[] = [];
 
       if (projectIds.length > 0) {
-        const [invoicesByProjectRes, filesRes, commentsRes, subProjectsRes] =
-          await Promise.all([
-            supabase
-              .from("invoices")
-              .select(
-                "id,project_id,client_id,status,total,invoice_number,created_at,due_date,issue_date,invoice_file_url,shared_with_client",
-              )
-              .in("project_id", projectIds)
-              .eq("shared_with_client", true)
-              .order("created_at", { ascending: false }),
-            supabase
-              .from("project_files")
-              .select("id,project_id,file_name,file_url,file_type,file_category,storage_type,created_at,description,file_size,projects(name)")
-              .in("project_id", projectIds)
-              .order("created_at", { ascending: false }),
-            supabase
-              .from("project_comments")
-              .select(
-                "id,project_id,comment_text,file_id,timestamp_seconds,created_at,projects(name),user:users!user_id(full_name,email)",
-              )
-              .in("project_id", projectIds)
-              .order("created_at", { ascending: false }),
-            supabase
-              .from("sub_projects")
-              .select("id,project_id,title,status,due_date,created_at")
-              .in("project_id", projectIds)
-              .order("created_at", { ascending: false }),
-          ]);
+        // Load initial data immediately, defer loading all files and comments
+        const [invoicesByProjectRes, filesRes] = await Promise.all([
+          supabase
+            .from("invoices")
+            .select(
+              "id,project_id,client_id,status,total,invoice_number,created_at,due_date,issue_date,invoice_file_url,shared_with_client",
+            )
+            .in("project_id", projectIds)
+            .eq("shared_with_client", true)
+            .order("created_at", { ascending: false }),
+          supabase
+            .from("project_files")
+            .select("id,project_id,file_name,file_url,file_type,file_category,storage_type,created_at,description,file_size,projects(name)")
+            .in("project_id", projectIds)
+            .order("created_at", { ascending: false })
+            .limit(100), // Limit files to first 100 for faster initial load
+        ]);
 
         const { data: fetchedInvoices, error: invoicesByProjectError } =
           invoicesByProjectRes;
@@ -329,26 +344,38 @@ export default function ClientDashboardTabs() {
         console.debug("[5a/6] Files query OK:", fetchedFiles?.length);
         filesData = fetchedFiles || [];
 
-        const { data: fetchedComments, error: commentsError } = commentsRes;
-        if (commentsError) {
-          console.error("[5b/6] Comments query failed:", commentsError);
-          throw commentsError;
-        }
-        console.debug("[5b/6] Comments query OK:", fetchedComments?.length);
-        commentsData = fetchedComments || [];
+        // Load comments and sub-projects in background (non-blocking)
+        Promise.all([
+          supabase
+            .from("project_comments")
+            .select(
+              "id,project_id,comment_text,file_id,timestamp_seconds,created_at,projects(name),user:users!user_id(full_name,email)",
+            )
+            .in("project_id", projectIds)
+            .order("created_at", { ascending: false })
+            .limit(50), // Limit comments for initial load
+          supabase
+            .from("sub_projects")
+            .select("id,project_id,title,status,due_date,created_at")
+            .in("project_id", projectIds)
+            .order("created_at", { ascending: false }),
+        ]).then(([commentsRes, subProjectsRes]) => {
+          const { data: fetchedComments, error: commentsError } = commentsRes;
+          if (!commentsError && fetchedComments) {
+            console.debug("[5b/6] Comments query OK:", fetchedComments.length);
+            setComments(fetchedComments);
+          }
 
-        const { data: fetchedSubProjects, error: subProjectsError } = subProjectsRes;
-        if (subProjectsError) {
-          // Not all clients may have visibility to sub_projects under RLS; proceed without blocking.
-          console.warn(
-            "[6/6] sub_projects fetch skipped due to permissions:",
-            subProjectsError,
-          );
-          subProjectsData = [];
-        } else {
-          console.debug("[6/6] Sub-projects query OK:", fetchedSubProjects?.length);
-          subProjectsData = fetchedSubProjects || [];
-        }
+          const { data: fetchedSubProjects, error: subProjectsError } = subProjectsRes;
+          if (subProjectsError) {
+            console.warn("[6/6] sub_projects fetch skipped due to permissions:", subProjectsError);
+          } else {
+            console.debug("[6/6] Sub-projects query OK:", fetchedSubProjects?.length);
+            setSubProjects(fetchedSubProjects || []);
+          }
+        }).catch(err => {
+          console.warn("Background data load failed:", err);
+        });
       }
 
       const invoicesData = (() => {
@@ -361,15 +388,10 @@ export default function ClientDashboardTabs() {
       setProjects(projectsData || []);
       setInvoices(invoicesData || []);
       setFiles(filesData);
-      setComments(commentsData);
-      setSubProjects(subProjectsData);
       
       console.log("📊 Client Dashboard Data Loaded:");
       console.log("  - Client ID:", clientId);
       console.log("  - Invoices Count:", invoicesData?.length || 0);
-      console.log("  - Invoices Data:", invoicesData);
-      console.log("  - Invoices by Client:", invoicesByClient);
-      console.log("  - Invoices by Project:", invoicesByProject);
     } catch (err: any) {
       const errorDetails = {
         message: err?.message || "Unknown error",
@@ -402,6 +424,16 @@ export default function ClientDashboardTabs() {
     
     console.log("🔔 Setting up real-time subscriptions for client:", clientData.id);
     
+    // Debounce real-time updates to avoid excessive re-fetches
+    let realtimeTimeout: NodeJS.Timeout | null = null;
+    const scheduleRefresh = () => {
+      if (realtimeTimeout) clearTimeout(realtimeTimeout);
+      realtimeTimeout = setTimeout(() => {
+        console.log("📡 Performing debounced refresh");
+        fetchClientData();
+      }, 1000); // Wait 1 second to batch multiple changes
+    };
+    
     // Subscribe to all relevant tables for real-time updates
     const channel = supabase
       .channel(`client-dashboard-${clientData.id}`)
@@ -416,7 +448,7 @@ export default function ClientDashboardTabs() {
         },
         (payload: any) => {
           console.log("📡 Invoice change:", payload.eventType);
-          fetchClientData();
+          scheduleRefresh();
         }
       )
       // Projects
@@ -430,7 +462,7 @@ export default function ClientDashboardTabs() {
         },
         (payload: any) => {
           console.log("📡 Project change:", payload.eventType);
-          fetchClientData();
+          scheduleRefresh();
         }
       )
       // Project Files
@@ -445,7 +477,7 @@ export default function ClientDashboardTabs() {
           // Check if file belongs to client's projects
           if (projectIds.includes(payload.new?.project_id || payload.old?.project_id)) {
             console.log("📡 File change:", payload.eventType);
-            fetchClientData();
+            scheduleRefresh();
           }
         }
       )
@@ -460,7 +492,7 @@ export default function ClientDashboardTabs() {
         (payload: any) => {
           if (projectIds.includes(payload.new?.project_id || payload.old?.project_id)) {
             console.log("📡 Comment change:", payload.eventType);
-            fetchClientData();
+            scheduleRefresh();
           }
         }
       )
@@ -475,7 +507,7 @@ export default function ClientDashboardTabs() {
         (payload: any) => {
           if (projectIds.includes(payload.new?.project_id || payload.old?.project_id)) {
             console.log("📡 Sub-project change:", payload.eventType);
-            fetchClientData();
+            scheduleRefresh();
           }
         }
       )
@@ -486,6 +518,7 @@ export default function ClientDashboardTabs() {
     return () => {
       console.log("🔕 Removing all subscriptions");
       supabase.removeChannel(channel);
+      if (realtimeTimeout) clearTimeout(realtimeTimeout);
     };
   }, [clientData?.id, projects, fetchClientData]);
 
@@ -560,6 +593,22 @@ export default function ClientDashboardTabs() {
         c.projects?.name?.toLowerCase().includes(searchQuery.toLowerCase()),
     );
   }, [comments, searchQuery]);
+
+  // Paginated data accessors
+  const paginatedFiles = useMemo(() => {
+    const start = (filesPaginationPage - 1) * ITEMS_PER_PAGE;
+    const end = start + ITEMS_PER_PAGE;
+    return files.slice(start, end);
+  }, [files, filesPaginationPage]);
+
+  const paginatedComments = useMemo(() => {
+    const start = (commentsPaginationPage - 1) * ITEMS_PER_PAGE;
+    const end = start + ITEMS_PER_PAGE;
+    return filteredComments.slice(start, end);
+  }, [filteredComments, commentsPaginationPage]);
+
+  const filesTotalPages = useMemo(() => Math.ceil(files.length / ITEMS_PER_PAGE), [files]);
+  const commentsTotalPages = useMemo(() => Math.ceil(filteredComments.length / ITEMS_PER_PAGE), [filteredComments]);
 
   const toggleFavorite = (projectId: string) => {
     setFavoriteProjects((prev) =>

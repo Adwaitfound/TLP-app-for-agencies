@@ -9,6 +9,10 @@ import { ErrorBoundary } from "@/components/error-boundary";
 import { GlobalErrorListener } from "@/components/global-error-listener";
 import { VersionBadge } from "@/components/version-badge";
 import { SwUpdateBanner } from "@/components/sw-update-banner";
+import { NotificationPortal } from "@/components/notification-portal";
+import { ChatNotifier } from "@/components/chat-notifier";
+import { PushSubscriptionManager } from "@/components/push-subscription";
+import { NotificationDiagnostics } from "@/components/notification-diagnostics";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -86,10 +90,14 @@ export default function RootLayout({
           <AuthProvider>
             <ErrorBoundary>
               {children}
+              <ChatNotifier />
+              <PushSubscriptionManager />
+              <NotificationPortal />
               <VersionBadge />
               <SwUpdateBanner />
               <GlobalClickTracker />
               <GlobalErrorListener />
+              <NotificationDiagnostics />
               <DebugConsole />
             </ErrorBoundary>
           </AuthProvider>
@@ -124,7 +132,19 @@ export default function RootLayout({
 
                   if ('serviceWorker' in navigator) {
                     window.addEventListener('load', function () {
-                      navigator.serviceWorker.register('/sw.js').catch(function () {});
+                      navigator.serviceWorker.register('/sw.js').then(function(reg) {
+                        console.log("🔄 SW: registered successfully", reg);
+                        // Check for updates immediately and then every minute
+                        reg.update().catch(function(err) {
+                          console.warn("🔄 SW: immediate update check failed", err);
+                        });
+                        setInterval(function() {
+                          console.log("🔄 SW: periodic update check");
+                          reg.update().catch(function() {});
+                        }, 60000);
+                      }).catch(function (err) {
+                        console.warn("🔄 SW: registration failed", err);
+                      });
                     });
                   }
                 } catch (e) {}

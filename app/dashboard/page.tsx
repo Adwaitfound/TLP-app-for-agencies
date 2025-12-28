@@ -10,15 +10,21 @@ export default function DashboardPage() {
   const router = useRouter();
 
   useEffect(() => {
-    if (!authLoading && user) {
-      // Redirect based on user role from Supabase
-      if (user.role === "client") {
-        router.push("/dashboard/client");
-      } else if (user.role === "employee" || user.role === "project_manager") {
-        router.push("/dashboard/employee");
-      }
-      // Admin stays on this page (admin-view)
+    if (authLoading) return // Wait for auth to complete
+    
+    if (!user) {
+      // No user, redirect to login
+      router.replace("/login");
+      return
     }
+
+    // Redirect based on user role from Supabase
+    if (user.role === "client") {
+      router.replace("/dashboard/client");
+    } else if (user.role === "employee" || user.role === "project_manager") {
+      router.replace("/dashboard/employee");
+    }
+    // Admin stays on this page (admin-view)
   }, [authLoading, user, router]);
 
   if (authLoading) {

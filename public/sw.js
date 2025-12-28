@@ -85,20 +85,42 @@ if (typeof window === 'undefined') {
     });
 
     self.addEventListener('message', (event) => {
+        console.log("🔄 SW: message received", event.data);
         if (event.data && event.data.type === 'SKIP_WAITING') {
+            console.log("🔄 SW: SKIP_WAITING - activating new worker");
             self.skipWaiting();
         }
     });
 
     self.addEventListener('push', (event) => {
-        const data = event.data ? event.data.json() : {};
+        console.log('📬 Push event received:', event);
+        
+        let data = {};
+        if (event.data) {
+            try {
+                data = event.data.json();
+            } catch (e) {
+                console.warn('Failed to parse push data as JSON:', e);
+                data = { body: event.data.text() };
+            }
+        }
+
         const options = {
             body: data.body || 'New notification',
-            icon: '/icons/icon-192x192.png',
-            badge: '/icons/icon-192x192.png',
+            icon: data.icon || '/icons/icon-192x192.png',
+            badge: data.badge || '/icons/icon-192x192.png',
             tag: data.tag || 'notification',
             requireInteraction: data.requireInteraction || false,
+            data: {
+                url: data.url || '/',
+                ...data.metadata,
+            },
         };
+
+        console.log('🔔 Showing notification:', {
+            title: data.title || 'Video Production App',
+            options,
+        });
 
         event.waitUntil(
             self.registration.showNotification(data.title || 'Video Production App', options)
@@ -106,20 +128,29 @@ if (typeof window === 'undefined') {
     });
 
     self.addEventListener('notificationclick', (event) => {
+        console.log('✅ Notification clicked:', event.notification.tag);
         event.notification.close();
+        
+        const url = (event.notification.data && event.notification.data.url) || '/';
+        
         event.waitUntil(
             clients
                 .matchAll({ type: 'window', includeUncontrolled: true })
                 .then((clientList) => {
+                    // Look for existing window
                     for (const client of clientList) {
-                        if (client.url === '/' && 'focus' in client) {
+                        if (client.url === url && 'focus' in client) {
                             return client.focus();
                         }
                     }
+                    // Fall back to home or create new window
                     if (clients.openWindow) {
-                        return clients.openWindow('/');
+                        return clients.openWindow(url);
                     }
                 })
         );
     });
-}
+
+    self.addEventListener('notificationclose', (event) => {
+        console.log('❌ Notification closed:', event.notification.tag);
+    });

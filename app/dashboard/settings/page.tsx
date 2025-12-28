@@ -31,6 +31,7 @@ import {
   Loader2,
   CheckCircle2,
   LogOut,
+  Upload as UploadIcon,
 } from "lucide-react";
 import { useAuth } from "@/contexts/auth-context";
 import { createClient } from "@/lib/supabase/client";
@@ -40,12 +41,14 @@ export default function SettingsPage() {
   const { user, loading: authLoading, setUser, logout } = useAuth();
   const router = useRouter();
   const [saving, setSaving] = useState(false);
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [savedMessage, setSavedMessage] = useState("");
   const [passwordData, setPasswordData] = useState({
     current: "",
     new: "",
     confirm: "",
   });
+  const [isChangingPassword, setIsChangingPassword] = useState(false);
 
   // Profile form state
   const [profileData, setProfileData] = useState({
@@ -166,8 +169,93 @@ export default function SettingsPage() {
     }
   }
 
+  async function handleAvatarUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file || !user) return;
+
+    // Validate file type
+    if (!file.type.startsWith('image/')) {
+      alert('Please select an image file');
+      return;
+    }
+
+    // Validate file size (max 2MB)
+    if (file.size > 2 * 1024 * 1024) {
+      alert('Image size must be less than 2MB');
+      return;
+    }
+
+    setUploadingAvatar(true);
+    debug.log("SETTINGS", "Uploading avatar", { userId: user.id });
+
+    const supabase = createClient();
+
+    try {
+      // Helper to extract storage path from public URL
+      const getAvatarPathFromUrl = (url: string) => {
+        const parts = url.split("/avatars/");
+        return parts[1]?.split("?")[0];
+      };
+
+      // Delete old avatar if exists
+      if (profileData.avatar_url) {
+        const oldPath = getAvatarPathFromUrl(profileData.avatar_url);
+        if (oldPath) {
+          await supabase.storage.from("avatars").remove([oldPath]);
+        }
+      }
+
+      // Upload new avatar into a user-scoped folder to satisfy RLS
+      const fileExt = file.name.split('.').pop();
+      const fileName = `${user.id}-${Date.now()}.${fileExt}`;
+      const filePath = `${user.id}/${fileName}`;
+      const { error: uploadError } = await supabase.storage
+        .from("avatars")
+        .upload(filePath, file, { upsert: true });
+
+      if (uploadError) throw uploadError;
+
+      // Get public URL
+      const { data: { publicUrl } } = supabase.storage
+        .from("avatars")
+        .getPublicUrl(filePath);
+
+      // Update user profile in database
+      const { data: updatedProfile, error: updateError } = await supabase
+        .from('users')
+        .update({ avatar_url: publicUrl })
+        .eq('id', user.id)
+        .select()
+        .single();
+
+      if (updateError) throw updateError;
+
+      debug.success("SETTINGS", "Avatar uploaded");
+      if (updatedProfile) {
+        // Add cache-busting timestamp to force browser to reload image
+        const avatarWithCache = `${publicUrl}?t=${Date.now()}`;
+        setProfileData({ ...profileData, avatar_url: avatarWithCache });
+        setUser({ ...user, avatar_url: avatarWithCache } as any);
+      }
+      setSavedMessage("Profile picture updated successfully!");
+      setTimeout(() => setSavedMessage(""), 3000);
+    } catch (error: any) {
+      debug.error("SETTINGS", "Avatar upload error", {
+        message: error.message,
+      });
+      alert("Failed to upload avatar: " + error.message);
+    } finally {
+      setUploadingAvatar(false);
+    }
+  }
+
   async function handleChangePassword(e: React.FormEvent) {
     e.preventDefault();
+
+    if (isChangingPassword) {
+      debug.log("SETTINGS", "Password change already in progress");
+      return;
+    }
 
     if (passwordData.new !== passwordData.confirm) {
       alert("New passwords don't match");
@@ -179,6 +267,7 @@ export default function SettingsPage() {
       return;
     }
 
+    setIsChangingPassword(true);
     setSaving(true);
     debug.log("SETTINGS", "Changing password");
 
@@ -202,6 +291,7 @@ export default function SettingsPage() {
       alert("Failed to change password: " + error.message);
     } finally {
       setSaving(false);
+      setIsChangingPassword(false);
     }
   }
 
@@ -240,22 +330,34 @@ export default function SettingsPage() {
       </div>
 
       <Tabs defaultValue="profile" className="space-y-4">
-        <TabsList className={`grid w-full ${user.role === "admin" || user.role === "project_manager" ? "grid-cols-2 md:grid-cols-4" : "grid-cols-3"}`}>
-          <TabsTrigger value="profile" className="text-xs md:text-sm">
+        <TabsList className="flex w-full overflow-x-auto gap-2 rounded-full bg-muted/70 p-1 backdrop-blur supports-[backdrop-filter]:bg-muted/60">
+          <TabsTrigger
+            value="profile"
+            className="flex-1 min-w-[72px] justify-center rounded-full text-xs md:text-sm text-muted-foreground data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow"
+          >
             <User className="h-4 w-4 md:mr-2" />
             <span className="hidden md:inline">Profile</span>
           </TabsTrigger>
           {(user.role === "admin" || user.role === "project_manager") && (
-            <TabsTrigger value="company" className="text-xs md:text-sm">
+            <TabsTrigger
+              value="company"
+              className="flex-1 min-w-[72px] justify-center rounded-full text-xs md:text-sm text-muted-foreground data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow"
+            >
               <Building2 className="h-4 w-4 md:mr-2" />
               <span className="hidden md:inline">Company</span>
             </TabsTrigger>
           )}
-          <TabsTrigger value="notifications" className="text-xs md:text-sm">
+          <TabsTrigger
+            value="notifications"
+            className="flex-1 min-w-[72px] justify-center rounded-full text-xs md:text-sm text-muted-foreground data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow"
+          >
             <Bell className="h-4 w-4 md:mr-2" />
             <span className="hidden md:inline">Notifications</span>
           </TabsTrigger>
-          <TabsTrigger value="security" className="text-xs md:text-sm">
+          <TabsTrigger
+            value="security"
+            className="flex-1 min-w-[72px] justify-center rounded-full text-xs md:text-sm text-muted-foreground data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow"
+          >
             <Lock className="h-4 w-4 md:mr-2" />
             <span className="hidden md:inline">Security</span>
           </TabsTrigger>
@@ -272,12 +374,32 @@ export default function SettingsPage() {
             </CardHeader>
             <CardContent className="space-y-6">
               <div className="flex flex-col md:flex-row items-start md:items-center gap-4">
-                <Avatar className="h-20 w-20">
-                  <AvatarImage src={profileData.avatar_url} />
-                  <AvatarFallback>
-                    {user.full_name?.charAt(0) || "U"}
-                  </AvatarFallback>
-                </Avatar>
+                <div className="relative">
+                  <Avatar key={profileData.avatar_url} className="h-20 w-20">
+                    <AvatarImage src={profileData.avatar_url} />
+                    <AvatarFallback>
+                      {user.full_name?.charAt(0) || "U"}
+                    </AvatarFallback>
+                  </Avatar>
+                  <label
+                    htmlFor="avatar-upload"
+                    className="absolute bottom-0 right-0 p-1.5 bg-primary text-primary-foreground rounded-full cursor-pointer hover:bg-primary/90 transition-colors"
+                  >
+                    {uploadingAvatar ? (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      <UploadIcon className="h-3.5 w-3.5" />
+                    )}
+                  </label>
+                  <input
+                    id="avatar-upload"
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={handleAvatarUpload}
+                    disabled={uploadingAvatar}
+                  />
+                </div>
                 <div className="space-y-2">
                   <p className="text-sm font-medium">{user.full_name}</p>
                   <p className="text-xs text-muted-foreground">{user.email}</p>
@@ -287,6 +409,7 @@ export default function SettingsPage() {
                       {user.role.replace("_", " ")}
                     </span>
                   </p>
+                  <p className="text-xs text-muted-foreground">Click icon to update picture</p>
                 </div>
               </div>
               <Separator />
@@ -558,10 +681,10 @@ export default function SettingsPage() {
                   <Button
                     type="submit"
                     disabled={
-                      saving || !passwordData.new || !passwordData.confirm
+                      isChangingPassword || !passwordData.new || !passwordData.confirm
                     }
                   >
-                    {saving && (
+                    {isChangingPassword && (
                       <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                     )}
                     Update Password

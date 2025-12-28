@@ -113,6 +113,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     useEffect(() => {
+        let mounted = true
+        
         // Check active sessions and sets the user
         const initAuth = async () => {
             try {
@@ -127,10 +129,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 console.log('Auth context init: session user:', session?.user?.email)
                 debug.log('AUTH', 'Session fetched', { email: session?.user?.email, userId: session?.user?.id })
 
+                if (!mounted) return
+
                 if (session?.user) {
                     setSupabaseUser(session.user)
                     const profile = await ensureUserProfile(session.user)
-                    if (profile) {
+                    if (profile && mounted) {
                         setUser(profile)
                     }
                 } else {
@@ -140,12 +144,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 console.error('Auth context init error:', err.message)
                 debug.error('AUTH', 'Init error', { message: err.message })
             } finally {
-                setLoading(false)
-                debug.log('AUTH', 'Auth init complete')
+                if (mounted) {
+                    setLoading(false)
+                    debug.log('AUTH', 'Auth init complete')
+                }
             }
         }
 
         initAuth()
+        
+        return () => {
+            mounted = false
+        }
 
         // Listen for changes on auth state (throttled to prevent multi-tab conflicts)
         let lastEventTime = 0
@@ -162,22 +172,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             debug.log('AUTH', 'Auth state changed', { event, email: session?.user?.email, userId: session?.user?.id })
 
             try {
-                if (session?.user) {
+                if (session?.user && mounted) {
                     setSupabaseUser(session.user)
                     const profile = await ensureUserProfile(session.user)
-                    if (profile) {
+                    if (profile && mounted) {
                         setUser(profile)
-                    } else {
+                    } else if (mounted) {
                         setUser(null)
                     }
-                } else if (event === 'SIGNED_OUT') {
+                } else if (event === 'SIGNED_OUT' && mounted) {
                     debug.log('AUTH', 'Session cleared, setting user to null')
                     setSupabaseUser(null)
                     setUser(null)
                     setProfileCache(new Map())
                 }
             } finally {
-                setLoading(false)
+                if (mounted) {
+                    setLoading(false)
+                }
             }
         })
 

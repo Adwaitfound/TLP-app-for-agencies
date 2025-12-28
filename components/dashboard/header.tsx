@@ -77,16 +77,17 @@ export function Header() {
         <Moon className="absolute h-[1.2rem] w-[1.2rem] rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" />
         <span className="sr-only">Toggle theme</span>
       </Button>
-      <NotificationBell />
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <Button variant="ghost" className="relative h-8 w-8 rounded-full">
-            <Avatar className="h-8 w-8">
+            <Avatar key={user?.avatar_url} className="h-8 w-8">
               <AvatarImage
-                src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGP8/5+hHgAGgwJ/lqS4VwAAAABJRU5ErkJggg=="
-                alt="User"
+                src={user?.avatar_url}
+                alt={user?.full_name || "User"}
               />
-              <AvatarFallback>VP</AvatarFallback>
+              <AvatarFallback>
+                {user?.full_name?.charAt(0)?.toUpperCase() || "U"}
+              </AvatarFallback>
             </Avatar>
           </Button>
         </DropdownMenuTrigger>

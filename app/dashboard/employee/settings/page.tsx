@@ -15,7 +15,7 @@ import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { User, Bell, Lock, Loader2, CheckCircle2, LogOut } from "lucide-react";
+import { User, Bell, Lock, Loader2, CheckCircle2, LogOut, Upload as UploadIcon } from "lucide-react";
 import { useAuth } from "@/contexts/auth-context";
 import { createClient } from "@/lib/supabase/client";
 import { debug } from "@/lib/debug";
@@ -24,12 +24,14 @@ export default function EmployeeSettingsPage() {
   const { user, loading: authLoading, setUser, logout } = useAuth();
   const router = useRouter();
   const [saving, setSaving] = useState(false);
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [savedMessage, setSavedMessage] = useState("");
   const [passwordData, setPasswordData] = useState({
     current: "",
     new: "",
     confirm: "",
   });
+  const [isChangingPassword, setIsChangingPassword] = useState(false);
 
   // Profile form state
   const [profileData, setProfileData] = useState({
@@ -100,7 +102,90 @@ export default function EmployeeSettingsPage() {
     }
   };
 
+  const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !user) return;
+
+    // Validate file type
+    if (!file.type.startsWith('image/')) {
+      setSavedMessage('Please select an image file');
+      setTimeout(() => setSavedMessage(""), 3000);
+      return;
+    }
+
+    // Validate file size (max 2MB)
+    if (file.size > 2 * 1024 * 1024) {
+      setSavedMessage('Image size must be less than 2MB');
+      setTimeout(() => setSavedMessage(""), 3000);
+      return;
+    }
+
+    setUploadingAvatar(true);
+    setSavedMessage("");
+
+    try {
+      const supabase = createClient();
+
+      // Helper to extract storage path from public URL
+      const getAvatarPathFromUrl = (url: string) => {
+        const parts = url.split("/avatars/");
+        return parts[1]?.split("?")[0];
+      };
+
+      // Delete old avatar if exists
+      if (profileData.avatar_url) {
+        const oldPath = getAvatarPathFromUrl(profileData.avatar_url);
+        if (oldPath) {
+          await supabase.storage.from("avatars").remove([oldPath]);
+        }
+      }
+
+      // Upload new avatar into a user-scoped folder to satisfy RLS
+      const fileExt = file.name.split('.').pop();
+      const fileName = `${user.id}-${Date.now()}.${fileExt}`;
+      const filePath = `${user.id}/${fileName}`;
+      const { error: uploadError } = await supabase.storage
+        .from("avatars")
+        .upload(filePath, file, { upsert: true });
+
+      if (uploadError) throw uploadError;
+
+      // Get public URL
+      const { data: { publicUrl } } = supabase.storage
+        .from("avatars")
+        .getPublicUrl(filePath);
+
+      // Update user profile in database
+      const { data: updatedProfile, error: updateError } = await supabase
+        .from('users')
+        .update({ avatar_url: publicUrl })
+        .eq('id', user.id)
+        .select()
+        .single();
+
+      if (updateError) throw updateError;
+
+      if (updatedProfile) {
+        // Add cache-busting timestamp to force browser to reload image
+        const avatarWithCache = `${publicUrl}?t=${Date.now()}`;
+        setProfileData({ ...profileData, avatar_url: avatarWithCache });
+        setUser({ ...user, avatar_url: avatarWithCache } as any);
+      }
+      setSavedMessage("Profile picture updated successfully!");
+      setTimeout(() => setSavedMessage(""), 3000);
+    } catch (error: any) {
+      console.error("Error uploading avatar:", error);
+      setSavedMessage(`Error: ${error.message}`);
+      setTimeout(() => setSavedMessage(""), 5000);
+    } finally {
+      setUploadingAvatar(false);
+    }
+  };
+
   const handlePasswordChange = async () => {
+    if (isChangingPassword) {
+      return;
+    }
     if (!passwordData.new || !passwordData.confirm) {
       setSavedMessage("Please fill in all password fields");
       setTimeout(() => setSavedMessage(""), 3000);
@@ -113,6 +198,7 @@ export default function EmployeeSettingsPage() {
       return;
     }
 
+    setIsChangingPassword(true);
     setSaving(true);
     setSavedMessage("");
 
@@ -134,6 +220,7 @@ export default function EmployeeSettingsPage() {
       setTimeout(() => setSavedMessage(""), 5000);
     } finally {
       setSaving(false);
+      setIsChangingPassword(false);
     }
   };
 
@@ -198,35 +285,41 @@ export default function EmployeeSettingsPage() {
             <CardContent className="space-y-6">
               {/* Avatar Section */}
               <div className="flex flex-col md:flex-row items-start md:items-center gap-4">
-                <Avatar className="h-20 w-20">
-                  <AvatarImage src={profileData.avatar_url} />
-                  <AvatarFallback className="text-2xl">
-                    {(profileData.full_name || profileData.email || "U")
-                      .split(/\s+/)
-                      .map((part) => part.charAt(0))
-                      .join("")
-                      .slice(0, 2)
-                      .toUpperCase()}
-                  </AvatarFallback>
-                </Avatar>
+                <div className="relative">
+                  <Avatar key={profileData.avatar_url} className="h-20 w-20">
+                    <AvatarImage src={profileData.avatar_url} />
+                    <AvatarFallback className="text-2xl">
+                      {(profileData.full_name || profileData.email || "U")
+                        .split(/\s+/)
+                        .map((part) => part.charAt(0))
+                        .join("")
+                        .slice(0, 2)
+                        .toUpperCase()}
+                    </AvatarFallback>
+                  </Avatar>
+                  <label
+                    htmlFor="avatar-upload"
+                    className="absolute bottom-0 right-0 p-1.5 bg-primary text-primary-foreground rounded-full cursor-pointer hover:bg-primary/90 transition-colors"
+                  >
+                    {uploadingAvatar ? (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      <UploadIcon className="h-3.5 w-3.5" />
+                    )}
+                  </label>
+                  <input
+                    id="avatar-upload"
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={handleAvatarUpload}
+                    disabled={uploadingAvatar}
+                  />
+                </div>
                 <div className="flex-1 space-y-2">
-                  <p className="text-sm font-medium">Profile Picture</p>
-                  <div className="flex flex-col sm:flex-row gap-2">
-                    <Input
-                      placeholder="Avatar URL"
-                      value={profileData.avatar_url}
-                      onChange={(e) =>
-                        setProfileData({
-                          ...profileData,
-                          avatar_url: e.target.value,
-                        })
-                      }
-                      className="flex-1"
-                    />
-                  </div>
-                  <p className="text-xs text-muted-foreground">
-                    Enter an image URL for your profile picture
-                  </p>
+                  <p className="text-sm font-medium">{profileData.full_name}</p>
+                  <p className="text-xs text-muted-foreground">{profileData.email}</p>
+                  <p className="text-xs text-muted-foreground">Click icon to update picture</p>
                 </div>
               </div>
 
@@ -333,8 +426,8 @@ export default function EmployeeSettingsPage() {
                 />
               </div>
               <div className="flex justify-end">
-                <Button onClick={handlePasswordChange} disabled={saving}>
-                  {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                <Button onClick={handlePasswordChange} disabled={isChangingPassword}>
+                  {isChangingPassword && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                   Update Password
                 </Button>
               </div>

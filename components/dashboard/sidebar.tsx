@@ -15,6 +15,7 @@ import {
   Bell,
   Wallet,
   Files,
+  MessagesSquare,
 } from "lucide-react";
 import { useAuth } from "@/contexts/auth-context";
 
@@ -33,6 +34,11 @@ const adminRoutes = [
     label: "Comments",
     icon: MessageSquare,
     href: "/dashboard/comments",
+  },
+  {
+    label: "Team Chat",
+    icon: MessagesSquare,
+    href: "/dashboard/chat",
   },
   {
     label: "Notifications",
@@ -98,6 +104,11 @@ const employeeRoutes = [
     href: "/dashboard/comments",
   },
   {
+    label: "Team Chat",
+    icon: MessagesSquare,
+    href: "/dashboard/chat",
+  },
+  {
     label: "Notifications",
     icon: Bell,
     href: "/dashboard/notifications",
@@ -147,11 +158,14 @@ export function Sidebar() {
   return (
     <div className="flex h-full flex-col gap-2">
       <div className="flex h-14 items-center border-b px-4 lg:h-[60px] lg:px-6">
-        <div className="flex items-center gap-2">
-          <div className="h-8 w-8 rounded-lg bg-primary flex items-center justify-center">
-            <span className="text-primary-foreground font-bold text-lg">
-              TLP
-            </span>
+        <div className="flex items-center gap-3">
+          <div className="h-9 flex items-center">
+            <img
+              src="https://www.thelostproject.in/cdn/shop/files/TLP_logo_for_Backlit-01-white.png?height=72&v=1760209067"
+              alt="The Lost Project"
+              className="h-8 w-auto"
+              loading="eager"
+            />
           </div>
           <div className="flex flex-col">
             <span className="text-lg font-bold leading-tight">

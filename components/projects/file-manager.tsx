@@ -35,6 +35,7 @@ import {
   Image as ImageIcon,
   Video,
   File,
+  Folder as FolderIcon,
   ExternalLink,
   Trash2,
   Loader2,
@@ -87,9 +88,7 @@ export function FileManager({
   const [previewFile, setPreviewFile] = useState<ProjectFile | null>(null);
 
   // Refs to prevent race conditions and state corruption
-  const isSubmittingRef = useRef(false);
   const isUploadingRef = useRef(false);
-  const isSavingDriveRef = useRef(false);
   const abortControllerRef = useRef<AbortController | null>(null);
   const componentMountedRef = useRef(true);
 
@@ -188,6 +187,9 @@ export function FileManager({
       setUploadCategory("other");
       setUploading(false);
       isUploadingRef.current = false;
+      // Also clear the file input element
+      const fileInput = document.querySelector<HTMLInputElement>('input[type="file"][id="file-upload-input"]');
+      if (fileInput) fileInput.value = '';
     }
   }, [isUploadDialogOpen]);
 
@@ -199,7 +201,6 @@ export function FileManager({
       setLinkDescription("");
       setLinkCategory("other");
       setLinkSubmitting(false);
-      isSubmittingRef.current = false;
       debug.log("FILE_MANAGER", "Add link dialog closed and form reset");
     } else {
       console.log("[FileManager] Link dialog opened");
@@ -210,7 +211,6 @@ export function FileManager({
     if (!isDriveFolderDialogOpen) {
       setNewDriveFolderUrl(driveFolderUrl || "");
       setSavingDrive(false);
-      isSavingDriveRef.current = false;
     }
   }, [isDriveFolderDialogOpen, driveFolderUrl]);
 
@@ -221,7 +221,10 @@ export function FileManager({
       return;
     }
 
-    if (!selectedFile) return;
+    if (!selectedFile) {
+      showToast("Please select a file to upload", "error");
+      return;
+    }
 
     if (!projectId) {
       showToast("Missing project. Open a project before uploading.", "error");
@@ -235,7 +238,7 @@ export function FileManager({
 
     const validation = validateFileSize(selectedFile);
     if (!validation.valid) {
-      showToast(validation.error || "File validation failed", "error");
+      showToast(validation.error || "File validation failed", "error", 5000);
       return;
     }
 
@@ -362,7 +365,7 @@ export function FileManager({
   async function handleAddLink() {
     // ========== GUARDS: Block execution if already in progress ==========
     if (!componentMountedRef.current) return;
-    if (isSubmittingRef.current || linkSubmitting) {
+    if (linkSubmitting) {
       console.log("[handleAddLink] BLOCKED: already submitting");
       return;
     }
@@ -385,7 +388,6 @@ export function FileManager({
     }
 
     // ========== SET GUARDS ==========
-    isSubmittingRef.current = true;
     setLinkSubmitting(true);
 
     const supabase = createClient();
@@ -462,14 +464,13 @@ export function FileManager({
       if (componentMountedRef.current) {
         setLinkSubmitting(false);
       }
-      isSubmittingRef.current = false;
       console.log("[handleAddLink] ✅ Submission complete, guards reset");
     }
   }
 
   async function handleUpdateDriveFolder() {
     // Prevent overlapping saves
-    if (isSavingDriveRef.current || savingDrive) {
+    if (savingDrive) {
       debug.log(
         "FILE_MANAGER",
         "Drive folder save already in progress, ignoring",
@@ -489,7 +490,6 @@ export function FileManager({
       return;
     }
 
-    isSavingDriveRef.current = true;
     setSavingDrive(true);
 
     const supabase = createClient();
@@ -536,7 +536,6 @@ export function FileManager({
       if (componentMountedRef.current) {
         setSavingDrive(false);
       }
-      isSavingDriveRef.current = false;
       debug.log("FILE_MANAGER", "Drive folder save end - flags reset");
     }
   }
@@ -604,14 +603,26 @@ export function FileManager({
       const u = new URL(url);
       // Pattern: /file/d/<id>/
       const fileMatch = u.pathname.match(/\/file\/d\/([^/]+)/);
-      if (fileMatch) return fileMatch[1];
-      // Pattern: open?id=<id>
+      if (fileMatch) {
+        console.log(`✅ Parsed file ID from /file/d/ pattern: ${fileMatch[1]}`);
+        return fileMatch[1];
+      }
+      // Pattern: /drive/folders/<id> (for folder links)
+      const folderMatch = u.pathname.match(/\/drive\/folders\/([^/?]+)/);
+      if (folderMatch) {
+        console.log(`✅ Parsed folder ID from /drive/folders/ pattern: ${folderMatch[1]}`);
+        return folderMatch[1];
+      }
+      // Pattern: ?id=<id> query parameter
       const idParam = u.searchParams.get("id");
-      if (idParam) return idParam;
-      // Pattern: uc?id=<id>
-      const ucId = u.searchParams.get("id");
-      if (ucId) return ucId;
-    } catch {}
+      if (idParam) {
+        console.log(`✅ Parsed ID from query param: ${idParam}`);
+        return idParam;
+      }
+      console.warn(`❌ Could not parse Drive ID from URL: ${url.substring(0, 80)}...`);
+    } catch (e) {
+      console.error(`❌ Error parsing Drive URL: ${e}`);
+    }
     return null;
   }
 
@@ -635,8 +646,12 @@ export function FileManager({
     setIsPreviewOpen(true);
     if (file.storage_type === "supabase") {
       const res = await getSignedProjectFileUrl(file.file_url);
+      console.log("📸 Preview signed URL response:", { fileName: file.file_name, hasUrl: !!res.signedUrl, error: res.error });
       if (!res.error && res.signedUrl) setPreviewUrl(res.signedUrl);
-      else setPreviewUrl(file.file_url); // fallback for public buckets
+      else {
+        console.warn("⚠️ Failed to get signed preview URL, using fallback:", res.error);
+        setPreviewUrl(file.file_url); // fallback for public buckets
+      }
     } else {
       setPreviewUrl(file.file_url);
     }
@@ -668,29 +683,50 @@ export function FileManager({
     const [failed, setFailed] = useState(false);
     const [signedSrc, setSignedSrc] = useState<string | null>(null);
     let src: string | null = null;
-    // Prefer Google Drive thumbnail when source is Drive (works for many file types)
-    if (file.storage_type === "google_drive") {
-      src = getDriveThumbnailUrl(
-        file.file_url,
-        display === "tile" ? 480 : 160,
-      );
-    } else if (file.file_type === "image") {
-      // For Supabase or external images, attempt to show the image directly
-      if (file.storage_type === "supabase") {
-        src = signedSrc ?? file.file_url; // allow public bucket fallback
-      } else {
-        src = file.file_url;
-      }
+    
+    // Debug: log file type for PNG detection
+    if (file.file_name?.toLowerCase().endsWith('.png')) {
+      console.log(`🖼️ PNG File Detected: ${file.file_name}, file_type="${file.file_type}", storage_type="${file.storage_type}"`);
+    }
+    
+    // Check if this is a Google Drive folder link
+    const isDriveFolder = file.storage_type === "google_drive" && 
+                          file.file_url.includes('/drive/folders/');
+    
+    // Note: Google Drive thumbnails disabled due to CSP violations and authentication requirements
+    // All Drive files will show appropriate icons instead
+    
+    // PRIORITY 1: Supabase images - use signed URL
+    if (file.file_type === "image" && file.storage_type === "supabase") {
+      src = signedSrc ?? file.file_url; // allow public bucket fallback
+      console.log(`🖼️ Supabase image source for ${file.file_name}: ${src ? "✓ Available" : "✗ No URL"}`);
+    }
+    // PRIORITY 2: External image links
+    else if (file.file_type === "image") {
+      src = file.file_url;
+      console.log(`🔗 External image link: ${file.file_name}`);
+    }
+    // FALLBACK: No thumbnail available
+    else {
+      console.log(`❌ File ${file.file_name} - file_type="${file.file_type}", storage_type="${file.storage_type}" - no thumbnail strategy`);
     }
 
     useEffect(() => {
       let cancelled = false;
       async function run() {
         if (file.file_type === "image" && file.storage_type === "supabase") {
+          console.log(`🔗 Fetching signed URL for: ${file.file_name}`);
           const res = await getSignedProjectFileUrl(file.file_url, 300);
-          if (!cancelled && !res.error && res.signedUrl)
+          console.log(`📡 Signed URL response: ${file.file_name}`, { hasUrl: !!res.signedUrl, error: res.error });
+          if (!cancelled && !res.error && res.signedUrl) {
             setSignedSrc(res.signedUrl);
-          if (!cancelled && res.error) setSignedSrc(null);
+            console.log(`✅ Using signed URL for ${file.file_name}`);
+          }
+          if (!cancelled && res.error) {
+            console.warn(`⚠️ Failed to get signed URL for ${file.file_name}, using public URL:`, res.error);
+            // Fallback to file_url directly for public buckets or as last resort
+            setSignedSrc(file.file_url);
+          }
         }
       }
       run();
@@ -727,7 +763,15 @@ export function FileManager({
           className="flex items-center justify-center rounded bg-muted"
           style={boxStyle}
         >
-          {getFileIcon(file.file_type)}
+          {file.storage_type === "google_drive" ? (
+            isDriveFolder ? (
+              <FolderIcon className="h-4 w-4 text-blue-500" />
+            ) : (
+              <ExternalLink className="h-4 w-4 text-blue-500" />
+            )
+          ) : (
+            getFileIcon(file.file_type)
+          )}
         </div>
       );
     }
@@ -744,7 +788,16 @@ export function FileManager({
             : "rounded object-cover"
         }
         style={boxStyle}
-        onError={() => setFailed(true)}
+        onLoad={() => {
+          console.log(`✅ Thumbnail loaded: ${file.file_name} (${file.file_type}) from ${file.storage_type}`);
+        }}
+        onError={() => {
+          console.warn(`❌ Thumbnail failed: ${file.file_name} (${file.file_type}) from ${file.storage_type}`, {
+            attemptedUrl: src,
+            driveId: file.storage_type === "google_drive" ? parseGoogleDriveId(file.file_url) : null,
+          });
+          setFailed(true);
+        }}
       />
     );
   }
@@ -835,7 +888,8 @@ export function FileManager({
                 debug.log("FILE_MANAGER", "Open upload dialog");
                 setIsUploadDialogOpen(true);
               }}
-              disabled={files.length >= 20 || !!readOnly}
+              disabled={files.length >= 20 || uploading || !!readOnly}
+              title={files.length >= 20 ? "Maximum 20 files reached" : readOnly ? "Read-only mode" : "Upload a file"}
             >
               <Upload className="h-4 w-4 mr-2" />
               Upload File
@@ -843,13 +897,13 @@ export function FileManager({
             <Button
               type="button"
               onClick={() => {
-                if (isSubmittingRef.current || isUploadingRef.current) return;
                 debug.log("FILE_MANAGER", "Open add link dialog");
                 setIsLinkDialogOpen(true);
               }}
               disabled={
-                files.length >= 20 || linkSubmitting || uploading || !!readOnly
+                files.length >= 20 || linkSubmitting || !!readOnly
               }
+              title={files.length >= 20 ? "Maximum 20 files reached" : readOnly ? "Read-only mode" : "Add a Google Drive link"}
             >
               <LinkIcon className="h-4 w-4 mr-2" />
               Add Drive Link
@@ -987,12 +1041,14 @@ export function FileManager({
             </DialogHeader>
             <div className="space-y-4 py-4">
               <div>
-                <Label>File</Label>
+                <Label htmlFor="file-upload-input">File</Label>
                 <Input
+                  id="file-upload-input"
                   type="file"
                   onChange={(e) => setSelectedFile(e.target.files?.[0] || null)}
                   className="mt-1"
                   required
+                  disabled={uploading}
                 />
                 {selectedFile && (
                   <p className="text-xs text-muted-foreground mt-1">

@@ -23,6 +23,7 @@ import {
   Loader2,
   CheckCircle2,
   LogOut,
+  Upload as UploadIcon,
 } from "lucide-react";
 import { useAuth } from "@/contexts/auth-context";
 import { createClient } from "@/lib/supabase/client";
@@ -32,12 +33,14 @@ export default function ClientSettingsPage() {
   const { user, loading: authLoading, setUser, logout } = useAuth();
   const router = useRouter();
   const [saving, setSaving] = useState(false);
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [savedMessage, setSavedMessage] = useState("");
   const [passwordData, setPasswordData] = useState({
     current: "",
     new: "",
     confirm: "",
   });
+  const [isChangingPassword, setIsChangingPassword] = useState(false);
 
   // Profile form state
   const [profileData, setProfileData] = useState({
@@ -99,8 +102,93 @@ export default function ClientSettingsPage() {
     }
   }
 
+  async function handleAvatarUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file || !user) return;
+
+    // Validate file type
+    if (!file.type.startsWith('image/')) {
+      alert('Please select an image file');
+      return;
+    }
+
+    // Validate file size (max 2MB)
+    if (file.size > 2 * 1024 * 1024) {
+      alert('Image size must be less than 2MB');
+      return;
+    }
+
+    setUploadingAvatar(true);
+    debug.log("CLIENT_SETTINGS", "Uploading avatar", { userId: user.id });
+
+    const supabase = createClient();
+
+    try {
+      // Helper to extract storage path from public URL
+      const getAvatarPathFromUrl = (url: string) => {
+        const parts = url.split("/avatars/");
+        return parts[1]?.split("?")[0];
+      };
+
+      // Delete old avatar if exists
+      if (profileData.avatar_url) {
+        const oldPath = getAvatarPathFromUrl(profileData.avatar_url);
+        if (oldPath) {
+          await supabase.storage.from("avatars").remove([oldPath]);
+        }
+      }
+
+      // Upload new avatar into a user-scoped folder to satisfy RLS
+      const fileExt = file.name.split('.').pop();
+      const fileName = `${user.id}-${Date.now()}.${fileExt}`;
+      const filePath = `${user.id}/${fileName}`;
+      const { error: uploadError } = await supabase.storage
+        .from("avatars")
+        .upload(filePath, file, { upsert: true });
+
+      if (uploadError) throw uploadError;
+
+      // Get public URL
+      const { data: { publicUrl } } = supabase.storage
+        .from("avatars")
+        .getPublicUrl(filePath);
+
+      // Update user profile in database
+      const { data: updatedProfile, error: updateError } = await supabase
+        .from('users')
+        .update({ avatar_url: publicUrl })
+        .eq('id', user.id)
+        .select()
+        .single();
+
+      if (updateError) throw updateError;
+
+      debug.success("CLIENT_SETTINGS", "Avatar uploaded");
+      if (updatedProfile) {
+        // Add cache-busting timestamp to force browser to reload image
+        const avatarWithCache = `${publicUrl}?t=${Date.now()}`;
+        setProfileData({ ...profileData, avatar_url: avatarWithCache });
+        setUser({ ...user, avatar_url: avatarWithCache } as any);
+      }
+      setSavedMessage("Profile picture updated successfully!");
+      setTimeout(() => setSavedMessage(""), 3000);
+    } catch (error: any) {
+      debug.error("CLIENT_SETTINGS", "Avatar upload error", {
+        message: error.message,
+      });
+      alert("Failed to upload avatar: " + error.message);
+    } finally {
+      setUploadingAvatar(false);
+    }
+  }
+
   async function handleChangePassword(e: React.FormEvent) {
     e.preventDefault();
+
+    if (isChangingPassword) {
+      debug.log("CLIENT_SETTINGS", "Password change already in progress");
+      return;
+    }
 
     if (passwordData.new !== passwordData.confirm) {
       alert("New passwords don't match");
@@ -112,6 +200,7 @@ export default function ClientSettingsPage() {
       return;
     }
 
+    setIsChangingPassword(true);
     setSaving(true);
     debug.log("CLIENT_SETTINGS", "Changing password");
 
@@ -135,6 +224,7 @@ export default function ClientSettingsPage() {
       alert("Failed to change password: " + error.message);
     } finally {
       setSaving(false);
+      setIsChangingPassword(false);
     }
   }
 
@@ -199,12 +289,32 @@ export default function ClientSettingsPage() {
             </CardHeader>
             <CardContent className="space-y-6">
               <div className="flex flex-col md:flex-row items-start md:items-center gap-4">
-                <Avatar className="h-20 w-20">
-                  <AvatarImage src={profileData.avatar_url} />
-                  <AvatarFallback>
-                    {user.full_name?.charAt(0) || "U"}
-                  </AvatarFallback>
-                </Avatar>
+                <div className="relative">
+                  <Avatar key={profileData.avatar_url} className="h-20 w-20">
+                    <AvatarImage src={profileData.avatar_url} />
+                    <AvatarFallback>
+                      {user.full_name?.charAt(0) || "U"}
+                    </AvatarFallback>
+                  </Avatar>
+                  <label
+                    htmlFor="avatar-upload"
+                    className="absolute bottom-0 right-0 p-1.5 bg-primary text-primary-foreground rounded-full cursor-pointer hover:bg-primary/90 transition-colors"
+                  >
+                    {uploadingAvatar ? (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      <UploadIcon className="h-3.5 w-3.5" />
+                    )}
+                  </label>
+                  <input
+                    id="avatar-upload"
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={handleAvatarUpload}
+                    disabled={uploadingAvatar}
+                  />
+                </div>
                 <div className="space-y-2">
                   <p className="text-sm font-medium">{user.full_name}</p>
                   <p className="text-xs text-muted-foreground">{user.email}</p>
@@ -214,6 +324,7 @@ export default function ClientSettingsPage() {
                       {user.role.replace("_", " ")}
                     </span>
                   </p>
+                  <p className="text-xs text-muted-foreground">Click icon to update picture</p>
                 </div>
               </div>
               <Separator />
@@ -361,10 +472,10 @@ export default function ClientSettingsPage() {
                   <Button
                     type="submit"
                     disabled={
-                      saving || !passwordData.new || !passwordData.confirm
+                      isChangingPassword || !passwordData.new || !passwordData.confirm
                     }
                   >
-                    {saving && (
+                    {isChangingPassword && (
                       <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                     )}
                     Update Password

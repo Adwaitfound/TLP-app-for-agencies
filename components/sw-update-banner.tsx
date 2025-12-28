@@ -9,18 +9,23 @@ export function SwUpdateBanner() {
   const [show, setShow] = useState(false);
 
   useEffect(() => {
-    if (typeof window === "undefined" || !("serviceWorker" in navigator)) return;
+    if (typeof window === "undefined" || !("serviceWorker" in navigator)) {
+      console.log("🔄 SW Update: serviceWorker not available");
+      return;
+    }
 
     let registration: ServiceWorkerRegistration | null = null;
     let controllerChangeListener: (() => void) | null = null;
 
     const onControllerChange = () => {
+      console.log("🔄 SW Update: controller changed, reloading...");
       // When the new SW takes control, reload to get fresh assets
       window.location.reload();
     };
 
     const handleInstalled = (worker: ServiceWorker | null) => {
       if (!worker) return;
+      console.log("🔄 SW Update: new version detected, showing banner");
       setWaitingWorker(worker);
       setShow(true);
     };
@@ -28,29 +33,37 @@ export function SwUpdateBanner() {
     const monitorRegistration = async () => {
       try {
         registration = await navigator.serviceWorker.ready;
+        console.log("🔄 SW Update: service worker ready", registration);
 
         // Check if there's already a waiting worker (e.g., after tab restore)
         if (registration.waiting) {
+          console.log("🔄 SW Update: existing waiting worker found");
           handleInstalled(registration.waiting);
         }
 
         registration.addEventListener("updatefound", () => {
+          console.log("🔄 SW Update: update found, new worker installing...");
           const newWorker = registration?.installing;
           if (!newWorker) return;
           newWorker.addEventListener("statechange", () => {
+            console.log("🔄 SW Update: new worker state:", newWorker.state);
             if (newWorker.state === "installed" && navigator.serviceWorker.controller) {
+              console.log("🔄 SW Update: new worker installed and controller exists");
               handleInstalled(newWorker);
             }
           });
         });
 
-        // Proactively check for updates
-        registration.update().catch(() => {});
+        // Proactively check for updates every 5 seconds
+        const updateInterval = setInterval(() => {
+          console.log("🔄 SW Update: checking for updates...");
+          registration?.update().catch((err) => console.warn("Update check failed:", err));
+        }, 5000);
 
         controllerChangeListener = onControllerChange;
         navigator.serviceWorker.addEventListener("controllerchange", controllerChangeListener);
       } catch (err) {
-        console.warn("SW update monitor failed", err);
+        console.warn("🔄 SW Update: monitor failed", err);
       }
     };
 
@@ -65,6 +78,7 @@ export function SwUpdateBanner() {
 
   const activateUpdate = () => {
     if (waitingWorker) {
+      console.log("🔄 SW Update: posting SKIP_WAITING to service worker");
       waitingWorker.postMessage({ type: "SKIP_WAITING" });
     }
   };

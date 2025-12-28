@@ -9,10 +9,26 @@ async function notifyUsers(
 ) {
   if (!userIds.length) return;
   const supabase = createServiceClient();
+
+  // Filter out clients to avoid sending them notifications
+  const { data: allowedUsers, error: fetchErr } = await supabase
+    .from("users")
+    .select("id, role")
+    .in("id", userIds)
+    .neq("role", "client");
+
+  if (fetchErr) {
+    console.warn("notifyUsers fetch users failed", fetchErr.message);
+    return;
+  }
+
+  const allowedIds = (allowedUsers || []).map((u: any) => u.id);
+  if (!allowedIds.length) return;
+
   const { error } = await supabase
     .from("notifications")
     .insert(
-      userIds.map((uid) => ({
+      allowedIds.map((uid) => ({
         user_id: uid,
         type: payload.type,
         message: payload.message,
