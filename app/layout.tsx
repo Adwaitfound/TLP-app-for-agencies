@@ -14,6 +14,7 @@ import { PushSubscriptionManager } from "@/components/push-subscription";
 import { NotificationDiagnostics } from "@/components/notification-diagnostics";
 import { InstallPrompt } from "@/components/install-prompt";
 import { BadgeManager } from "@/components/badge-manager";
+import { PullToRefresh } from "@/components/pull-to-refresh";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -95,6 +96,7 @@ export default function RootLayout({
               <PushSubscriptionManager />
               <NotificationPortal />
               <BadgeManager />
+              <PullToRefresh />
               <InstallPrompt />
               <SwUpdateBanner />
               <GlobalClickTracker />
