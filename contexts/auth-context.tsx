@@ -120,6 +120,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             try {
                 debug.log('AUTH', 'Initializing auth context...')
 
+                // Try to restore session from localStorage first (for PWA/offline support)
+                const savedSession = localStorage.getItem('tlp_auth_session')
                 const { data: { session }, error: sessionError } = await supabase.auth.getSession()
                 
                 if (sessionError) {
@@ -133,9 +135,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
                 if (session?.user) {
                     setSupabaseUser(session.user)
+                    // Save session to localStorage for PWA offline support
+                    localStorage.setItem('tlp_auth_session', JSON.stringify(session))
+                    
                     const profile = await ensureUserProfile(session.user)
                     if (profile && mounted) {
                         setUser(profile)
+                        debug.log('AUTH', 'User authenticated and profile loaded', { email: profile.email })
+                    }
+                } else if (savedSession) {
+                    // If no active session but we have a saved one, try to use it
+                    try {
+                        const parsed = JSON.parse(savedSession)
+                        if (parsed?.user) {
+                            debug.log('AUTH', 'Restoring session from localStorage', { email: parsed.user.email })
+                            setSupabaseUser(parsed.user)
+                            const profile = await ensureUserProfile(parsed.user)
+                            if (profile && mounted) {
+                                setUser(profile)
+                            }
+                        }
+                    } catch (e) {
+                        debug.warn('AUTH', 'Failed to restore saved session', { error: String(e) })
+                        localStorage.removeItem('tlp_auth_session')
                     }
                 } else {
                     debug.log('AUTH', 'No active session found')
@@ -174,6 +196,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             try {
                 if (session?.user && mounted) {
                     setSupabaseUser(session.user)
+                    // Persist session to localStorage
+                    localStorage.setItem('tlp_auth_session', JSON.stringify(session))
+                    
                     const profile = await ensureUserProfile(session.user)
                     if (profile && mounted) {
                         setUser(profile)
@@ -185,6 +210,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                     setSupabaseUser(null)
                     setUser(null)
                     setProfileCache(new Map())
+                    // Clear saved session
+                    localStorage.removeItem('tlp_auth_session')
                 }
             } finally {
                 if (mounted) {
@@ -233,6 +260,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setUser(null)
         setSupabaseUser(null)
         setProfileCache(new Map())
+        // Clear saved session from localStorage
+        localStorage.removeItem('tlp_auth_session')
         debug.log('AUTH', 'User state cleared')
         try {
             await supabase.auth.signOut({ scope: 'local' })
