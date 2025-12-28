@@ -161,6 +161,13 @@ async function sendWebPushNotification(
             tag,
             icon: '/icons/icon-192x192.png',
             badge: '/icons/icon-192x192.png',
+            image: '/icons/icon-512x512.png',
+            vibrate: [200, 100, 200],
+            requireInteraction: tag === 'chat_mention',
+            data: {
+              url: '/dashboard/chat',
+              timestamp: Date.now(),
+            },
           },
         }),
       }

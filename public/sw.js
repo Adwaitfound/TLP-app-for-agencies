@@ -109,10 +109,24 @@ if (typeof window === 'undefined') {
             body: data.body || 'New notification',
             icon: data.icon || '/icons/icon-192x192.png',
             badge: data.badge || '/icons/icon-192x192.png',
+            image: data.image,
             tag: data.tag || 'notification',
             requireInteraction: data.requireInteraction || false,
+            vibrate: data.vibrate || [200, 100, 200],
+            actions: [
+                {
+                    action: 'open',
+                    title: 'Open Chat',
+                    icon: '/icons/icon-192x192.png'
+                },
+                {
+                    action: 'close',
+                    title: 'Dismiss'
+                }
+            ],
             data: {
-                url: data.url || '/',
+                url: data.data?.url || '/dashboard/chat',
+                timestamp: data.data?.timestamp || Date.now(),
                 ...data.metadata,
             },
         };
