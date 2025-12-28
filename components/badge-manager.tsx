@@ -9,7 +9,7 @@ export function BadgeManager() {
   const [unreadCount, setUnreadCount] = useState(0);
 
   useEffect(() => {
-    if (!user) return;
+    if (!user?.id) return;
 
     const supabase = createClient();
 
@@ -18,7 +18,7 @@ export function BadgeManager() {
       const { count } = await supabase
         .from('notifications')
         .select('id', { count: 'exact', head: true })
-        .eq('user_id', user.id)
+        .eq('user_id', user?.id || '')
         .eq('read', false);
 
       setUnreadCount(count || 0);
@@ -36,14 +36,14 @@ export function BadgeManager() {
           event: '*',
           schema: 'public',
           table: 'notifications',
-          filter: `user_id=eq.${user.id}`,
+          filter: `user_id=eq.${user?.id}`,
         },
         async () => {
           // Refetch count on any notification change
           const { count } = await supabase
             .from('notifications')
             .select('id', { count: 'exact', head: true })
-            .eq('user_id', user.id)
+            .eq('user_id', user?.id)
             .eq('read', false);
 
           const newCount = count || 0;
@@ -56,7 +56,7 @@ export function BadgeManager() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [user]);
+  }, [user?.id]);
 
   useEffect(() => {
     // Update document title with count
