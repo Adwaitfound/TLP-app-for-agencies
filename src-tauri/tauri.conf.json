@@ -1,14 +1,15 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
   "productName": "The Lost Project",
-  "version": "0.1.48",
+  "version": "0.1.49",
   "identifier": "com.foundtech.tlpapp",
   "build": {
     "frontendDist": "../out",
-    "devUrl": "http://localhost:3000"
+    "devUrl": "http://localhost:3000",
+    "beforeDevCommand": "npm run dev",
+    "beforeBuildCommand": "npm run build"
   },
   "app": {
-    "withGlobalTauri": true,
     "windows": [
       {
         "title": "The Lost Project",
@@ -16,7 +17,8 @@
         "height": 900,
         "minWidth": 800,
         "minHeight": 600,
-        "resizable": true
+        "resizable": true,
+        "fullscreen": false
       }
     ],
     "security": {
@@ -31,6 +33,9 @@
       "icons/128x128.png",
       "icons/128x128@2x.png",
       "icons/icon.icns"
-    ]
+    ],
+    "macOS": {
+      "minimumSystemVersion": "10.13"
+    }
   }
 }

@@ -1,6 +1,6 @@
 {
   "name": "video-production-app",
-  "version": "0.1.48",
+  "version": "0.1.49",
   "private": true,
   "engines": {
     "node": "20.x"
@@ -16,8 +16,9 @@
     "export": "next build",
     "build:pwa": "next build",
     "build:apk": "npm run build && cd android && ./gradlew assembleRelease",
-    "build:macos": "npm run build && npx tauri build --target universal-apple-darwin",
-    "build:macos:dmg": "npm run build && npx tauri build --target universal-apple-darwin --bundles dmg",
+    "build:macos": "npm run build && npx tauri build",
+    "build:macos:standalone": "TAURI_PLATFORM=macos npm run build && npx tauri build --bundles dmg",
+    "build:macos:dmg": "npm run build && npx tauri build --bundles dmg",
     "tauri:dev": "npx tauri dev",
     "tauri:build": "npx tauri build",
     "cap:add:android": "npx cap add android",
