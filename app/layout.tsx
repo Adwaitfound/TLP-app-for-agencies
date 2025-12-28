@@ -7,7 +7,6 @@ import { DebugConsole } from "@/components/debug-console";
 import { GlobalClickTracker } from "@/components/global-click-tracker";
 import { ErrorBoundary } from "@/components/error-boundary";
 import { GlobalErrorListener } from "@/components/global-error-listener";
-import { VersionBadge } from "@/components/version-badge";
 import { SwUpdateBanner } from "@/components/sw-update-banner";
 import { NotificationPortal } from "@/components/notification-portal";
 import { ChatNotifier } from "@/components/chat-notifier";
@@ -97,7 +96,6 @@ export default function RootLayout({
               <NotificationPortal />
               <BadgeManager />
               <InstallPrompt />
-              <VersionBadge />
               <SwUpdateBanner />
               <GlobalClickTracker />
               <GlobalErrorListener />

@@ -146,19 +146,19 @@ export function NotificationDiagnostics() {
 
   if (!isVisible) {
     return (
-      <Button
-        variant="outline"
-        size="sm"
+      <button
         onClick={() => setIsVisible(true)}
-        className="fixed bottom-4 right-4 z-40"
+        className="fixed bottom-4 right-4 z-40 p-2 rounded-lg bg-muted hover:bg-muted/80 transition-colors opacity-50 hover:opacity-100"
+        title="Notification diagnostics"
+        aria-label="Show notification diagnostics"
       >
-        🔍 Notification Diagnostics
-      </Button>
+        🔍
+      </button>
     );
   }
 
   return (
-    <Card className="fixed bottom-4 right-4 w-96 z-50 max-h-[600px] overflow-y-auto">
+    <Card className="fixed bottom-4 right-4 w-96 z-50 max-h-[600px] overflow-y-auto shadow-lg"
       <CardHeader className="pb-3">
         <div className="flex items-center justify-between">
           <CardTitle className="text-sm">Notification Status</CardTitle>
