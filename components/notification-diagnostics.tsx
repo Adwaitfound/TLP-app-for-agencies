@@ -158,7 +158,7 @@ export function NotificationDiagnostics() {
   }
 
   return (
-    <Card className="fixed bottom-4 right-4 w-96 z-50 max-h-[600px] overflow-y-auto shadow-lg"
+    <Card className="fixed bottom-4 right-4 w-96 z-50 max-h-[600px] overflow-y-auto shadow-lg">
       <CardHeader className="pb-3">
         <div className="flex items-center justify-between">
           <CardTitle className="text-sm">Notification Status</CardTitle>
