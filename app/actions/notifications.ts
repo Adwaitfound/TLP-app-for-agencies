@@ -71,14 +71,15 @@ export async function notifyChatMessage(
   // Extract mentions from message (@username)
   const mentionMatches = message.match(/@(\w+)/g) || [];
   const mentionedNames = mentionMatches.map(m => m.substring(1).toLowerCase());
+  
+  // Create preview once for all uses
+  const preview = message.length > 50 ? message.substring(0, 50) + '...' : message;
 
   // Create notifications for all users
   const notifications = users.map(user => {
     const isMentioned = mentionedNames.some(name => 
       user.full_name.toLowerCase().replace(/\s+/g, '').includes(name)
     );
-
-    const preview = message.length > 50 ? message.substring(0, 50) + '...' : message;
 
     return {
       user_id: user.id,
