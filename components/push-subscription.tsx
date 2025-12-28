@@ -9,42 +9,68 @@ export function PushSubscriptionManager() {
   useEffect(() => {
     async function subscribe() {
       try {
-        if (!user) return;
-        if (!("serviceWorker" in navigator) || !("PushManager" in window)) return;
-
-        // First, request notification permission
-        if (Notification.permission === 'default') {
-          const permission = await Notification.requestPermission();
-          if (permission !== 'granted') {
-            console.warn('Notification permission not granted');
-            return;
-          }
-        } else if (Notification.permission !== 'granted') {
-          console.warn('Notification permission was denied');
+        if (!user) {
+          console.log('⏳ Push: User not authenticated yet');
           return;
         }
 
+        console.log('🔔 Push: Starting subscription for user:', user.id);
+
+        if (!("serviceWorker" in navigator)) {
+          console.warn('🔔 Push: ServiceWorker not supported');
+          return;
+        }
+        if (!("PushManager" in window)) {
+          console.warn('🔔 Push: PushManager not supported');
+          return;
+        }
+
+        // First, request notification permission
+        console.log('🔔 Push: Current permission:', Notification.permission);
+        
+        if (Notification.permission === 'default') {
+          console.log('🔔 Push: Requesting notification permission...');
+          const permission = await Notification.requestPermission();
+          console.log('🔔 Push: Permission result:', permission);
+          if (permission !== 'granted') {
+            console.warn('🔔 Push: Notification permission not granted');
+            return;
+          }
+        } else if (Notification.permission !== 'granted') {
+          console.warn('🔔 Push: Notification permission was previously denied');
+          return;
+        }
+
+        console.log('🔔 Push: Getting service worker registration...');
         const reg = await navigator.serviceWorker.ready;
+        console.log('🔔 Push: Service worker ready:', !!reg);
 
         // VAPID public key from env
         const vapidPublicKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
         if (!vapidPublicKey) {
-          console.warn('VAPID public key not configured');
+          console.warn('🔔 Push: VAPID public key not configured');
           return;
         }
+        console.log('🔔 Push: VAPID key present:', vapidPublicKey.substring(0, 10) + '...');
 
         // Check if already subscribed
+        console.log('🔔 Push: Checking for existing subscription...');
         const existing = await reg.pushManager.getSubscription();
         if (existing) {
-          console.log('✅ Already subscribed to push notifications');
+          console.log('✅ Push: Already subscribed to push notifications');
+          console.log('🔔 Push: Subscription endpoint:', existing.endpoint.substring(0, 50) + '...');
           return;
         }
 
+        console.log('🔔 Push: Creating new push subscription...');
         // Subscribe with VAPID
         const sub = await reg.pushManager.subscribe({
           userVisibleOnly: true,
           applicationServerKey: urlBase64ToUint8Array(vapidPublicKey),
         });
+
+        console.log('✅ Push: Subscription created, sending to server...');
+        console.log('🔔 Push: Endpoint:', sub.endpoint.substring(0, 50) + '...');
 
         // Send subscription to server
         const response = await fetch("/api/push/subscribe", {
@@ -54,12 +80,13 @@ export function PushSubscriptionManager() {
         });
 
         if (response.ok) {
-          console.log('✅ Push subscription registered successfully');
+          console.log('✅ Push: Subscription registered successfully');
         } else {
-          console.error('Failed to register push subscription:', await response.text());
+          const text = await response.text();
+          console.error('❌ Push: Failed to register subscription:', text);
         }
       } catch (err) {
-        console.warn("Push subscription failed", err);
+        console.error("❌ Push: Subscription failed", err);
       }
     }
 
