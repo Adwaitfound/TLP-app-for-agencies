@@ -1,6 +1,6 @@
 {
   "name": "video-production-app",
-  "version": "0.1.47",
+  "version": "0.1.48",
   "private": true,
   "engines": {
     "node": "20.x"
@@ -13,11 +13,11 @@
     "lint": "eslint .",
     "setup:db": "./scripts/setup-database.sh",
     "setup:admin": "./scripts/setup-admin.sh",
-    "export": "next build && next export",
+    "export": "next build",
     "build:pwa": "next build",
     "build:apk": "npm run build && cd android && ./gradlew assembleRelease",
-    "build:macos": "npm run export && npx tauri build --target universal-apple-darwin",
-    "build:macos:dmg": "npm run export && npx tauri build --target universal-apple-darwin --bundles dmg",
+    "build:macos": "npm run build && npx tauri build --target universal-apple-darwin",
+    "build:macos:dmg": "npm run build && npx tauri build --target universal-apple-darwin --bundles dmg",
     "tauri:dev": "npx tauri dev",
     "tauri:build": "npx tauri build",
     "cap:add:android": "npx cap add android",

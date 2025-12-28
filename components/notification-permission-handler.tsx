@@ -135,9 +135,8 @@ export function NotificationPermissionHandler() {
           body: 'This is a test notification from TLP App',
           icon: '/icons/icon-192x192.png',
           badge: '/icons/icon-192x192.png',
-          vibrate: [200, 100, 200],
           tag: 'test',
-        });
+        } as NotificationOptions & { vibrate?: number[] });
 
         notification.onclick = () => {
           addLog('Notification clicked');

@@ -11,11 +11,13 @@ This guide explains how to build and distribute The Lost Project app for macOS.
 ## Quick Build
 
 ### Development Mode
+
 ```bash
 npm run tauri:dev
 ```
 
 ### Production DMG
+
 ```bash
 npm run build:macos:dmg
 ```
@@ -25,6 +27,7 @@ The DMG file will be created in: `src-tauri/target/release/bundle/dmg/`
 ## Features
 
 ### ✅ Native macOS App
+
 - Full native performance with Rust backend
 - Small bundle size (~10MB vs 100MB+ for Electron)
 - Native system tray integration
@@ -32,18 +35,21 @@ The DMG file will be created in: `src-tauri/target/release/bundle/dmg/`
 - Menu bar icon with quick actions
 
 ### ✅ Auto-Updater
+
 - Checks for updates on app startup
 - In-app update notifications
 - Silent background downloads
 - One-click update installation
 
 ### ✅ System Integration
+
 - **System Tray**: Shows in menu bar, click to open/hide
 - **Notifications**: Native macOS notification center integration
 - **Close Behavior**: Closing window hides app (stays in tray)
 - **Dock Icon**: Full dock integration with badge support
 
 ### ✅ Offline Support
+
 - Service Worker caching
 - Local session storage
 - Works without internet connection
@@ -67,15 +73,18 @@ npm run tauri:build
 ## Distribution
 
 ### Local Installation
+
 1. Build the DMG: `npm run build:macos:dmg`
 2. Find it in: `src-tauri/target/release/bundle/dmg/The Lost Project_0.1.47_universal.dmg`
 3. Double-click to mount
 4. Drag app to Applications folder
 
 ### Code Signing (for App Store)
+
 1. Get Apple Developer account
 2. Create certificates in Xcode
 3. Update `tauri.conf.json`:
+
 ```json
 {
   "bundle": {
@@ -86,6 +95,7 @@ npm run tauri:build
   }
 }
 ```
+
 4. Build with signing: `npm run build:macos:dmg`
 
 ### Auto-Updater Setup
@@ -93,6 +103,7 @@ npm run tauri:build
 The app checks for updates automatically. To enable:
 
 1. **Generate Update Keys**:
+
 ```bash
 cd src-tauri
 cargo install tauri-cli
@@ -100,6 +111,7 @@ cargo tauri signer generate -w ~/.tauri/myapp.key
 ```
 
 2. **Add Public Key to tauri.conf.json**:
+
 ```json
 {
   "plugins": {
@@ -111,9 +123,10 @@ cargo tauri signer generate -w ~/.tauri/myapp.key
 ```
 
 3. **Host Update Manifest**:
-Create endpoint at: `https://tlp-app-v2.vercel.app/api/tauri-update/darwin/{{current_version}}`
+   Create endpoint at: `https://tlp-app-v2.vercel.app/api/tauri-update/darwin/{{current_version}}`
 
 Response format:
+
 ```json
 {
   "version": "0.1.48",
@@ -147,26 +160,31 @@ The app adds a menu bar icon with these options:
 ## Troubleshooting
 
 ### Build Fails with "xcrun: error"
+
 ```bash
 xcode-select --install
 sudo xcode-select --reset
 ```
 
 ### Rust Not Found
+
 ```bash
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 source $HOME/.cargo/env
 ```
 
 ### DMG Won't Open on Other Macs
+
 You need to code-sign the app. See "Code Signing" section above.
 
 ### Notifications Don't Work
+
 1. Check System Preferences → Notifications → The Lost Project
 2. Enable "Allow Notifications"
 3. Grant permission when prompted
 
 ### App Won't Start
+
 1. Check Console.app for errors
 2. Remove quarantine flag: `xattr -dr com.apple.quarantine /Applications/The\ Lost\ Project.app`
 3. Rebuild: `npm run build:macos:dmg`

@@ -1,87 +1,36 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
   "productName": "The Lost Project",
-  "version": "0.1.47",
+  "version": "0.1.48",
   "identifier": "com.foundtech.tlpapp",
   "build": {
     "frontendDist": "../out",
-    "devUrl": "http://localhost:3000",
-    "beforeDevCommand": "npm run dev",
-    "beforeBuildCommand": "npm run build && npx next export"
+    "devUrl": "http://localhost:3000"
   },
   "app": {
     "withGlobalTauri": true,
     "windows": [
       {
-        "title": "The Lost Project - Video Production App",
+        "title": "The Lost Project",
         "width": 1400,
         "height": 900,
         "minWidth": 800,
         "minHeight": 600,
-        "resizable": true,
-        "fullscreen": false,
-        "decorations": true,
-        "transparent": false,
-        "center": true,
-        "titleBarStyle": "Overlay",
-        "hiddenTitle": false
+        "resizable": true
       }
     ],
     "security": {
-      "csp": null,
-      "dangerousDisableAssetCspModification": true
-    },
-    "systemTray": {
-      "iconPath": "icons/icon.png",
-      "menuOnLeftClick": false
+      "csp": null
     }
   },
   "bundle": {
     "active": true,
-    "targets": ["dmg", "app"],
-    "identifier": "com.foundtech.tlpapp",
+    "targets": ["dmg"],
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
       "icons/128x128@2x.png",
-      "icons/icon.icns",
-      "icons/icon.ico"
-    ],
-    "copyright": "© 2025 Found Tech",
-    "category": "Productivity",
-    "shortDescription": "Video Production Management App",
-    "longDescription": "Complete video production management solution with chat, file sharing, invoicing, and team collaboration.",
-    "macOS": {
-      "minimumSystemVersion": "10.13",
-      "frameworks": [],
-      "useBootstrapper": false,
-      "dmg": {
-        "appPosition": {
-          "x": 180,
-          "y": 170
-        },
-        "applicationFolderPosition": {
-          "x": 480,
-          "y": 170
-        },
-        "window": {
-          "width": 660,
-          "height": 400
-        }
-      }
-    }
-  },
-  "plugins": {
-    "updater": {
-      "active": true,
-      "endpoints": [
-        "https://tlp-app-v2.vercel.app/api/tauri-update/{{target}}/{{current_version}}"
-      ],
-      "dialog": true,
-      "pubkey": ""
-    },
-    "notification": {
-      "active": true
-    }
+      "icons/icon.icns"
+    ]
   }
 }
