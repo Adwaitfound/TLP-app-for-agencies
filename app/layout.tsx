@@ -13,6 +13,7 @@ import { NotificationPortal } from "@/components/notification-portal";
 import { ChatNotifier } from "@/components/chat-notifier";
 import { PushSubscriptionManager } from "@/components/push-subscription";
 import { NotificationDiagnostics } from "@/components/notification-diagnostics";
+import { InstallPrompt } from "@/components/install-prompt";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -93,6 +94,7 @@ export default function RootLayout({
               <ChatNotifier />
               <PushSubscriptionManager />
               <NotificationPortal />
+              <InstallPrompt />
               <VersionBadge />
               <SwUpdateBanner />
               <GlobalClickTracker />

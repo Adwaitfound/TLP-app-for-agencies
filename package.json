@@ -1,6 +1,6 @@
 {
   "name": "video-production-app",
-  "version": "0.1.37",
+  "version": "0.1.38",
   "private": true,
   "engines": {
     "node": "20.x"
@@ -56,11 +56,9 @@
     "react-hook-form": "^7.68.0",
     "recharts": "^3.5.1",
     "tailwind-merge": "^3.4.0",
+    "web-push": "^3.5.0",
     "zod": "^4.1.13",
     "zustand": "^5.0.9"
-  },
-  "optionalDependencies": {
-    "web-push": "^3.5.0"
   },
   "devDependencies": {
     "@capacitor/cli": "^8.0.0",
