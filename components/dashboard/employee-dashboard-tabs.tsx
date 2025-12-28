@@ -183,13 +183,20 @@ export function EmployeeDashboardTabs() {
     setModalOpen(true);
   }
 
-  if (authLoading || loading) {
+  if (authLoading) {
     return (
       <div className="flex items-center justify-center h-96">
-        <p className="text-muted-foreground">Loading your dashboard...</p>
+        <p className="text-muted-foreground">Loading...</p>
       </div>
     );
   }
+
+  if (!user) {
+    return null;
+  }
+
+  // Show content immediately, load data in background
+  const contentReady = true;
 
   return (
     <div className="flex flex-col gap-6">

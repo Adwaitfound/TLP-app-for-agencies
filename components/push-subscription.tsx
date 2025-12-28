@@ -2,9 +2,23 @@
 
 import { useEffect } from "react";
 import { useAuth } from "@/contexts/auth-context";
+import { playNotificationSound } from "@/lib/notification-sound";
 
 export function PushSubscriptionManager() {
   const { user } = useAuth();
+
+  useEffect(() => {
+    // Listen for messages from service worker about notifications
+    if ("serviceWorker" in navigator) {
+      navigator.serviceWorker.addEventListener("message", (event) => {
+        if (event.data.type === "NOTIFICATION_RECEIVED") {
+          console.log("🔔 Notification received in app:", event.data.data);
+          // Play sound when notification arrives
+          playNotificationSound();
+        }
+      });
+    }
+  }, []);
 
   useEffect(() => {
     async function subscribe() {

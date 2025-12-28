@@ -122,8 +122,19 @@ if (typeof window === 'undefined') {
             options,
         });
 
+        // Notify all open clients about the notification
         event.waitUntil(
-            self.registration.showNotification(data.title || 'Video Production App', options)
+            Promise.all([
+                self.registration.showNotification(data.title || 'Video Production App', options),
+                self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clients) => {
+                    clients.forEach((client) => {
+                        client.postMessage({
+                            type: 'NOTIFICATION_RECEIVED',
+                            data: { title: data.title, body: data.body }
+                        });
+                    });
+                })
+            ])
         );
     });
 
