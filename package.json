@@ -1,6 +1,6 @@
 {
   "name": "video-production-app",
-  "version": "0.1.46",
+  "version": "0.1.47",
   "private": true,
   "engines": {
     "node": "20.x"
@@ -13,9 +13,13 @@
     "lint": "eslint .",
     "setup:db": "./scripts/setup-database.sh",
     "setup:admin": "./scripts/setup-admin.sh",
-    "export": "next build",
+    "export": "next build && next export",
     "build:pwa": "next build",
     "build:apk": "npm run build && cd android && ./gradlew assembleRelease",
+    "build:macos": "npm run export && npx tauri build --target universal-apple-darwin",
+    "build:macos:dmg": "npm run export && npx tauri build --target universal-apple-darwin --bundles dmg",
+    "tauri:dev": "npx tauri dev",
+    "tauri:build": "npx tauri build",
     "cap:add:android": "npx cap add android",
     "cap:sync": "npx cap sync",
     "cap:open:android": "npx cap open android",
@@ -63,6 +67,8 @@
   "devDependencies": {
     "@capacitor/cli": "^8.0.0",
     "@playwright/test": "^1.57.0",
+    "@tauri-apps/api": "^2.9.1",
+    "@tauri-apps/cli": "^2.9.6",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
