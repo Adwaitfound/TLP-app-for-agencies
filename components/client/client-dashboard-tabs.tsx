@@ -1,8 +1,9 @@
 "use client";
 
-import { useState, useEffect, useMemo, useCallback } from "react";
+import { useState, useEffect, useMemo, useCallback, memo } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
+import { AdDisplay } from "./ad-display";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Card,
@@ -237,6 +238,7 @@ export default function ClientDashboardTabs() {
   const fetchClientData = useCallback(async () => {
     // Guard when no user
     if (!userId) {
+      console.log("❌ No userId available yet, skipping fetch");
       setClientData(null);
       setProjects([]);
       setInvoices([]);
@@ -250,58 +252,101 @@ export default function ClientDashboardTabs() {
     setError(null);
     const supabase = createClient();
 
+    // Helper function to race a promise with a timeout
+    const withTimeout = <T,>(promise: Promise<T>, timeoutMs: number): Promise<T> => {
+      return Promise.race([
+        promise,
+        new Promise<T>((_, reject) =>
+          setTimeout(() => reject(new Error(`Request timeout after ${timeoutMs}ms`)), timeoutMs)
+        ),
+      ]);
+    };
+
     try {
+      console.log("🔄 Starting data fetch for user:", userId);
+      
       // Get client record
-      const { data: clientRecord, error: clientError } = await supabase
-        .from("clients")
-        .select("id,user_id,company_name,email,status")
-        .eq("user_id", userId)
-        .single();
+      const clientResult = await withTimeout(
+        Promise.resolve(
+          supabase
+            .from("clients")
+            .select("id,user_id,company_name,email,status")
+            .eq("user_id", userId)
+            .single()
+        ),
+        10000 // 10 second timeout per query
+      );
+
+      const { data: clientRecord, error: clientError } = clientResult as any;
 
       if (clientError) {
         console.error("[1/6] Clients query failed:", clientError);
-        throw clientError;
+        setError(`Failed to load client info: ${clientError.message}`);
+        setLoading(false);
+        return;
       }
+      
+      if (!clientRecord) {
+        console.error("[1/6] No client found for user");
+        setError("No client profile found for your account");
+        setLoading(false);
+        return;
+      }
+      
       console.debug("[1/6] Clients query OK");
       setClientData(clientRecord);
 
       const clientId = clientRecord.id;
 
-      // Fetch projects and invoices (by client) in parallel to cut load time
-      const [projectsRes, invoicesByClientRes] = await Promise.all([
-        supabase
-          .from("projects")
-          .select(
-            "id,name,status,description,created_at,client_id,clients(company_name)",
-          )
-          .eq("client_id", clientId)
-          .order("created_at", { ascending: false }),
-        supabase
-          .from("invoices")
-          .select(
-            "id,project_id,client_id,status,total,invoice_number,created_at,due_date,issue_date,invoice_file_url,shared_with_client",
-          )
-          .eq("client_id", clientId)
-          .eq("shared_with_client", true)
-          .order("created_at", { ascending: false }),
-      ]);
+      // Fetch projects and invoices (by client) in parallel
+      console.log("🔄 Fetching projects and invoices for client:", clientId);
+      const projectsResult = await withTimeout(
+        Promise.resolve(
+          supabase
+            .from("projects")
+            .select(
+              "id,name,status,description,created_at,client_id,clients(company_name)",
+            )
+            .eq("client_id", clientId)
+            .order("created_at", { ascending: false })
+        ),
+        10000
+      );
 
-      const { data: projectsData, error: projectsError } = projectsRes;
+      const invoicesClientResult = await withTimeout(
+        Promise.resolve(
+          supabase
+            .from("invoices")
+            .select(
+              "id,project_id,client_id,status,total,invoice_number,created_at,due_date,issue_date,invoice_file_url,shared_with_client",
+            )
+            .eq("client_id", clientId)
+            .eq("shared_with_client", true)
+            .order("created_at", { ascending: false })
+        ),
+        10000
+      );
+
+      const { data: projectsData, error: projectsError } = projectsResult as any;
       if (projectsError) {
         console.error("[2/6] Projects query failed:", projectsError);
-        throw projectsError;
+        setError(`Failed to load projects: ${projectsError.message}`);
+        setLoading(false);
+        return;
       }
-      console.debug("[2/6] Projects query OK:", projectsData?.length);
+      console.debug("[2/6] Projects query OK:", projectsData?.length || 0);
 
-      const projectIds = projectsData?.map((p) => p.id) || [];
+      const projectIds = projectsData?.map((p: any) => p.id) || [];
 
       const { data: invoicesByClient, error: invoicesByClientError } =
-        invoicesByClientRes;
+        invoicesClientResult as any;
       if (invoicesByClientError) {
         console.error("[3/6] Invoices (by client) query failed:", invoicesByClientError);
-        throw invoicesByClientError;
+        setError(`Failed to load invoices: ${invoicesByClientError.message}`);
+        setLoading(false);
+        return;
       }
-      console.debug("[3/6] Invoices (by client) query OK:", invoicesByClient?.length);
+      console.debug("[3/6] Invoices (by client) query OK:", invoicesByClient?.length || 0);
 
       let invoicesByProject: any[] = [];
       let filesData: any[] = [];
@@ -310,71 +355,97 @@ export default function ClientDashboardTabs() {
 
       if (projectIds.length > 0) {
         // Load initial data immediately, defer loading all files and comments
+        console.log("🔄 Fetching invoices by project and files for", projectIds.length, "projects");
+        
         const [invoicesByProjectRes, filesRes] = await Promise.all([
-          supabase
-            .from("invoices")
-            .select(
-              "id,project_id,client_id,status,total,invoice_number,created_at,due_date,issue_date,invoice_file_url,shared_with_client",
-            )
-            .in("project_id", projectIds)
-            .eq("shared_with_client", true)
-            .order("created_at", { ascending: false }),
-          supabase
-            .from("project_files")
-            .select("id,project_id,file_name,file_url,file_type,file_category,storage_type,created_at,description,file_size,projects(name)")
-            .in("project_id", projectIds)
-            .order("created_at", { ascending: false })
-            .limit(100), // Limit files to first 100 for faster initial load
+          withTimeout(
+            Promise.resolve(
+              supabase
+                .from("invoices")
+                .select(
+                  "id,project_id,client_id,status,total,invoice_number,created_at,due_date,issue_date,invoice_file_url,shared_with_client",
+                )
+                .in("project_id", projectIds)
+                .eq("shared_with_client", true)
+                .order("created_at", { ascending: false })
+            ),
+            10000
+          ),
+          withTimeout(
+            Promise.resolve(
+              supabase
+                .from("project_files")
+                .select("id,project_id,file_name,file_url,file_type,file_category,storage_type,created_at,description,file_size,projects(name)")
+                .in("project_id", projectIds)
+                .order("created_at", { ascending: false })
+                .limit(100) // Limit files to first 100 for faster initial load
+            ),
+            10000
+          ),
         ]);
 
         const { data: fetchedInvoices, error: invoicesByProjectError } =
-          invoicesByProjectRes;
+          invoicesByProjectRes as any;
         if (invoicesByProjectError) {
           console.error("[4/6] Invoices (by project) query failed:", invoicesByProjectError);
-          throw invoicesByProjectError;
+          setError(`Failed to load project invoices: ${invoicesByProjectError.message}`);
+          setLoading(false);
+          return;
         }
-        console.debug("[4/6] Invoices (by project) query OK:", fetchedInvoices?.length);
+        console.debug("[4/6] Invoices (by project) query OK:", fetchedInvoices?.length || 0);
         invoicesByProject = fetchedInvoices || [];
 
-        const { data: fetchedFiles, error: filesError } = filesRes;
+        const { data: fetchedFiles, error: filesError } = filesRes as any;
         if (filesError) {
           console.error("[5a/6] Files query failed:", filesError);
-          throw filesError;
+          setError(`Failed to load files: ${filesError.message}`);
+          setLoading(false);
+          return;
         }
-        console.debug("[5a/6] Files query OK:", fetchedFiles?.length);
+        console.debug("[5a/6] Files query OK:", fetchedFiles?.length || 0);
         filesData = fetchedFiles || [];
 
         // Load comments and sub-projects in background (non-blocking)
         Promise.all([
-          supabase
-            .from("project_comments")
-            .select(
-              "id,project_id,comment_text,file_id,timestamp_seconds,created_at,projects(name),user:users!user_id(full_name,email)",
-            )
-            .in("project_id", projectIds)
-            .order("created_at", { ascending: false })
-            .limit(50), // Limit comments for initial load
-          supabase
-            .from("sub_projects")
-            .select("id,project_id,title,status,due_date,created_at")
-            .in("project_id", projectIds)
-            .order("created_at", { ascending: false }),
+          withTimeout(
+            Promise.resolve(
+              supabase
+                .from("project_comments")
+                .select(
+                  "id,project_id,comment_text,file_id,timestamp_seconds,created_at,projects(name),user:users!user_id(full_name,email)",
+                )
+                .in("project_id", projectIds)
+                .order("created_at", { ascending: false })
+                .limit(50)
+            ),
+            10000
+          ),
+          withTimeout(
+            Promise.resolve(
+              supabase
+                .from("sub_projects")
+                .select("id,project_id,title,status,due_date,created_at")
+                .in("project_id", projectIds)
+                .order("created_at", { ascending: false })
+            ),
+            10000
+          ),
         ]).then(([commentsRes, subProjectsRes]) => {
-          const { data: fetchedComments, error: commentsError } = commentsRes;
+          const { data: fetchedComments, error: commentsError } = commentsRes as any;
           if (!commentsError && fetchedComments) {
             console.debug("[5b/6] Comments query OK:", fetchedComments.length);
             setComments(fetchedComments);
           }
 
-          const { data: fetchedSubProjects, error: subProjectsError } = subProjectsRes;
+          const { data: fetchedSubProjects, error: subProjectsError } = subProjectsRes as any;
           if (subProjectsError) {
             console.warn("[6/6] sub_projects fetch skipped due to permissions:", subProjectsError);
           } else {
-            console.debug("[6/6] Sub-projects query OK:", fetchedSubProjects?.length);
+            console.debug("[6/6] Sub-projects query OK:", fetchedSubProjects?.length || 0);
             setSubProjects(fetchedSubProjects || []);
           }
         }).catch(err => {
-          console.warn("Background data load failed:", err);
+          console.warn("⚠️ Background data load failed:", err);
         });
       }
 
@@ -412,8 +483,15 @@ export default function ClientDashboardTabs() {
   }, [userId]);
 
   useEffect(() => {
-    fetchClientData();
-  }, [fetchClientData]);
+    if (!authLoading && userId) {
+      console.log("🔄 Auth loaded, userId available:", userId);
+      fetchClientData();
+    } else if (!authLoading && !userId) {
+      console.warn("⚠️ Auth loaded but no userId - user may not be authenticated");
+      setLoading(false);
+      setError("You must be logged in to view this dashboard");
+    }
+  }, [userId, authLoading, fetchClientData]);
 
   // Subscribe to real-time updates for all client data
   useEffect(() => {
@@ -822,6 +900,9 @@ export default function ClientDashboardTabs() {
           Request Project
         </Button>
       </div>
+
+      {/* Top Advertisement */}
+      <AdDisplay position="top" />
 
       {/* Tabs */}
       <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
@@ -1609,6 +1690,9 @@ export default function ClientDashboardTabs() {
           ) : null}
         </DialogContent>
       </Dialog>
+
+      {/* Bottom Advertisement */}
+      <AdDisplay position="bottom" />
     </div>
   );
 }

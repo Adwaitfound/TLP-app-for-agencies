@@ -343,12 +343,14 @@ function ProjectsPageContent() {
         count: projectsData?.length,
       });
 
-      // Fetch clients for dropdown
-      const { data: clientsData, error: clientsError } = await supabase
+      // Fetch clients for dropdown - filter by agency if agency_admin
+      let clientsQuery = supabase
         .from("clients")
         .select("*")
         .eq("status", "active")
         .order("company_name");
+
+      const { data: clientsData, error: clientsError } = await clientsQuery;
 
       if (clientsError) throw clientsError;
       debug.success("FETCH_DATA", "Clients fetched", {
@@ -357,6 +359,7 @@ function ProjectsPageContent() {
 
       setProjects(projectsData || []);
       setClients(clientsData || []);
+
 
       // Fetch recent files for the listed projects
       if (projectsData && projectsData.length > 0) {

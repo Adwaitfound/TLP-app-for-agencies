@@ -96,6 +96,17 @@ export default function Home() {
                 </Button>
                 <Button
                   size="lg"
+                  variant="secondary"
+                  asChild
+                  className="w-full gap-2 rounded-full px-8 sm:w-auto"
+                >
+                  <Link href="/agency-onboarding">
+                    Agency Onboarding
+                    <ArrowRight className="h-5 w-5" />
+                  </Link>
+                </Button>
+                <Button
+                  size="lg"
                   variant="outline"
                   asChild
                   className="w-full rounded-full bg-transparent px-8 sm:w-auto"
@@ -192,6 +203,17 @@ export default function Home() {
                   >
                     <Link href="/signup?role=client">
                       Get Started
+                      <ArrowRight className="h-5 w-5" />
+                    </Link>
+                  </Button>
+                  <Button
+                    size="lg"
+                    variant="secondary"
+                    asChild
+                    className="gap-2 rounded-full px-8"
+                  >
+                    <Link href="/agency-onboarding">
+                      Agency Onboarding
                       <ArrowRight className="h-5 w-5" />
                     </Link>
                   </Button>

@@ -114,7 +114,7 @@ export default function ClientsPage() {
       console.log("Fetching clients...");
       debug.log("CLIENTS", "Fetching clients...");
 
-      // Fetch clients
+      // Fetch all clients
       const { data: clientsData, error: clientsError } = await supabase
         .from("clients")
         .select("*")
@@ -134,7 +134,7 @@ export default function ClientsPage() {
         count: clientsData?.length,
       });
 
-      // Fetch projects for each client
+      // Fetch projects
       const { data: projectsData, error: projectsError } = await supabase
         .from("projects")
         .select("*");
@@ -143,7 +143,7 @@ export default function ClientsPage() {
         console.error("Error fetching projects:", projectsError);
       }
 
-      // Fetch invoices
+      // Fetch paid invoices
       const { data: invoicesData, error: invoicesError } = await supabase
         .from("invoices")
         .select("*")

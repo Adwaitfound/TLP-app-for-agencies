@@ -215,9 +215,13 @@ export function FileManager({
   }, [isDriveFolderDialogOpen, driveFolderUrl]);
 
   async function handleFileUpload() {
-    // Prevent overlapping uploads
-    if (isUploadingRef.current) {
-      debug.log("FILE_MANAGER", "Upload already in progress, ignoring");
+    // Block duplicate submissions or unmounted component
+    if (!componentMountedRef.current) {
+      console.log("[handleFileUpload] BLOCKED: component unmounted");
+      return;
+    }
+    if (uploading || isUploadingRef.current) {
+      console.log("[handleFileUpload] BLOCKED: already uploading");
       return;
     }
 
@@ -227,7 +231,7 @@ export function FileManager({
     }
 
     if (!projectId) {
-      showToast("Missing project. Open a project before uploading.", "error");
+      showToast("Missing project. Please reopen the project and try again.", "error");
       return;
     }
 
@@ -236,37 +240,32 @@ export function FileManager({
       return;
     }
 
-    const validation = validateFileSize(selectedFile);
-    if (!validation.valid) {
-      showToast(validation.error || "File validation failed", "error", 5000);
-      return;
-    }
-
-    // Check file limit
     if (files.length >= 20) {
       showToast(
-        "Maximum 20 files/links per project. Please delete some files before adding more.",
+        "Maximum 20 files/link per project. Please delete some files before adding more.",
         "error",
       );
       return;
     }
 
-    isUploadingRef.current = true;
+    const validation = validateFileSize(selectedFile);
+    if (!validation.valid) {
+      showToast(validation.error || "File is too large", "error");
+      return;
+    }
+
     setUploading(true);
+    isUploadingRef.current = true;
+
     const supabase = createClient();
+    const fileToUpload = selectedFile;
 
     try {
-      debug.log("FILE_MANAGER", "Upload start", {
-        projectId,
-        name: selectedFile.name,
-        size: selectedFile.size,
-        category: uploadCategory,
-      });
       // Upload to Supabase Storage
-      const filePath = `${projectId}/${Date.now()}-${selectedFile.name}`;
+      const filePath = `${projectId}/${Date.now()}-${fileToUpload.name}`;
       const { error: uploadError } = await supabase.storage
         .from("project-files")
-        .upload(filePath, selectedFile);
+        .upload(filePath, fileToUpload);
 
       if (uploadError) throw uploadError;
 
@@ -280,12 +279,12 @@ export function FileManager({
         .from("project_files")
         .insert({
           project_id: projectId,
-          file_name: selectedFile.name,
-          file_type: getFileType(selectedFile.name),
+          file_name: fileToUpload.name,
+          file_type: getFileType(fileToUpload.name),
           file_category: uploadCategory,
           storage_type: "supabase",
           file_url: publicUrl,
-          file_size: selectedFile.size,
+          file_size: fileToUpload.size,
           description: uploadDescription,
           uploaded_by: user.id,
         })
@@ -295,22 +294,22 @@ export function FileManager({
       if (dbError) throw dbError;
 
       // Optimistically add to files array
-      if (fileData) {
+      if (fileData && componentMountedRef.current) {
         setFiles((prev) => [fileData, ...prev]);
       }
 
-      // Log the file upload
+      // Log the file upload (fire-and-forget)
       logAuditEvent({
         action: "upload",
         entityType: "file",
         entityId: fileData?.id,
-        entityName: selectedFile.name,
+        entityName: fileToUpload.name,
         status: "success",
         newValues: {
-          file_name: selectedFile.name,
-          file_type: getFileType(selectedFile.name),
+          file_name: fileToUpload.name,
+          file_type: getFileType(fileToUpload.name),
           file_category: uploadCategory,
-          file_size: selectedFile.size,
+          file_size: fileToUpload.size,
         },
         details: {
           project_id: projectId,
@@ -318,14 +317,14 @@ export function FileManager({
         },
       }).catch((e) => console.warn("Failed to log audit event:", e));
 
-      // Close dialog first
-      setIsUploadDialogOpen(false);
-
-      // Reset form
-      setSelectedFile(null);
-      setUploadDescription("");
-      setUploadCategory("other");
-      setUploading(false);
+      if (componentMountedRef.current) {
+        // Close dialog and reset form
+        setIsUploadDialogOpen(false);
+        setSelectedFile(null);
+        setUploadDescription("");
+        setUploadCategory("other");
+        setUploading(false);
+      }
 
       debug.success(
         "FILE_MANAGER",
@@ -339,12 +338,12 @@ export function FileManager({
       logAuditEvent({
         action: "upload",
         entityType: "file",
-        entityName: selectedFile.name,
+        entityName: fileToUpload.name,
         status: "error",
         errorMessage: error?.message,
         details: {
           project_id: projectId,
-          file_size: selectedFile.size,
+          file_size: fileToUpload.size,
         },
       }).catch((e) => console.warn("Failed to log audit event:", e));
 
@@ -356,7 +355,9 @@ export function FileManager({
       });
       showToast(error.message || "Failed to upload file", "error", 4000);
     } finally {
-      setUploading(false);
+      if (componentMountedRef.current) {
+        setUploading(false);
+      }
       isUploadingRef.current = false;
       debug.log("FILE_MANAGER", "Upload end - flags reset");
     }
@@ -364,7 +365,10 @@ export function FileManager({
 
   async function handleAddLink() {
     // ========== GUARDS: Block execution if already in progress ==========
-    if (!componentMountedRef.current) return;
+    if (!componentMountedRef.current) {
+      console.log("[handleAddLink] BLOCKED: component unmounted");
+      return;
+    }
     if (linkSubmitting) {
       console.log("[handleAddLink] BLOCKED: already submitting");
       return;
@@ -376,50 +380,70 @@ export function FileManager({
 
     if (!trimmedUrl || !trimmedName) {
       showToast("Please provide both URL and file name", "error");
+      console.log("[handleAddLink] BLOCKED: missing URL or name");
       return;
     }
 
     if (files.length >= 20) {
       showToast(
-        "Maximum 20 files/links per project. Please delete some files before adding more.",
+        "Maximum 20 files/link per project. Please delete some files before adding more.",
         "error",
       );
+      console.log("[handleAddLink] BLOCKED: file limit reached");
+      return;
+    }
+
+    if (!projectId) {
+      showToast("Missing project. Please reopen the project and try again.", "error");
+      console.log("[handleAddLink] BLOCKED: no projectId");
+      return;
+    }
+
+    if (!user?.id) {
+      showToast("Missing user session. Please log in again.", "error");
+      console.log("[handleAddLink] BLOCKED: no user");
       return;
     }
 
     // ========== SET GUARDS ==========
     setLinkSubmitting(true);
 
-    const supabase = createClient();
+    // Failsafe to prevent UI from getting stuck if the request never resolves
+    const submissionGuard = window.setTimeout(() => {
+      console.warn("[handleAddLink] ⚠️ Submission guard fired; resetting state");
+      if (componentMountedRef.current) {
+        setLinkSubmitting(false);
+        showToast("Request timed out. Please try again.", "error", 4000);
+      }
+    }, 15000);
 
     try {
       console.log("[handleAddLink] ✅ Starting submission");
 
-      // Validate input one more time before submitting
-      if (!projectId || !user?.id) {
-        showToast("Missing project or user. Reopen the project and try again.", "error");
-        return;
-      }
+      const controller = new AbortController();
+      const timeout = window.setTimeout(() => controller.abort(), 12000);
 
-      // ========== INSERT TO DATABASE ==========
-      const { data, error } = await supabase
-        .from("project_files")
-        .insert({
-          project_id: projectId,
-          file_name: trimmedName,
-          file_type: getFileType(trimmedName),
-          file_category: linkCategory,
-          storage_type: "google_drive",
-          file_url: trimmedUrl,
+      const res = await fetch("/api/project-files/add-drive-link", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          projectId,
+          fileName: trimmedName,
+          fileUrl: trimmedUrl,
+          fileCategory: linkCategory,
           description: linkDescription,
-          uploaded_by: user.id,
-        })
-        .select()
-        .single();
+        }),
+        signal: controller.signal,
+      });
 
-      if (error) {
-        throw error;
+      window.clearTimeout(timeout);
+
+      if (!res.ok) {
+        const payload = await res.json().catch(() => ({}));
+        throw new Error(payload?.error || `Failed to add link (${res.status})`);
       }
+
+      const { data } = await res.json();
 
       if (!data) {
         throw new Error("No data returned from insert");
@@ -428,7 +452,7 @@ export function FileManager({
       console.log("[handleAddLink] ✅ Link inserted successfully");
 
       // ========== UPDATE LOCAL STATE SAFELY ==========
-      if (componentMountedRef.current) {
+      if (componentMountedRef.current && data) {
         setFiles((prev) => {
           // Guard: prevent adding duplicate
           if (prev.some((f) => f.id === data.id)) return prev;
@@ -464,6 +488,7 @@ export function FileManager({
       if (componentMountedRef.current) {
         setLinkSubmitting(false);
       }
+      window.clearTimeout(submissionGuard);
       console.log("[handleAddLink] ✅ Submission complete, guards reset");
     }
   }
@@ -481,15 +506,24 @@ export function FileManager({
     const trimmed = newDriveFolderUrl.trim();
     if (!trimmed) {
       showToast("Please provide a folder URL", "error");
+      console.log("[handleUpdateDriveFolder] BLOCKED: empty URL");
       return;
     }
 
     // Validate it's a Google Drive URL
     if (!trimmed.includes("drive.google.com")) {
       showToast("Please provide a valid Google Drive URL", "error", 4000);
+      console.log("[handleUpdateDriveFolder] BLOCKED: not a Drive URL");
       return;
     }
 
+    if (!projectId) {
+      showToast("Missing project. Please reopen the project and try again.", "error");
+      console.log("[handleUpdateDriveFolder] BLOCKED: no projectId");
+      return;
+    }
+
+    console.log("[handleUpdateDriveFolder] ✅ Starting save", { projectId, url: trimmed });
     setSavingDrive(true);
 
     const supabase = createClient();
@@ -500,17 +534,34 @@ export function FileManager({
         url: trimmed,
       });
 
-      const { error } = await supabase
+      console.log("[handleUpdateDriveFolder] 📡 Calling database update...");
+
+      // Add a soft timeout so the UI never stays stuck if the network hangs.
+      const timeoutMs = 12000;
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        setTimeout(() => reject(new Error("Drive folder update timed out")), timeoutMs);
+      });
+
+      const updatePromise = supabase
         .from("projects")
         .update({ drive_folder_url: trimmed })
         .eq("id", projectId);
 
-      if (error) throw error;
+      const { error } = await Promise.race([updatePromise, timeoutPromise]);
 
+      console.log("[handleUpdateDriveFolder] 📡 Database response received", { hasError: !!error });
+
+      if (error) {
+        console.error("[handleUpdateDriveFolder] ❌ Database error:", error);
+        throw error;
+      }
+
+      console.log("[handleUpdateDriveFolder] ✅ Save successful");
       debug.success("FILE_MANAGER", "Drive folder saved successfully");
 
       // Notify parent component first
       if (onDriveFolderUpdate) {
+        console.log("[handleUpdateDriveFolder] 📢 Calling parent callback");
         onDriveFolderUpdate(trimmed);
       }
 
@@ -518,11 +569,10 @@ export function FileManager({
       showToast("Drive folder saved", "success");
 
       // Close dialog on success
-      if (componentMountedRef.current) {
-        setIsDriveFolderDialogOpen(false);
-      }
+      console.log("[handleUpdateDriveFolder] 🚪 Closing dialog");
+      setIsDriveFolderDialogOpen(false);
     } catch (error: any) {
-      console.error("Error updating drive folder:", error);
+      console.error("[handleUpdateDriveFolder] ❌ Error caught:", error);
       debug.error("FILE_MANAGER", "Drive folder save error", {
         message: error?.message,
         code: error?.code,
@@ -533,9 +583,8 @@ export function FileManager({
         4000,
       );
     } finally {
-      if (componentMountedRef.current) {
-        setSavingDrive(false);
-      }
+      console.log("[handleUpdateDriveFolder] 🔄 Finally block - resetting savingDrive");
+      setSavingDrive(false);
       debug.log("FILE_MANAGER", "Drive folder save end - flags reset");
     }
   }
@@ -603,25 +652,15 @@ export function FileManager({
       const u = new URL(url);
       // Pattern: /file/d/<id>/
       const fileMatch = u.pathname.match(/\/file\/d\/([^/]+)/);
-      if (fileMatch) {
-        console.log(`✅ Parsed file ID from /file/d/ pattern: ${fileMatch[1]}`);
-        return fileMatch[1];
-      }
+      if (fileMatch) return fileMatch[1];
       // Pattern: /drive/folders/<id> (for folder links)
       const folderMatch = u.pathname.match(/\/drive\/folders\/([^/?]+)/);
-      if (folderMatch) {
-        console.log(`✅ Parsed folder ID from /drive/folders/ pattern: ${folderMatch[1]}`);
-        return folderMatch[1];
-      }
+      if (folderMatch) return folderMatch[1];
       // Pattern: ?id=<id> query parameter
       const idParam = u.searchParams.get("id");
-      if (idParam) {
-        console.log(`✅ Parsed ID from query param: ${idParam}`);
-        return idParam;
-      }
-      console.warn(`❌ Could not parse Drive ID from URL: ${url.substring(0, 80)}...`);
+      if (idParam) return idParam;
     } catch (e) {
-      console.error(`❌ Error parsing Drive URL: ${e}`);
+      console.error(`Error parsing Drive URL: ${e}`);
     }
     return null;
   }
@@ -683,12 +722,7 @@ export function FileManager({
     const [failed, setFailed] = useState(false);
     const [signedSrc, setSignedSrc] = useState<string | null>(null);
     let src: string | null = null;
-    
-    // Debug: log file type for PNG detection
-    if (file.file_name?.toLowerCase().endsWith('.png')) {
-      console.log(`🖼️ PNG File Detected: ${file.file_name}, file_type="${file.file_type}", storage_type="${file.storage_type}"`);
-    }
-    
+
     // Check if this is a Google Drive folder link
     const isDriveFolder = file.storage_type === "google_drive" && 
                           file.file_url.includes('/drive/folders/');
@@ -699,31 +733,25 @@ export function FileManager({
     // PRIORITY 1: Supabase images - use signed URL
     if (file.file_type === "image" && file.storage_type === "supabase") {
       src = signedSrc ?? file.file_url; // allow public bucket fallback
-      console.log(`🖼️ Supabase image source for ${file.file_name}: ${src ? "✓ Available" : "✗ No URL"}`);
     }
     // PRIORITY 2: External image links
     else if (file.file_type === "image") {
       src = file.file_url;
-      console.log(`🔗 External image link: ${file.file_name}`);
     }
     // FALLBACK: No thumbnail available
     else {
-      console.log(`❌ File ${file.file_name} - file_type="${file.file_type}", storage_type="${file.storage_type}" - no thumbnail strategy`);
+      // No thumbnail strategy for non-image types
     }
 
     useEffect(() => {
       let cancelled = false;
       async function run() {
         if (file.file_type === "image" && file.storage_type === "supabase") {
-          console.log(`🔗 Fetching signed URL for: ${file.file_name}`);
           const res = await getSignedProjectFileUrl(file.file_url, 300);
-          console.log(`📡 Signed URL response: ${file.file_name}`, { hasUrl: !!res.signedUrl, error: res.error });
           if (!cancelled && !res.error && res.signedUrl) {
             setSignedSrc(res.signedUrl);
-            console.log(`✅ Using signed URL for ${file.file_name}`);
           }
           if (!cancelled && res.error) {
-            console.warn(`⚠️ Failed to get signed URL for ${file.file_name}, using public URL:`, res.error);
             // Fallback to file_url directly for public buckets or as last resort
             setSignedSrc(file.file_url);
           }
@@ -788,14 +816,7 @@ export function FileManager({
             : "rounded object-cover"
         }
         style={boxStyle}
-        onLoad={() => {
-          console.log(`✅ Thumbnail loaded: ${file.file_name} (${file.file_type}) from ${file.storage_type}`);
-        }}
         onError={() => {
-          console.warn(`❌ Thumbnail failed: ${file.file_name} (${file.file_type}) from ${file.storage_type}`, {
-            attemptedUrl: src,
-            driveId: file.storage_type === "google_drive" ? parseGoogleDriveId(file.file_url) : null,
-          });
           setFailed(true);
         }}
       />

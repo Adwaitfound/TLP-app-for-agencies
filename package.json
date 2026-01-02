@@ -1,6 +1,6 @@
 {
   "name": "video-production-app",
-  "version": "0.1.49",
+  "version": "0.1.50",
   "private": true,
   "engines": {
     "node": "20.x"
@@ -60,6 +60,7 @@
     "react-dom": "19.2.1",
     "react-hook-form": "^7.68.0",
     "recharts": "^3.5.1",
+    "resend": "^6.6.0",
     "tailwind-merge": "^3.4.0",
     "web-push": "^3.5.0",
     "zod": "^4.1.13",

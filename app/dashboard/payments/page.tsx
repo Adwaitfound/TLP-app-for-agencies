@@ -53,11 +53,9 @@ export default function PaymentsPage() {
   );
 
   useEffect(() => {
-    // Only admins can access this page
     if (authLoading) return;
-    if (user?.role !== "admin") return;
     loadData();
-  }, [authLoading, user?.role]);
+  }, [authLoading]);
 
   async function loadData() {
     setPageLoading(true);
@@ -90,24 +88,6 @@ export default function PaymentsPage() {
     return (
       <div className="flex items-center justify-center h-[60vh] text-muted-foreground">
         Loading...
-      </div>
-    );
-  }
-
-  if (user?.role !== "admin") {
-    return (
-      <div className="space-y-6">
-        <Card>
-          <CardHeader>
-            <CardTitle>Access Restricted</CardTitle>
-            <CardDescription>
-              Only admins can view Payments & Vendors.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            Please contact an administrator if you believe this is an error.
-          </CardContent>
-        </Card>
       </div>
     );
   }

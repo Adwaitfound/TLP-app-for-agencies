@@ -13,7 +13,8 @@ import { PushSubscriptionManager } from "@/components/push-subscription";
 import { NotificationDiagnostics } from "@/components/notification-diagnostics";
 import { InstallPrompt } from "@/components/install-prompt";
 import { BadgeManager } from "@/components/badge-manager";
-import { PullToRefresh } from "@/components/pull-to-refresh";import { NotificationPermissionHandler } from '@/components/notification-permission-handler';
+import { PullToRefresh } from "@/components/pull-to-refresh";
+import { MacOSUpdateWidget } from "@/components/macos-update-widget";
 const geistSans = Geist({
   variable: "--font-geist-sans",
   subsets: ["latin"],
@@ -95,8 +96,8 @@ export default function RootLayout({
               <NotificationPortal />
               <BadgeManager />
               <PullToRefresh />
-              <NotificationPermissionHandler />
               <InstallPrompt />
+              <MacOSUpdateWidget />
               <SwUpdateBanner />
               <GlobalClickTracker />
               <GlobalErrorListener />

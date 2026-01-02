@@ -52,6 +52,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             return cached
         }
 
+        // LocalStorage cache (persisted across reloads)
+        try {
+            const raw = localStorage.getItem('tlp_auth_profile')
+            if (raw) {
+                const parsed = JSON.parse(raw) as User
+                if (parsed?.id === sessionUser.id) {
+                    debug.log('AUTH', 'Using persisted profile cache', { email: parsed.email, role: parsed.role })
+                    setProfileCache(prev => new Map(prev).set(sessionUser.id, parsed))
+                    return parsed
+                }
+            }
+        } catch (e) {
+            debug.warn('AUTH', 'Failed to read profile from localStorage', { message: (e as any)?.message })
+        }
+
         const derivedRole = (sessionUser.user_metadata?.role as UserRole) || 'project_manager'
         const derivedName = sessionUser.user_metadata?.full_name || sessionUser.email?.split('@')[0] || 'User'
 
@@ -69,7 +84,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
         if (userData) {
             debug.success('AUTH', 'User profile loaded', { email: userData.email, role: userData.role })
+            
             setProfileCache(prev => new Map(prev).set(sessionUser.id, userData))
+            try {
+                localStorage.setItem('tlp_auth_profile', JSON.stringify(userData))
+            } catch (e) {
+                debug.warn('AUTH', 'Failed to persist profile cache', { message: (e as any)?.message })
+            }
             return userData
         }
 
@@ -108,6 +129,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (profile) {
             debug.success('AUTH', 'User profile created', { email: profile.email, role: profile.role })
             setProfileCache(prev => new Map(prev).set(sessionUser.id, profile))
+            try {
+                localStorage.setItem('tlp_auth_profile', JSON.stringify(profile))
+            } catch (e) {
+                debug.warn('AUTH', 'Failed to persist created profile', { message: (e as any)?.message })
+            }
         }
         return profile
     }
@@ -119,9 +145,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const initAuth = async () => {
             try {
                 debug.log('AUTH', 'Initializing auth context...')
-
-                // Try to restore session from localStorage first (for PWA/offline support)
-                const savedSession = localStorage.getItem('tlp_auth_session')
                 const { data: { session }, error: sessionError } = await supabase.auth.getSession()
                 
                 if (sessionError) {
@@ -143,22 +166,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                         setUser(profile)
                         debug.log('AUTH', 'User authenticated and profile loaded', { email: profile.email })
                     }
-                } else if (savedSession) {
-                    // If no active session but we have a saved one, try to use it
-                    try {
-                        const parsed = JSON.parse(savedSession)
-                        if (parsed?.user) {
-                            debug.log('AUTH', 'Restoring session from localStorage', { email: parsed.user.email })
-                            setSupabaseUser(parsed.user)
-                            const profile = await ensureUserProfile(parsed.user)
-                            if (profile && mounted) {
-                                setUser(profile)
-                            }
-                        }
-                    } catch (e) {
-                        debug.warn('AUTH', 'Failed to restore saved session', { error: String(e) })
-                        localStorage.removeItem('tlp_auth_session')
-                    }
                 } else {
                     debug.log('AUTH', 'No active session found')
                 }
@@ -174,10 +181,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
 
         initAuth()
-        
-        return () => {
-            mounted = false
-        }
 
         // Listen for changes on auth state (throttled to prevent multi-tab conflicts)
         let lastEventTime = 0
@@ -196,12 +199,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             try {
                 if (session?.user && mounted) {
                     setSupabaseUser(session.user)
-                    // Persist session to localStorage
-                    localStorage.setItem('tlp_auth_session', JSON.stringify(session))
                     
                     const profile = await ensureUserProfile(session.user)
                     if (profile && mounted) {
                         setUser(profile)
+                        debug.log('AUTH', 'Profile set after auth state change', { email: profile.email })
+                        try {
+                            localStorage.setItem('tlp_auth_profile', JSON.stringify(profile))
+                        } catch (e) {
+                            debug.warn('AUTH', 'Failed to persist profile after fetch', { message: (e as any)?.message })
+                        }
                     } else if (mounted) {
                         setUser(null)
                     }
@@ -210,7 +217,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                     setSupabaseUser(null)
                     setUser(null)
                     setProfileCache(new Map())
-                    // Clear saved session
                     localStorage.removeItem('tlp_auth_session')
                 }
             } finally {
@@ -219,9 +225,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 }
             }
         })
-
+        
         return () => {
-            subscription.unsubscribe()
+            mounted = false
+            subscription?.unsubscribe()
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [supabase])
@@ -241,6 +248,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                     filter: `id=eq.${supabaseUser.id}`,
                 },
                 (payload) => {
+                    localStorage.removeItem('tlp_auth_profile')
                     const nextUser = (payload.new as any) || null
                     if (nextUser) {
                         setUser(nextUser)

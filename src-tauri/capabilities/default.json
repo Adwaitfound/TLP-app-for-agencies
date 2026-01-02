@@ -3,9 +3,19 @@
   "identifier": "default",
   "description": "enables the default permissions",
   "windows": [
-    "main"
+    "*"
   ],
+  "remote": {
+    "urls": [
+      "https://app.thelostproject.in"
+    ]
+  },
   "permissions": [
-    "core:default"
+    "core:default",
+    "shell:default",
+    "notification:default",
+    "notification:allow-request-permission",
+    "notification:allow-is-permission-granted",
+    "notification:allow-show"
   ]
 }

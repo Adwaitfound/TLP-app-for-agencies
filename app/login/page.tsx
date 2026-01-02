@@ -13,6 +13,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Video, Loader2 } from "lucide-react";
+import { useAuth } from "@/contexts/auth-context";
 import { createClient } from "@/lib/supabase/client";
 import { debug } from "@/lib/debug";
 import { forceConfirmEmail } from "@/app/actions/force-confirm-email";
@@ -26,7 +27,9 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const router = useRouter();
-  const supabase = createClient();
+  const { user: authContextUser, loading: authLoading } = useAuth();
+  // Create supabase client inside state to ensure it's properly initialized
+  const [supabase] = useState(() => createClient());
 
   const describeError = (err: any) => {
     const code = err?.code || err?.status;
@@ -46,7 +49,19 @@ export default function LoginPage() {
   useEffect(() => {
     setEmail("");
     setPassword("");
-  }, []);
+    
+    // If user is already authenticated, redirect them
+    if (authContextUser && !authLoading) {
+      console.log("User already authenticated, redirecting...", { email: authContextUser.email });
+      if (authContextUser.role === "admin") {
+        router.push("/dashboard");
+      } else if (authContextUser.role === "client") {
+        router.push("/dashboard/client");
+      } else {
+        router.push("/dashboard/employee");
+      }
+    }
+  }, [authContextUser, authLoading, router]);
 
   const handleLogin = async (e?: React.FormEvent) => {
     if (e && typeof e.preventDefault === "function") e.preventDefault();
@@ -65,12 +80,46 @@ export default function LoginPage() {
     try {
       console.log("Step 1: Attempting login with:", email);
       debug.log("LOGIN", "Attempting login", { email });
-      // Avoid aggressive timeouts on auth; rely on UI watchdog
-      let { data: authData, error: authError } =
-        await supabase.auth.signInWithPassword({
-          email,
-          password,
-        });
+      
+      // Retry logic for transient auth failures
+      let authData: any = null;
+      let authError: any = null;
+      let retryCount = 0;
+      const maxRetries = 2;
+      
+      while (retryCount <= maxRetries) {
+        try {
+          const result = await supabase.auth.signInWithPassword({
+            email,
+            password,
+          });
+          authData = result.data;
+          authError = result.error;
+          
+          // If successful or permanent error, break
+          if (!authError || authError?.code === "invalid_grant") {
+            break;
+          }
+          
+          // For transient errors, retry with backoff
+          if (retryCount < maxRetries) {
+            console.warn(`Login attempt ${retryCount + 1} failed, retrying...`, authError?.message);
+            await new Promise(r => setTimeout(r, 100 * (retryCount + 1)));
+            retryCount++;
+          } else {
+            break;
+          }
+        } catch (err) {
+          if (retryCount < maxRetries) {
+            console.warn(`Login attempt ${retryCount + 1} threw error, retrying...`, err);
+            await new Promise(r => setTimeout(r, 100 * (retryCount + 1)));
+            retryCount++;
+          } else {
+            throw err;
+          }
+        }
+      }
+      
       console.log("Step 2: Auth response received", {
         authError: authError?.message,
         userId: authData?.user?.id,
@@ -248,16 +297,46 @@ export default function LoginPage() {
         }
       }
 
+      // Wait a moment for auth context to sync AND for Supabase auth to fully commit
+      console.log("Waiting for auth context to sync...");
+      let waitCount = 0;
+      let sessionVerified = false;
+      while (waitCount < 20) {
+        const sessionCheck = await supabase.auth.getSession();
+        if (sessionCheck.data.session?.user?.id) {
+          console.log("Session verified in Supabase", { userId: sessionCheck.data.session.user.id });
+          sessionVerified = true;
+          break;
+        }
+        await new Promise(r => setTimeout(r, 100));
+        waitCount++;
+      }
+
+      if (!sessionVerified) {
+        console.warn("Session could not be verified after 2s, but proceeding anyway");
+      }
+
       // Redirect based on role
+      let redirectPath = "/dashboard";
       if (userData.role === "admin") {
-        console.log("Redirecting to admin dashboard");
-        router.push("/dashboard");
+        redirectPath = "/dashboard";
       } else if (userData.role === "client") {
-        console.log("Redirecting to client dashboard");
-        router.push("/dashboard/client");
+        redirectPath = "/dashboard/client";
       } else {
-        console.log("Redirecting to employee dashboard");
-        router.push("/dashboard/employee");
+        redirectPath = "/dashboard/employee";
+      }
+      
+      console.log("Login successful, redirecting to:", redirectPath);
+      debug.success("LOGIN", "About to redirect", { role: userData.role, path: redirectPath });
+      
+      // Use router.push and wait for it
+      try {
+        console.log("Calling router.push");
+        await router.push(redirectPath);
+        console.log("Navigation completed");
+      } catch (navError) {
+        console.error("Navigation failed:", navError);
+        debug.error("LOGIN", "Navigation failed", { error: String(navError), path: redirectPath });
       }
 
       clearTimeout(timeout);

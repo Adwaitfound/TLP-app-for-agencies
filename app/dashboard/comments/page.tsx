@@ -20,6 +20,7 @@ import {
 } from "@/components/ui/select";
 import { assignCommentToEmployee } from "@/app/actions/client-comments";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 
 export default function CommentsAdminPage() {
   const { user } = useAuth();
@@ -31,6 +32,9 @@ export default function CommentsAdminPage() {
   const [projectFilter, setProjectFilter] = useState<string>("all");
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
+  const [replies, setReplies] = useState<Record<string, string>>({});
+  const [repliesData, setRepliesData] = useState<Record<string, any[]>>({});
+  const [expandedComments, setExpandedComments] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     async function fetchData() {
@@ -38,11 +42,58 @@ export default function CommentsAdminPage() {
       const supabase = createClient();
       setLoading(true);
       try {
-        const { data: projectsData } = await supabase
-          .from("projects")
-          .select("id, name, client_id, clients(company_name)")
-          .order("created_at", { ascending: false });
+        // Get user's role and info
+        const { data: userData } = await supabase
+          .from("users")
+          .select("id, role")
+          .eq("id", userId)
+          .single();
 
+        // If admin/PM, get all projects; if agency_admin get only their agency's projects; otherwise get their assigned projects
+        let projectsData: any[] = [];
+        
+        if (userData?.role === "admin") {
+          // System admin can see all projects
+          const { data } = await supabase
+            .from("projects")
+            .select("id, name, client_id, clients(company_name)")
+            .order("created_at", { ascending: false });
+          projectsData = data || [];
+        } else if (userData?.role === "agency_admin") {
+          // Agency admin can see only their agency's projects
+          const { data: userAgency } = await supabase
+            .from("user_agencies")
+            .select("agency_id")
+            .eq("user_id", userId)
+            .single();
+
+          if (userAgency) {
+            const { data } = await supabase
+              .from("projects")
+              .select("id, name, client_id, clients(company_name)")
+              .eq("agency_id", userAgency.agency_id)
+              .order("created_at", { ascending: false });
+            projectsData = data || [];
+          }
+        } else if (userData?.role === "project_manager") {
+          // PM can see all projects
+          const { data } = await supabase
+            .from("projects")
+            .select("id, name, client_id, clients(company_name)")
+            .order("created_at", { ascending: false });
+          projectsData = data || [];
+        } else {
+          // Regular employee can only see projects they're assigned to
+          const { data: assignedProjects } = await supabase
+            .from("project_team")
+            .select("project_id, projects(id, name, client_id, clients(company_name))")
+            .eq("user_id", userId);
+          projectsData = assignedProjects?.map(p => p.projects).filter(Boolean) || [];
+        }
+
+        const projectIds = projectsData?.map((p: any) => p.id) || [];
+
+        // Fetch all comments for visible projects
         const { data: commentsData } = await supabase
           .from("project_comments")
           .select(
@@ -56,13 +107,20 @@ export default function CommentsAdminPage() {
                         created_at,
                         author:user_id(full_name, email),
                         assignee:assigned_user_id(full_name, email),
-                        projects(name, clients(company_name))
+                        projects(name, clients(company_name)),
+                        comment_replies(id, reply_text, created_at, author:user_id(full_name, email))
                     `,
           )
-          .order("created_at", { ascending: false })
-          .limit(200);
+          .in("project_id", projectIds)
+          .order("created_at", { ascending: false });
 
-        const projectIds = projectsData?.map((p) => p.id) || [];
+        // Organize replies by comment ID
+        const repliesByComment: Record<string, any[]> = {};
+        commentsData?.forEach((comment) => {
+          repliesByComment[comment.id] = comment.comment_replies || [];
+        });
+        setRepliesData(repliesByComment);
+
         const { data: teamRows } = await supabase
           .from("project_team")
           .select("project_id, user_id, users(full_name, email)")
@@ -116,6 +174,55 @@ export default function CommentsAdminPage() {
         ),
       );
     }
+  };
+
+  const addReply = async (commentId: string) => {
+    const replyText = replies[commentId]?.trim();
+    if (!replyText || !userId) return;
+
+    const supabase = createClient();
+    try {
+      const { data: newReply, error } = await supabase
+        .from("comment_replies")
+        .insert([
+          {
+            comment_id: commentId,
+            user_id: userId,
+            reply_text: replyText,
+          },
+        ])
+        .select(
+          `
+          id,
+          reply_text,
+          created_at,
+          author:user_id(full_name, email)
+        `,
+        )
+        .single();
+
+      if (error) throw error;
+
+      setReplies((prev) => ({ ...prev, [commentId]: "" }));
+      setRepliesData((prev) => ({
+        ...prev,
+        [commentId]: [...(prev[commentId] || []), newReply],
+      }));
+    } catch (e) {
+      console.error("Failed to add reply", e);
+    }
+  };
+
+  const toggleExpanded = (commentId: string) => {
+    setExpandedComments((prev) => {
+      const next = new Set(prev);
+      if (next.has(commentId)) {
+        next.delete(commentId);
+      } else {
+        next.add(commentId);
+      }
+      return next;
+    });
   };
 
   return (
@@ -213,6 +320,60 @@ export default function CommentsAdminPage() {
                     </Button>
                   </div>
                 ) : null}
+
+                {/* Replies Section */}
+                <div className="mt-4 pt-4 border-t space-y-3">
+                  <div className="space-y-2">
+                    <h4 className="text-sm font-medium">
+                      Replies ({repliesData[c.id]?.length || 0})
+                    </h4>
+                    {repliesData[c.id]?.length > 0 && expandedComments.has(c.id) && (
+                      <div className="space-y-2 bg-muted/30 p-2 rounded">
+                        {repliesData[c.id].map((reply) => (
+                          <div key={reply.id} className="text-xs border-l-2 border-primary pl-2">
+                            <p className="font-medium">
+                              {reply.author?.full_name || reply.author?.email}
+                            </p>
+                            <p className="text-muted-foreground">
+                              {new Date(reply.created_at).toLocaleString()}
+                            </p>
+                            <p className="mt-1">{reply.reply_text}</p>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => toggleExpanded(c.id)}
+                  >
+                    {expandedComments.has(c.id) ? "Hide Replies" : "Show Replies"}
+                  </Button>
+
+                  <div className="flex flex-col gap-2">
+                    <Textarea
+                      placeholder="Write a reply..."
+                      value={replies[c.id] || ""}
+                      onChange={(e) =>
+                        setReplies((prev) => ({
+                          ...prev,
+                          [c.id]: e.target.value,
+                        }))
+                      }
+                      className="text-sm"
+                      rows={2}
+                    />
+                    <Button
+                      size="sm"
+                      onClick={() => addReply(c.id)}
+                      disabled={!replies[c.id]?.trim()}
+                    >
+                      Post Reply
+                    </Button>
+                  </div>
+                </div>
               </div>
             ))
           )}

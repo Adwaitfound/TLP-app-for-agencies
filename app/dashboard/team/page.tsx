@@ -88,7 +88,8 @@ export default function TeamPage() {
 
     try {
       debug.log("TEAM", "Fetching team members...");
-      // Fetch all team members (admins and project managers)
+      
+      // Fetch all team members
       const { data: usersData, error: usersError } = await supabase
         .from("users")
         .select("*")
@@ -102,11 +103,18 @@ export default function TeamPage() {
         });
         throw usersError;
       }
+
+      // Fetch all projects
+      const { data: projectsData, error: projectsError } = await supabase
+        .from("projects")
+        .select("*")
+        .order("name");
+
+      if (projectsError) throw projectsError;
+
       debug.success("TEAM", "Team members fetched", {
         count: usersData?.length,
       });
-
-      if (usersError) throw usersError;
 
       // Fetch project assignments for each team member
       const { data: assignmentsData, error: assignmentsError } = await supabase
@@ -119,14 +127,6 @@ export default function TeamPage() {
           assignmentsError.message,
         );
       }
-
-      // Fetch all projects
-      const { data: projectsData, error: projectsError } = await supabase
-        .from("projects")
-        .select("*")
-        .order("name");
-
-      if (projectsError) throw projectsError;
 
       // Group assignments by user
       const assignmentsByUser = (assignmentsData || []).reduce(

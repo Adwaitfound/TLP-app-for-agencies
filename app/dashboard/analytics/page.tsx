@@ -24,6 +24,7 @@ import {
   type Invoice,
   type Client,
 } from "@/types";
+import { useAuth } from "@/contexts/auth-context";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import {
@@ -49,6 +50,7 @@ interface ServiceStats {
 }
 
 export default function AnalyticsPage() {
+  const { user } = useAuth();
   const [loading, setLoading] = useState(true);
   const [projects, setProjects] = useState<Project[]>([]);
   const [invoices, setInvoices] = useState<Invoice[]>([]);
@@ -57,14 +59,14 @@ export default function AnalyticsPage() {
 
   useEffect(() => {
     fetchAnalytics();
-  }, []);
+  }, [user]);
 
   async function fetchAnalytics() {
     const supabase = createClient();
     setLoading(true);
 
     try {
-      // Fetch all data
+      // Fetch all projects, invoices, and clients
       const [projectsRes, invoicesRes, clientsRes] = await Promise.all([
         supabase.from("projects").select("*"),
         supabase.from("invoices").select("*"),

@@ -102,27 +102,32 @@ export async function proxy(request: NextRequest) {
                 const role = userData.role
                 const path = request.nextUrl.pathname
 
+                // Client role: restrict to client dashboard only
                 if (role === 'client' && !path.startsWith('/dashboard/client')) {
                     return NextResponse.redirect(new URL('/dashboard/client', request.url))
                 }
 
+                // Project manager role: restrict to employee dashboard only
                 if (role === 'project_manager' && !path.startsWith('/dashboard/employee')) {
                     return NextResponse.redirect(new URL('/dashboard/employee', request.url))
                 }
 
+                // Admin (system admin) or agency_admin: allow access to all dashboard areas
                 if (
-                    role === 'admin' &&
+                    (role === 'admin' || role === 'agency_admin') &&
                     (path.startsWith('/dashboard/client/') || path.startsWith('/dashboard/employee/'))
                 ) {
                     return NextResponse.redirect(new URL('/dashboard', request.url))
                 }
 
+                // Default dashboard redirect based on role
                 if (path === '/dashboard') {
                     if (role === 'client') {
                         return NextResponse.redirect(new URL('/dashboard/client', request.url))
                     } else if (role === 'project_manager') {
                         return NextResponse.redirect(new URL('/dashboard/employee', request.url))
                     }
+                    // admin and agency_admin stay at /dashboard
                 }
             }
         } catch (err: any) {

@@ -83,10 +83,7 @@ export async function sendBrowserNotification(options: NotificationOptions): Pro
  * Show local in-app toast notification
  */
 export function showLocalNotification(options: NotificationOptions): HTMLDivElement {
-  console.log("🎨 showLocalNotification called:", options);
-  
   const container = document.getElementById("notification-container") || createNotificationContainer();
-  console.log("🎨 Container found/created:", container);
 
   const notificationEl = document.createElement("div");
   // Use inline styles for better reliability
@@ -163,7 +160,6 @@ export function showLocalNotification(options: NotificationOptions): HTMLDivElem
   });
 
   container.appendChild(notificationEl);
-  console.log("✅ Notification element appended to container");
 
   // Auto-dismiss after 5 seconds
   const timeout = setTimeout(() => {
@@ -223,25 +219,18 @@ export function vibrateDevice(pattern: number | number[] = 200): void {
  * Send comprehensive notification (all types)
  */
 export async function sendNotification(options: NotificationOptions & { vibrate?: boolean }): Promise<void> {
-  console.log("🔔 sendNotification called with:", options);
-  
   const { vibrate = true, ...notifOptions } = options;
 
   // Send local notification
-  console.log("🔔 Showing local notification...");
   showLocalNotification(notifOptions);
 
   // Send browser notification
-  console.log("🔔 Sending browser notification...");
   await sendBrowserNotification(notifOptions);
 
   // Trigger device vibration
   if (vibrate) {
-    console.log("🔔 Triggering vibration...");
     vibrateDevice(200);
   }
-  
-  console.log("✅ All notification methods called");
 }
 
 /**
@@ -252,11 +241,7 @@ export async function sendChatNotification(
   message: string,
   senderAvatar?: string
 ): Promise<void> {
-  console.log("📢 sendChatNotification called:", { senderName, message, senderAvatar });
-  
   const body = message.length > 100 ? message.substring(0, 97) + "..." : message;
-
-  console.log("📢 Calling sendNotification...");
   await sendNotification({
     title: `New message from ${senderName}`,
     body,
@@ -269,7 +254,6 @@ export async function sendChatNotification(
     },
     vibrate: true,
   });
-  console.log("✅ sendNotification complete");
 }
 
 /**

@@ -96,7 +96,6 @@ export default function AllFilesPage() {
         .limit(500);
 
       if (error) throw error;
-
       setFiles((data as FileWithProject[]) || []);
     } catch (error) {
       console.error("Error loading files:", error);

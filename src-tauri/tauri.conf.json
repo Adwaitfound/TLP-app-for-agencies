@@ -1,29 +1,35 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
   "productName": "The Lost Project",
-  "version": "0.1.49",
+  "version": "0.1.50",
   "identifier": "com.foundtech.tlpapp",
   "build": {
-    "frontendDist": "../out",
-    "devUrl": "http://localhost:3000",
+    "frontendDist": "../dist",
     "beforeDevCommand": "npm run dev",
-    "beforeBuildCommand": "npm run build"
+    "beforeBuildCommand": "mkdir -p dist && cat > dist/index.html << 'EOF'\n<!DOCTYPE html>\n<html>\n<head>\n  <meta charset=\"UTF-8\">\n  <title>The Lost Project</title>\n  <meta http-equiv=\"refresh\" content=\"0; url=https://app.thelostproject.in\">\n  <script>window.location.href='https://app.thelostproject.in';</script>\n</head>\n<body>\n  <p>Redirecting to The Lost Project...</p>\n</body>\n</html>\nEOF"
   },
   "app": {
     "windows": [
       {
+        "label": "main",
         "title": "The Lost Project",
         "width": 1400,
         "height": 900,
         "minWidth": 800,
         "minHeight": 600,
         "resizable": true,
-        "fullscreen": false
+        "fullscreen": false,
+        "incognito": false
       }
     ],
     "security": {
-      "csp": null
-    }
+      "csp": null,
+      "capabilities": [
+        "default",
+        "main-capability"
+      ]
+    },
+    "withGlobalTauri": false
   },
   "bundle": {
     "active": true,
@@ -35,7 +41,12 @@
       "icons/icon.icns"
     ],
     "macOS": {
-      "minimumSystemVersion": "10.13"
+      "minimumSystemVersion": "10.13",
+      "entitlements": null,
+      "exceptionDomain": "",
+      "frameworks": [],
+      "providerShortName": null,
+      "signingIdentity": null
     }
   }
 }

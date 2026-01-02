@@ -7,102 +7,85 @@ export function NotificationPermissionHandler() {
   const { user } = useAuth();
   const [permissionState, setPermissionState] = useState<NotificationPermission>('default');
   const [isSubscribed, setIsSubscribed] = useState(false);
-  const [debugInfo, setDebugInfo] = useState<string[]>([]);
-
-  const addLog = (message: string) => {
-    console.log(`🔔 [Notification Handler] ${message}`);
-    setDebugInfo(prev => [...prev.slice(-20), `${new Date().toLocaleTimeString()}: ${message}`]);
-  };
+  const [hasShownUpdateNotice, setHasShownUpdateNotice] = useState(false);
 
   useEffect(() => {
     if (!user || typeof window === 'undefined') return;
 
     checkPermissionStatus();
+    const seen = localStorage.getItem(updateNoticeKey());
+    setHasShownUpdateNotice(!!seen);
   }, [user]);
 
   const checkPermissionStatus = async () => {
     if ('Notification' in window) {
       const permission = Notification.permission;
       setPermissionState(permission);
-      addLog(`Current permission: ${permission}`);
+      if (permission === 'granted') {
+        maybeShowUpdateNotification();
+      }
 
       // Check if service worker is registered
       if ('serviceWorker' in navigator) {
         try {
           const registration = await navigator.serviceWorker.ready;
-          addLog(`Service Worker registered: ${registration.active?.state}`);
 
           // Check if already subscribed
           const subscription = await registration.pushManager.getSubscription();
           setIsSubscribed(!!subscription);
-          addLog(`Push subscription: ${subscription ? 'Active' : 'None'}`);
-          
-          if (subscription) {
-            addLog(`Endpoint: ${subscription.endpoint.substring(0, 50)}...`);
-          }
         } catch (error) {
-          addLog(`SW check error: ${error}`);
+          console.warn('Notification service worker check failed', error);
         }
       } else {
-        addLog('Service Worker not supported');
+        console.warn('Service Worker not supported');
       }
     } else {
-      addLog('Notifications not supported in this browser');
+      console.warn('Notifications not supported in this browser');
     }
   };
 
   const requestPermission = async () => {
-    addLog('Requesting notification permission...');
-    
     try {
       const permission = await Notification.requestPermission();
       setPermissionState(permission);
-      addLog(`Permission result: ${permission}`);
 
       if (permission === 'granted') {
         await subscribeToPush();
+        maybeShowUpdateNotification();
       }
     } catch (error) {
-      addLog(`Permission error: ${error}`);
+      console.warn('Notification permission error', error);
     }
   };
 
   const subscribeToPush = async () => {
     if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
-      addLog('Push notifications not supported');
+      console.warn('Push notifications not supported');
       return;
     }
 
     try {
-      addLog('Waiting for Service Worker...');
       const registration = await navigator.serviceWorker.ready;
-      addLog('Service Worker ready');
 
       // Check if already subscribed
       let subscription = await registration.pushManager.getSubscription();
       
       if (subscription) {
-        addLog('Already subscribed, unsubscribing first...');
         await subscription.unsubscribe();
       }
 
       // Subscribe with VAPID key
       const vapidPublicKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
       if (!vapidPublicKey) {
-        addLog('ERROR: VAPID public key not found');
+        console.warn('VAPID public key not found');
         return;
       }
 
-      addLog('Converting VAPID key...');
       const convertedVapidKey = urlBase64ToUint8Array(vapidPublicKey);
-      
-      addLog('Subscribing to push...');
       subscription = await registration.pushManager.subscribe({
         userVisibleOnly: true,
         applicationServerKey: convertedVapidKey,
       });
-
-      addLog('Subscription created, sending to server...');
 
       // Send subscription to server
       const response = await fetch('/api/push/subscribe', {
@@ -116,19 +99,17 @@ export function NotificationPermissionHandler() {
 
       if (response.ok) {
         setIsSubscribed(true);
-        addLog('✅ Successfully subscribed to push notifications');
+        maybeShowUpdateNotification();
       } else {
         const error = await response.text();
-        addLog(`❌ Server error: ${error}`);
+        console.warn('Push subscribe server error:', error);
       }
     } catch (error) {
-      addLog(`❌ Subscribe error: ${error}`);
+      console.warn('Push subscribe error', error);
     }
   };
 
   const testNotification = async () => {
-    addLog('Testing local notification...');
-    
     if (Notification.permission === 'granted') {
       try {
         const notification = new Notification('Test Notification', {
@@ -139,17 +120,32 @@ export function NotificationPermissionHandler() {
         } as NotificationOptions & { vibrate?: number[] });
 
         notification.onclick = () => {
-          addLog('Notification clicked');
           window.focus();
           notification.close();
         };
-
-        addLog('✅ Local notification shown');
       } catch (error) {
-        addLog(`❌ Local notification error: ${error}`);
+        console.warn('Local notification error', error);
       }
     } else {
-      addLog('❌ Permission not granted');
+      console.warn('Notification permission not granted');
+    }
+  };
+
+  const maybeShowUpdateNotification = () => {
+    if (hasShownUpdateNotice || typeof window === 'undefined') return;
+    if (!('Notification' in window) || Notification.permission !== 'granted') return;
+
+    try {
+      new Notification('Update available', {
+        body: 'A newer version is ready. Please update to the latest build now.',
+        icon: '/icons/icon-192x192.png',
+        badge: '/icons/icon-192x192.png',
+        tag: 'update-reminder',
+      });
+      localStorage.setItem(updateNoticeKey(), '1');
+      setHasShownUpdateNotice(true);
+    } catch (error) {
+      console.warn('Unable to show update notification', error);
     }
   };
 
@@ -232,17 +228,8 @@ export function NotificationPermissionHandler() {
           Refresh Status
         </button>
       </div>
-
-      <details className="mt-3">
-        <summary className="text-xs font-medium cursor-pointer text-gray-600 dark:text-gray-400">
-          Debug Log ({debugInfo.length})
-        </summary>
-        <div className="mt-2 max-h-40 overflow-y-auto bg-gray-50 dark:bg-gray-900 rounded p-2 text-xs font-mono">
-          {debugInfo.map((log, i) => (
-            <div key={i} className="text-gray-700 dark:text-gray-300">{log}</div>
-          ))}
-        </div>
-      </details>
     </div>
   );
 }
+
+const updateNoticeKey = () => `tlp-update-notice-${process.env.NEXT_PUBLIC_APP_VERSION || 'latest'}`;

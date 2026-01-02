@@ -16,14 +16,8 @@ export async function uploadInvoiceFile(formData: FormData) {
   }
 
   // Verify user is admin
-  {
-    const { data, error } = await supabase
-      .from("users")
-      .select("role")
-      .eq("id", user.id)
-      .single();
-    if (error) return { error: "Failed to verify role" };
-    if (!data || data.role !== "admin") return { error: "Access restricted to admins" };
+  if (user.email !== "adwait@thelostproject.in") {
+    return { error: "Access restricted to adwait@thelostproject.in" };
   }
 
   const file = formData.get("file") as File;

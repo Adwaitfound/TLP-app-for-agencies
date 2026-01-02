@@ -16,6 +16,7 @@ import {
   Wallet,
   Files,
   MessagesSquare,
+  Megaphone,
 } from "lucide-react";
 import { useAuth } from "@/contexts/auth-context";
 
@@ -74,6 +75,21 @@ const adminRoutes = [
     label: "Analytics",
     icon: BarChart3,
     href: "/dashboard/analytics",
+  },
+  {
+    label: "Advertisements",
+    icon: Megaphone,
+    href: "/dashboard/advertisements",
+  },
+  {
+    label: "Agency Onboarding",
+    icon: Users,
+    href: "/dashboard/agency-onboarding",
+  },
+  {
+    label: "Ad Analytics",
+    icon: BarChart3,
+    href: "/dashboard/ad-analytics",
   },
   {
     label: "Settings",
@@ -147,6 +163,8 @@ export function Sidebar() {
   const pathname = usePathname();
   const { user } = useAuth();
 
+  const isSystemAdmin = user?.email?.toLowerCase() === "adwait@thelostproject.in";
+
   // Determine routes based on user role
   let routes = adminRoutes;
   if (user?.role === "client") {
@@ -172,11 +190,13 @@ export function Sidebar() {
               The Lost Project
             </span>
             <span className="text-xs text-muted-foreground">
-              {user?.role === "admin"
-                ? "Admin Panel"
-                : user?.role === "project_manager"
-                  ? "Employee Portal"
-                  : "Client Portal"}
+              {isSystemAdmin
+                ? "System Admin"
+                : user?.role === "admin"
+                  ? "Admin"
+                  : user?.role === "project_manager"
+                    ? "Employee Portal"
+                    : "Client Portal"}
             </span>
           </div>
         </div>

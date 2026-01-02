@@ -29,7 +29,7 @@ export default function DashboardLayout({
   return (
     <>
       <div className="grid min-h-screen w-full md:grid-cols-[220px_1fr] lg:grid-cols-[280px_1fr]">
-        <div className="hidden border-r bg-muted/40 md:block">
+        <div className="hidden border-r bg-muted/40 md:sticky md:top-0 md:h-screen md:overflow-y-auto md:block">
           <Sidebar />
         </div>
         <div className="flex flex-col">
