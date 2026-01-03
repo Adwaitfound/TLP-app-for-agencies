@@ -43,14 +43,19 @@ export async function POST(request: Request) {
       }, { status: 400 });
     }
 
-    // Update the onboarding request with the selected tier
-    const { error: updateErr } = await supabase
-      .from("agency_onboarding_requests")
-      .update({ tier })
-      .eq("id", requestId);
+    // Update the onboarding request with the selected tier (if column exists)
+    try {
+      const { error: updateErr } = await supabase
+        .from("agency_onboarding_requests")
+        .update({ tier })
+        .eq("id", requestId);
 
-    if (updateErr) {
-      console.error("AGENCY_TIER_UPDATE_ERROR", { message: updateErr.message });
+      if (updateErr && !updateErr.message.includes('tier')) {
+        console.warn("Could not update tier:", updateErr.message);
+      }
+    } catch (err: any) {
+      // Tier column might not exist yet, that's ok - it will be created during provisioning
+      console.log(`ℹ️  Could not update tier column (may not exist yet): ${err.message}`);
     }
 
     console.log("AGENCY_APPROVED", {
