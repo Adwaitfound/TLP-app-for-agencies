@@ -68,37 +68,44 @@ export async function runMigrations(
 
   console.log(`   Found ${migrations.length} migration(s)`);
 
-  // Combine all migrations into one SQL script
-  const combinedSql = migrations.map(m => m.sql).join('\n\n');
-  console.log(`   Executing all migrations as combined script...`);
-
   const supabaseAccessToken = process.env.SUPABASE_ACCESS_TOKEN;
   if (!supabaseAccessToken) {
     throw new Error('SUPABASE_ACCESS_TOKEN not configured');
   }
 
-  // Execute the combined SQL
-  const response = await fetch(
-    `https://api.supabase.com/v1/projects/${projectRef}/database/query`,
-    {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${supabaseAccessToken}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        query: combinedSql,
-      }),
-      signal: AbortSignal.timeout(120000), // 2 minute timeout for all migrations
-    }
-  );
+  // Run each migration file separately (each in its own transaction)
+  // This is required because PostgreSQL enum values must be committed before use
+  let completed = 0;
+  for (const migration of migrations) {
+    console.log(`   Running ${migration.filename}...`);
+    
+    const response = await fetch(
+      `https://api.supabase.com/v1/projects/${projectRef}/database/query`,
+      {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${supabaseAccessToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          query: migration.sql,
+        }),
+        signal: AbortSignal.timeout(60000), // 60 second timeout per migration
+      }
+    );
 
-  if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(`Combined migrations failed: ${errorText}`);
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Migration ${migration.filename} failed: ${errorText}`);
+    }
+    
+    completed++;
+    if (completed % 10 === 0) {
+      console.log(`   ✓ ${completed}/${migrations.length} migrations completed`);
+    }
   }
 
-  console.log(`✅ All migrations completed successfully`);
+  console.log(`✅ All ${migrations.length} migrations completed successfully`);
 }
 
 /**
