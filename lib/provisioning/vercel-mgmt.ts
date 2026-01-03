@@ -88,13 +88,14 @@ export async function createVercelProject(
     outputDirectory: '.next',
   };
 
-  // Link to GitHub repo if configured
-  if (GITHUB_REPO_OWNER && GITHUB_REPO_NAME) {
-    payload.gitRepository = {
-      type: 'github',
-      repo: `${GITHUB_REPO_OWNER}/${GITHUB_REPO_NAME}`,
-    };
-  }
+  // Note: GitHub repo linking is skipped for now
+  // In production, each agency would get a fork or separate repo
+  // if (GITHUB_REPO_OWNER && GITHUB_REPO_NAME) {
+  //   payload.gitRepository = {
+  //     type: 'github',
+  //     repo: `${GITHUB_REPO_OWNER}/${GITHUB_REPO_NAME}`,
+  //   };
+  // }
 
   const response = await fetch(url, {
     method: 'POST',
@@ -104,6 +105,26 @@ export async function createVercelProject(
     },
     body: JSON.stringify(payload),
   });
+
+  // If project already exists (409 conflict), try to retrieve it
+  if (response.status === 409) {
+    console.log(`Project ${projectName} already exists, retrieving existing project...`);
+    const getUrl = VERCEL_TEAM_ID
+      ? `https://api.vercel.com/v9/projects/${projectName}?teamId=${VERCEL_TEAM_ID}`
+      : `https://api.vercel.com/v9/projects/${projectName}`;
+    
+    const getResponse = await fetch(getUrl, {
+      headers: {
+        'Authorization': `Bearer ${VERCEL_TOKEN}`,
+      },
+    });
+
+    if (getResponse.ok) {
+      const existingProject = await getResponse.json();
+      console.log(`✅ Using existing Vercel project: ${existingProject.id}`);
+      return existingProject;
+    }
+  }
 
   if (!response.ok) {
     const error = await response.text();
@@ -145,7 +166,7 @@ export async function setEnvironmentVariables(
     {
       key: 'SUPABASE_SERVICE_ROLE_KEY',
       value: config.supabaseServiceKey,
-      target: ['production', 'preview', 'development'],
+      target: ['production', 'preview'], // Sensitive vars can't be in development
       type: 'sensitive',
     },
     {
@@ -160,7 +181,7 @@ export async function setEnvironmentVariables(
     ? `https://api.vercel.com/v10/projects/${projectId}/env?teamId=${VERCEL_TEAM_ID}`
     : `https://api.vercel.com/v10/projects/${projectId}/env`;
 
-  // Create each environment variable
+  // Create or update each environment variable
   for (const envVar of envVars) {
     const response = await fetch(url, {
       method: 'POST',
@@ -171,9 +192,61 @@ export async function setEnvironmentVariables(
       body: JSON.stringify(envVar),
     });
 
+    // If variable already exists (409 or ENV_CONFLICT), try to update it
     if (!response.ok) {
-      const error = await response.text();
-      console.error(`Failed to set ${envVar.key}: ${error}`);
+      const errorBody = await response.text();
+      if (errorBody.includes('ENV_CONFLICT') || response.status === 409) {
+        console.log(`   ℹ ${envVar.key} already exists, updating...`);
+        
+        // Try to update the existing variable
+        // First, get the existing variable ID
+        const getUrl = VERCEL_TEAM_ID
+          ? `https://api.vercel.com/v10/projects/${projectId}/env?teamId=${VERCEL_TEAM_ID}`
+          : `https://api.vercel.com/v10/projects/${projectId}/env`;
+        
+        const getResponse = await fetch(getUrl, {
+          headers: {
+            'Authorization': `Bearer ${VERCEL_TOKEN}`,
+          },
+        });
+
+        if (getResponse.ok) {
+          const envList = await getResponse.json();
+          const existing = envList.envs?.find((e: any) => e.key === envVar.key);
+          
+          if (existing) {
+            // Update the existing variable
+            const updateUrl = VERCEL_TEAM_ID
+              ? `https://api.vercel.com/v10/projects/${projectId}/env/${existing.id}?teamId=${VERCEL_TEAM_ID}`
+              : `https://api.vercel.com/v10/projects/${projectId}/env/${existing.id}`;
+            
+            const updateResponse = await fetch(updateUrl, {
+              method: 'PATCH',
+              headers: {
+                'Authorization': `Bearer ${VERCEL_TOKEN}`,
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                key: envVar.key,
+                value: envVar.value,
+                target: envVar.target,
+                type: envVar.type,
+              }),
+            });
+
+            if (!updateResponse.ok) {
+              const updateError = await updateResponse.text();
+              console.error(`Failed to update ${envVar.key}: ${updateError}`);
+              throw new Error(`Failed to update environment variable ${envVar.key}`);
+            }
+
+            console.log(`   ✓ Updated ${envVar.key}`);
+            continue;
+          }
+        }
+      }
+
+      console.error(`Failed to set ${envVar.key}: ${errorBody}`);
       throw new Error(`Failed to set environment variable ${envVar.key}`);
     }
 

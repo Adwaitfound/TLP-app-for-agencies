@@ -186,6 +186,36 @@ export default function AgencyOnboardingAdminPage() {
     }
   };
 
+  const resetRequest = async (requestId: string) => {
+    if (!confirm("Reset this request back to pending status?")) return;
+    setActingId(requestId);
+    try {
+      const res = await fetch("/api/admin/agency-onboarding/reset", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-user-email": user?.email || "",
+        },
+        body: JSON.stringify({ requestId }),
+      });
+      if (!res.ok) {
+        const payload = await res.json().catch(() => ({}));
+        throw new Error(payload?.error || "Failed to reset request");
+      }
+      
+      // Refresh list
+      const refreshed = await fetch("/api/admin/agency-onboarding", {
+        headers: { "x-user-email": user?.email || "" },
+      });
+      const payload = await refreshed.json();
+      setRows(payload.requests || []);
+    } catch (err: any) {
+      setError(err?.message || "Unexpected error while resetting");
+    } finally {
+      setActingId(null);
+    }
+  };
+
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
@@ -277,33 +307,53 @@ export default function AgencyOnboardingAdminPage() {
                               )}
                             </div>
                           ) : row.status === "approved" ? (
-                            <div className="flex flex-col gap-1">
-                              <div className="flex items-center gap-2 text-sm text-green-600">
-                                <CheckCircle2 className="h-4 w-4" />
-                                <span className="font-medium">Deployed</span>
+                            <div className="flex flex-col gap-2">
+                              <div className="flex flex-col gap-1">
+                                <div className="flex items-center gap-2 text-sm text-green-600">
+                                  <CheckCircle2 className="h-4 w-4" />
+                                  <span className="font-medium">Deployed</span>
+                                </div>
+                                {row.metadata?.instanceUrl && (
+                                  <a 
+                                    href={row.metadata.instanceUrl}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="text-xs text-blue-600 hover:underline"
+                                  >
+                                    {row.metadata.instanceUrl}
+                                  </a>
+                                )}
                               </div>
-                              {row.metadata?.instanceUrl && (
-                                <a 
-                                  href={row.metadata.instanceUrl}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="text-xs text-blue-600 hover:underline"
-                                >
-                                  {row.metadata.instanceUrl}
-                                </a>
-                              )}
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => resetRequest(row.id)}
+                                disabled={actingId === row.id}
+                              >
+                                {actingId === row.id ? "Resetting..." : "Reset"}
+                              </Button>
                             </div>
                           ) : row.status === "failed" ? (
-                            <div className="flex flex-col gap-1">
-                              <div className="flex items-center gap-2 text-sm text-red-600">
-                                <XCircle className="h-4 w-4" />
-                                <span className="font-medium">Failed</span>
+                            <div className="flex flex-col gap-2">
+                              <div className="flex flex-col gap-1">
+                                <div className="flex items-center gap-2 text-sm text-red-600">
+                                  <XCircle className="h-4 w-4" />
+                                  <span className="font-medium">Failed</span>
+                                </div>
+                                {row.metadata?.error && (
+                                  <span className="text-xs text-red-500">
+                                    {row.metadata.error}
+                                  </span>
+                                )}
                               </div>
-                              {row.metadata?.error && (
-                                <span className="text-xs text-red-500">
-                                  {row.metadata.error}
-                                </span>
-                              )}
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => resetRequest(row.id)}
+                                disabled={actingId === row.id}
+                              >
+                                {actingId === row.id ? "Resetting..." : "Retry"}
+                              </Button>
                             </div>
                           ) : (
                             <span className="text-xs text-muted-foreground">—</span>

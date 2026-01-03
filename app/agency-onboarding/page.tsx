@@ -126,7 +126,7 @@ export default function AgencyOnboardingPage() {
                       <Label htmlFor="agencyName">Agency name *</Label>
                       <Input
                         id="agencyName"
-                        placeholder="UDM Digital"
+                        placeholder="e.g. Your Agency Name"
                         value={agencyName}
                         onChange={(e) => setAgencyName(e.target.value)}
                         required
@@ -136,7 +136,7 @@ export default function AgencyOnboardingPage() {
                       <Label htmlFor="website">Website</Label>
                       <Input
                         id="website"
-                        placeholder="https://udm.example"
+                        placeholder="https://yourwebsite.com"
                         value={website}
                         onChange={(e) => setWebsite(e.target.value)}
                       />

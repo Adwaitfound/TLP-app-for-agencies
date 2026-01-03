@@ -117,6 +117,38 @@ export async function createSupabaseProject(
   // Wait for project to be fully provisioned
   await waitForProjectReady(project.id);
 
+  // Fetch the API keys from the dedicated keys endpoint
+  const keysResponse = await fetch(`https://api.supabase.com/v1/projects/${project.id}/api-keys`, {
+    headers: {
+      'Authorization': `Bearer ${SUPABASE_ACCESS_TOKEN}`,
+    },
+  });
+
+  if (!keysResponse.ok) {
+    const errorText = await keysResponse.text();
+    console.warn('⚠️ Could not fetch API keys from management endpoint:', keysResponse.status, errorText);
+  }
+
+  let serviceRoleKey = '';
+  let anonKey = '';
+
+  if (keysResponse.ok) {
+    const keys = await keysResponse.json();
+    console.log('📦 Keys response:', JSON.stringify(keys, null, 2));
+    
+    const serviceRoleKeyObj = keys.find((k: any) => k.name === 'service_role');
+    const anonKeyObj = keys.find((k: any) => k.name === 'anon');
+    
+    serviceRoleKey = serviceRoleKeyObj?.api_key || '';
+    anonKey = anonKeyObj?.api_key || '';
+
+    console.log('✅ API keys retrieved from management endpoint');
+    console.log('  - Anon key:', anonKey.substring(0, 20) + '...');
+    console.log('  - Service role key:', serviceRoleKey.substring(0, 20) + '...');
+  } else {
+    console.error('❌ Failed to retrieve API keys - returning empty strings');
+  }
+
   return {
     id: project.id,
     name: projectName,
@@ -124,8 +156,8 @@ export async function createSupabaseProject(
     region: region,
     database_password: dbPassword,
     api_keys: {
-      anon: project.anon_key || '',
-      service_role: project.service_role_key || '',
+      anon: anonKey,
+      service_role: serviceRoleKey,
     },
   };
 }

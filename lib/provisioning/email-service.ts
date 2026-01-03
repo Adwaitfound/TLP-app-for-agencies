@@ -4,19 +4,35 @@
  * Handles sending welcome emails and provisioning notifications using Resend
  */
 
+import jwt from 'jsonwebtoken';
+
 const RESEND_API_KEY = process.env.RESEND_API_KEY;
 const RESEND_FROM_EMAIL = process.env.RESEND_FROM_EMAIL || 'onboarding@resend.dev';
+
+// Use existing Supabase service key as JWT secret (it's a good random value)
+// Fall back to the anon key if service key not available
+const JWT_SECRET = process.env.JWT_SECRET 
+  || process.env.SUPABASE_SERVICE_ROLE_KEY 
+  || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+  || 'tlp-dev-secret-key-change-in-production';
 
 if (!RESEND_API_KEY) {
   console.warn('⚠️  RESEND_API_KEY not configured - emails will fail');
 }
 
+if (!process.env.JWT_SECRET && process.env.NODE_ENV === 'production') {
+  console.warn('⚠️  JWT_SECRET not configured in production - using fallback');
+}
+
 interface WelcomeEmailData {
   agencyName: string;
   adminEmail: string;
-  adminPassword: string;
   instanceUrl: string;
+  supabaseProjectId: string;
   supabaseUrl: string;
+  vercelProjectId: string;
+  anonKey: string;
+  serviceRoleKey: string;
 }
 
 interface ProvisioningStatusEmail {
@@ -26,9 +42,63 @@ interface ProvisioningStatusEmail {
   instanceUrl?: string;
   errorMessage?: string;
 }
+/**
+ * Generate a one-time setup token for agency initialization
+ */
+export function generateSetupToken(
+  agencyId: string,
+  adminEmail: string,
+  supabaseProjectId: string,
+  anonKey: string,
+  serviceRoleKey: string,
+  vercelUrl: string
+): string {
+  return jwt.sign(
+    {
+      agencyId,
+      adminEmail,
+      supabaseProjectId,
+      anonKey,
+      serviceRoleKey,
+      vercelUrl,
+      type: 'agency-setup',
+    },
+    JWT_SECRET,
+    { expiresIn: '24h' }
+  );
+}
 
 /**
- * Send welcome email to agency admin with login credentials
+ * Verify a setup token
+ */
+export function verifySetupToken(token: string): {
+  agencyId: string;
+  adminEmail: string;
+  supabaseProjectId: string;
+  anonKey: string;
+  serviceRoleKey: string;
+  vercelUrl?: string;
+} {
+  try {
+    const decoded = jwt.verify(token, JWT_SECRET) as any;
+    if (decoded.type !== 'agency-setup') {
+      throw new Error('Invalid token type');
+    }
+    return {
+      agencyId: decoded.agencyId,
+      adminEmail: decoded.adminEmail,
+      supabaseProjectId: decoded.supabaseProjectId,
+      anonKey: decoded.anonKey,
+      serviceRoleKey: decoded.serviceRoleKey,
+      vercelUrl: decoded.vercelUrl,
+    };
+  } catch (error) {
+    throw new Error(`Invalid or expired setup token: ${error}`);
+  }
+}
+
+/**
+ * Send welcome email with one-click setup link
  */
 export async function sendWelcomeEmail(data: WelcomeEmailData): Promise<void> {
   if (!RESEND_API_KEY) {
@@ -37,6 +107,23 @@ export async function sendWelcomeEmail(data: WelcomeEmailData): Promise<void> {
   }
 
   console.log(`📧 Sending welcome email to ${data.adminEmail}`);
+
+  // Use the main app URL from environment or localhost for development
+  const mainAppUrl = process.env.NEXT_PUBLIC_APP_URL 
+    || process.env.VERCEL_URL 
+    || 'http://localhost:3000';
+
+  // Generate setup token with all necessary data
+  const setupToken = generateSetupToken(
+    data.agencyName,
+    data.adminEmail,
+    data.supabaseProjectId,
+    data.anonKey,
+    data.serviceRoleKey,
+    data.instanceUrl
+  );
+
+  const setupUrl = `${mainAppUrl}/setup?token=${setupToken}`;
 
   const htmlContent = `
 <!DOCTYPE html>
@@ -64,36 +151,19 @@ export async function sendWelcomeEmail(data: WelcomeEmailData): Promise<void> {
       padding: 30px;
       border-radius: 0 0 8px 8px;
     }
-    .credentials {
-      background: white;
-      padding: 20px;
-      border-radius: 8px;
-      border-left: 4px solid #667eea;
-      margin: 20px 0;
-    }
-    .credential-item {
-      margin: 10px 0;
-    }
-    .credential-label {
-      font-weight: 600;
-      color: #667eea;
-    }
-    .credential-value {
-      font-family: 'Courier New', monospace;
-      background: #f3f4f6;
-      padding: 8px 12px;
-      border-radius: 4px;
-      display: inline-block;
-      margin-top: 5px;
-    }
     .button {
       display: inline-block;
       background: #667eea;
       color: white;
-      padding: 12px 24px;
+      padding: 14px 32px;
       text-decoration: none;
       border-radius: 6px;
       margin: 20px 0;
+      font-weight: 600;
+      font-size: 16px;
+    }
+    .button:hover {
+      background: #764ba2;
     }
     .footer {
       text-align: center;
@@ -101,70 +171,55 @@ export async function sendWelcomeEmail(data: WelcomeEmailData): Promise<void> {
       font-size: 14px;
       margin-top: 30px;
     }
-    .warning {
-      background: #fef3c7;
-      border-left: 4px solid #f59e0b;
+    .highlight {
+      background: #eff6ff;
+      border-left: 4px solid #667eea;
       padding: 15px;
       margin: 20px 0;
       border-radius: 4px;
     }
+    h1 { color: white; margin: 0; }
+    h2 { color: #667eea; }
   </style>
 </head>
 <body>
   <div class="header">
     <h1>🎉 Welcome to The Lost Project!</h1>
-    <p>Your agency instance is ready</p>
+    <p style="margin: 10px 0 0 0;">Your agency instance is ready</p>
   </div>
   
   <div class="content">
     <p>Hi there,</p>
     
-    <p>Great news! Your dedicated instance of The Lost Project has been successfully provisioned for <strong>${data.agencyName}</strong>.</p>
+    <p>Great news! Your dedicated instance of <strong>The Lost Project</strong> has been successfully provisioned for <strong>${data.agencyName}</strong>.</p>
     
-    <div class="credentials">
-      <h3>🔐 Your Login Credentials</h3>
-      
-      <div class="credential-item">
-        <div class="credential-label">Instance URL:</div>
-        <div class="credential-value">${data.instanceUrl}</div>
-      </div>
-      
-      <div class="credential-item">
-        <div class="credential-label">Email:</div>
-        <div class="credential-value">${data.adminEmail}</div>
-      </div>
-      
-      <div class="credential-item">
-        <div class="credential-label">Temporary Password:</div>
-        <div class="credential-value">${data.adminPassword}</div>
-      </div>
-    </div>
-    
-    <div class="warning">
-      <strong>⚠️ Important:</strong> Please change your password immediately after your first login for security reasons.
+    <div class="highlight">
+      <p><strong>⚡ One-Click Setup</strong></p>
+      <p>Click the button below to complete your setup. You'll create your password and be instantly logged in to your dashboard.</p>
     </div>
     
     <center>
-      <a href="${data.instanceUrl}" class="button">Access Your Dashboard →</a>
+      <a href="${setupUrl}" class="button">Complete Setup & Access Dashboard →</a>
     </center>
     
-    <h3>✨ What's Next?</h3>
+    <p style="text-align: center; color: #6b7280; font-size: 14px; margin-top: 30px;">
+      If the button doesn't work, copy and paste this link in your browser:<br>
+      <code style="background: #f3f4f6; padding: 8px 12px; border-radius: 4px; display: inline-block; margin-top: 10px; word-break: break-all; font-size: 12px;">${setupUrl}</code>
+    </p>
+    
+    <h2>✨ What's Next?</h2>
     <ul>
-      <li>Log in and change your password</li>
+      <li>Click the button above to set up your account</li>
+      <li>Create your password</li>
       <li>Set up your agency profile and branding</li>
       <li>Invite team members</li>
       <li>Create your first project</li>
     </ul>
     
-    <h3>📚 Resources</h3>
-    <ul>
-      <li><a href="${data.instanceUrl}/docs">Documentation</a></li>
-      <li><a href="${data.instanceUrl}/support">Support</a></li>
-    </ul>
+    <h2>📚 Need Help?</h2>
+    <p>If you have any questions or the button doesn't work, please reach out to our support team.</p>
     
-    <p>If you have any questions or need assistance, please don't hesitate to reach out to our support team.</p>
-    
-    <p>Best regards,<br>The Lost Project Team</p>
+    <p>Best regards,<br><strong>The Lost Project Team</strong></p>
   </div>
   
   <div class="footer">
@@ -183,7 +238,7 @@ export async function sendWelcomeEmail(data: WelcomeEmailData): Promise<void> {
     body: JSON.stringify({
       from: RESEND_FROM_EMAIL,
       to: data.adminEmail,
-      subject: `Welcome to The Lost Project - ${data.agencyName}`,
+      subject: `${data.agencyName} - Complete Your Setup`,
       html: htmlContent,
     }),
   });

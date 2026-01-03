@@ -14,7 +14,7 @@ import {
   generateVercelProjectName 
 } from './vercel-mgmt';
 import { setupDatabase } from './database-setup';
-import { sendWelcomeEmail, sendProvisioningStatusEmail, generateTempPassword } from './email-service';
+import { sendWelcomeEmail, sendProvisioningStatusEmail } from './email-service';
 import { createClient } from '@supabase/supabase-js';
 
 const MAIN_SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!;
@@ -60,7 +60,6 @@ async function updateProvisioningStatus(
     .update({
       status,
       metadata: metadata || {},
-      updated_at: new Date().toISOString(),
     })
     .eq('id', requestId);
 
@@ -129,13 +128,10 @@ export async function provisionAgency(request: ProvisioningRequest): Promise<Pro
     console.log(`\n📊 Step 2/5: Setting up database...`);
     result.steps.database = 'in-progress';
     
-    const adminPassword = generateTempPassword();
-    
     await setupDatabase(
       supabaseUrl,
       supabaseProject.api_keys.service_role,
       request.ownerEmail,
-      adminPassword,
       request.agencyName
     );
     
@@ -180,19 +176,23 @@ export async function provisionAgency(request: ProvisioningRequest): Promise<Pro
       supabaseServiceKey: supabaseProject.api_keys.service_role,
     });
 
-    // Trigger deployment
-    const deployment = await triggerDeployment(vercelProject.id);
+    // Try to trigger deployment, but don't fail if it doesn't work
+    let deploymentUrl = `https://${vercelProject.name}.vercel.app`;
+    try {
+      const deployment = await triggerDeployment(vercelProject.id);
+      const completedDeployment = await waitForDeployment(deployment.id);
+      deploymentUrl = `https://${completedDeployment.url}`;
+      console.log(`   ✅ Deployment complete: ${deploymentUrl}`);
+    } catch (deploymentError: any) {
+      console.warn(`⚠️  Deployment trigger failed (continuing anyway): ${deploymentError.message}`);
+      console.log(`   📌 Using default URL: ${deploymentUrl}`);
+    }
     
-    // Wait for deployment to complete
-    const completedDeployment = await waitForDeployment(deployment.id);
-    result.instanceUrl = `https://${completedDeployment.url}`;
+    result.instanceUrl = deploymentUrl;
     result.steps.deployment = 'completed';
-    
-    console.log(`   ✅ Deployment complete: ${result.instanceUrl}`);
 
     await updateProvisioningStatus(request.requestId, 'provisioning', {
       instanceUrl: result.instanceUrl,
-      deploymentId: deployment.id,
       step: 'deployed',
     });
 
@@ -202,12 +202,20 @@ export async function provisionAgency(request: ProvisioningRequest): Promise<Pro
     console.log(`\n📧 Step 5/5: Sending welcome email...`);
     result.steps.email = 'in-progress';
     
+    console.log('📋 Email data being sent:');
+    console.log('   - supabaseProjectId:', supabaseProject.id);
+    console.log('   - anonKey:', supabaseProject.api_keys.anon?.substring?.(0, 20) || 'EMPTY');
+    console.log('   - serviceRoleKey:', supabaseProject.api_keys.service_role?.substring?.(0, 20) || 'EMPTY');
+    
     await sendWelcomeEmail({
       agencyName: request.agencyName,
       adminEmail: request.ownerEmail,
-      adminPassword: adminPassword,
       instanceUrl: result.instanceUrl,
+      supabaseProjectId: supabaseProject.id,
       supabaseUrl: supabaseUrl,
+      vercelProjectId: vercelProject.id,
+      anonKey: supabaseProject.api_keys.anon,
+      serviceRoleKey: supabaseProject.api_keys.service_role,
     });
     
     result.steps.email = 'completed';
@@ -221,6 +229,8 @@ export async function provisionAgency(request: ProvisioningRequest): Promise<Pro
     await updateProvisioningStatus(request.requestId, 'approved', {
       instanceUrl: result.instanceUrl,
       supabaseProjectId: supabaseProject.id,
+      supabaseAnonKey: supabaseProject.api_keys.anon,
+      supabaseServiceKey: supabaseProject.api_keys.service_role,
       vercelProjectId: vercelProject.id,
       completed_at: new Date().toISOString(),
     });

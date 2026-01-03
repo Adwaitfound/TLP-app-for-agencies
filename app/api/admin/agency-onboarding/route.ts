@@ -22,7 +22,7 @@ export async function GET(request: Request) {
     const supabase = createServiceClient();
     const { data, error } = await supabase
       .from("agency_onboarding_requests")
-      .select("id, agency_name, admin_email, admin_name, website, plan, notes, status, created_at, updated_at")
+      .select("id, agency_name, admin_email, admin_name, website, plan, notes, status, created_at")
       .order("created_at", { ascending: false })
       .limit(200);
 
