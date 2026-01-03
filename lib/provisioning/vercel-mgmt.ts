@@ -9,8 +9,8 @@
 
 const VERCEL_TOKEN = process.env.VERCEL_TOKEN;
 const VERCEL_TEAM_ID = process.env.VERCEL_TEAM_ID; // Optional for teams
-const GITHUB_REPO_OWNER = process.env.GITHUB_REPO_OWNER;
-const GITHUB_REPO_NAME = process.env.GITHUB_REPO_NAME;
+const GITHUB_REPO_OWNER = 'Adwaitfound';
+const GITHUB_REPO_NAME = 'TLP-app-for-agencies';
 
 if (!VERCEL_TOKEN) {
   console.warn('⚠️  VERCEL_TOKEN not configured - deployment will fail');
@@ -88,14 +88,8 @@ export async function createVercelProject(
     outputDirectory: '.next',
   };
 
-  // Note: GitHub repo linking is skipped for now
-  // In production, each agency would get a fork or separate repo
-  // if (GITHUB_REPO_OWNER && GITHUB_REPO_NAME) {
-  //   payload.gitRepository = {
-  //     type: 'github',
-  //     repo: `${GITHUB_REPO_OWNER}/${GITHUB_REPO_NAME}`,
-  //   };
-  // }
+  // Note: Repo linking happens after project creation via Vercel dashboard
+  // Each project needs manual Git connection or we'd need GitHub App authentication
 
   const response = await fetch(url, {
     method: 'POST',
@@ -135,6 +129,49 @@ export async function createVercelProject(
   console.log(`✅ Vercel project created: ${project.id}`);
 
   return project;
+}
+
+/**
+ * Link GitHub repository to Vercel project
+ */
+export async function linkGitHubRepo(
+  projectId: string,
+  projectName: string
+): Promise<void> {
+  if (!VERCEL_TOKEN) {
+    throw new Error('VERCEL_TOKEN not configured');
+  }
+
+  console.log(`Linking GitHub repo to project ${projectName}...`);
+
+  const url = VERCEL_TEAM_ID
+    ? `https://api.vercel.com/v9/projects/${projectId}/link?teamId=${VERCEL_TEAM_ID}`
+    : `https://api.vercel.com/v9/projects/${projectId}/link`;
+
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${VERCEL_TOKEN}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      type: 'github',
+      repo: `${GITHUB_REPO_OWNER}/${GITHUB_REPO_NAME}`,
+      gitBranch: 'main',
+    }),
+  });
+
+  if (!response.ok) {
+    const error = await response.text();
+    console.warn(`⚠️  Could not link GitHub repo: ${error}`);
+    // Don't fail - we can link manually via dashboard
+    return;
+  }
+
+  console.log(`✅ GitHub repo linked to project`);
+  
+  // Wait a moment for Vercel to process the link
+  await new Promise(resolve => setTimeout(resolve, 2000));
 }
 
 /**
@@ -269,6 +306,35 @@ export async function triggerDeployment(
 
   console.log(`Triggering deployment for project ${projectId}`);
 
+  // First, get the project to find the linked repo ID
+  const projectUrl = VERCEL_TEAM_ID
+    ? `https://api.vercel.com/v9/projects/${projectId}?teamId=${VERCEL_TEAM_ID}`
+    : `https://api.vercel.com/v9/projects/${projectId}`;
+
+  const projectResponse = await fetch(projectUrl, {
+    headers: {
+      'Authorization': `Bearer ${VERCEL_TOKEN}`,
+    },
+  });
+
+  if (!projectResponse.ok) {
+    throw new Error('Failed to get project details for deployment');
+  }
+
+  const project = await projectResponse.json();
+  
+  console.log(`📋 Project link status:`, {
+    hasLink: !!project.link,
+    linkType: project.link?.type,
+    repoId: project.link?.repoId,
+    repo: project.link?.repo,
+  });
+  
+  if (!project.link || !project.link.repoId) {
+    throw new Error('Project does not have a linked GitHub repository. Link may still be processing.');
+  }
+
+  // Now trigger deployment with the repo ID
   const url = VERCEL_TEAM_ID
     ? `https://api.vercel.com/v13/deployments?teamId=${VERCEL_TEAM_ID}`
     : 'https://api.vercel.com/v13/deployments';
@@ -280,11 +346,12 @@ export async function triggerDeployment(
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-      name: projectId,
+      name: project.name,
+      project: projectId,
       gitSource: {
         type: 'github',
         ref: gitBranch,
-        repoId: `${GITHUB_REPO_OWNER}/${GITHUB_REPO_NAME}`,
+        repoId: project.link.repoId,
       },
       target: 'production',
     }),

@@ -11,6 +11,7 @@ import {
   setEnvironmentVariables, 
   triggerDeployment, 
   waitForDeployment,
+  linkGitHubRepo,
   generateVercelProjectName 
 } from './vercel-mgmt';
 import { setupDatabase } from './database-setup';
@@ -175,6 +176,9 @@ export async function provisionAgency(request: ProvisioningRequest): Promise<Pro
       supabaseAnonKey: supabaseProject.api_keys.anon,
       supabaseServiceKey: supabaseProject.api_keys.service_role,
     });
+
+    // Link GitHub repository
+    await linkGitHubRepo(vercelProject.id, vercelProject.name);
 
     // Try to trigger deployment, but don't fail if it doesn't work
     let deploymentUrl = `https://${vercelProject.name}.vercel.app`;
