@@ -90,7 +90,7 @@ export async function runMigrations(
         body: JSON.stringify({
           query: migration.sql,
         }),
-        signal: AbortSignal.timeout(60000), // 60 second timeout per migration
+        signal: AbortSignal.timeout(120000), // 120 second timeout per migration
       }
     );
 
