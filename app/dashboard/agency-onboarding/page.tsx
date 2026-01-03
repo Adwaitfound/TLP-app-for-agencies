@@ -488,4 +488,6 @@ export default function AgencyOnboardingAdminPage() {
             </Button>
           </DialogFooter>
         </DialogContent>
-      </Dialog>
+      </Dialog>    </div>
+  );
+}
