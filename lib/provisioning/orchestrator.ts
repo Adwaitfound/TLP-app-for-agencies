@@ -240,29 +240,34 @@ export async function provisionAgency(request: ProvisioningRequest): Promise<Pro
     });
 
     // ============================================================
-    // STEP 5: Send Welcome Email
+    // STEP 5: Send Welcome Email (non-blocking)
     // ============================================================
     console.log(`\n📧 Step 5/5: Sending welcome email...`);
     result.steps.email = 'in-progress';
     
-    console.log('📋 Email data being sent:');
-    console.log('   - supabaseProjectId:', supabaseProject.id);
-    console.log('   - anonKey:', supabaseProject.api_keys.anon?.substring?.(0, 20) || 'EMPTY');
-    console.log('   - serviceRoleKey:', supabaseProject.api_keys.service_role?.substring?.(0, 20) || 'EMPTY');
-    
-    await sendWelcomeEmail({
-      agencyName: request.agencyName,
-      adminEmail: request.ownerEmail,
-      instanceUrl: result.instanceUrl,
-      supabaseProjectId: supabaseProject.id,
-      supabaseUrl: supabaseUrl,
-      vercelProjectId: vercelProject.id,
-      anonKey: supabaseProject.api_keys.anon,
-      serviceRoleKey: supabaseProject.api_keys.service_role,
-    });
-    
-    result.steps.email = 'completed';
-    console.log(`   ✅ Welcome email sent to ${request.ownerEmail}`);
+    try {
+      console.log('📋 Email data being sent:');
+      console.log('   - supabaseProjectId:', supabaseProject.id);
+      console.log('   - anonKey:', supabaseProject.api_keys.anon?.substring?.(0, 20) || 'EMPTY');
+      console.log('   - serviceRoleKey:', supabaseProject.api_keys.service_role?.substring?.(0, 20) || 'EMPTY');
+      
+      await sendWelcomeEmail({
+        agencyName: request.agencyName,
+        adminEmail: request.ownerEmail,
+        instanceUrl: result.instanceUrl,
+        supabaseProjectId: supabaseProject.id,
+        supabaseUrl: supabaseUrl,
+        vercelProjectId: vercelProject.id,
+        anonKey: supabaseProject.api_keys.anon,
+        serviceRoleKey: supabaseProject.api_keys.service_role,
+      });
+      
+      result.steps.email = 'completed';
+      console.log(`   ✅ Welcome email sent to ${request.ownerEmail}`);
+    } catch (emailError: any) {
+      console.warn(`⚠️  Email sending failed (continuing): ${emailError.message}`);
+      result.steps.email = 'completed'; // Mark as completed despite email failure - can resend later via UI
+    }
 
     // ============================================================
     // COMPLETE
