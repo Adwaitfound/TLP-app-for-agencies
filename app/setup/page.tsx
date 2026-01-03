@@ -203,10 +203,10 @@ export default function SetupPage() {
 
             <button
               type="submit"
-              disabled={loading || step === 'processing'}
+              disabled={loading}
               className="w-full bg-indigo-600 text-white py-2 rounded-lg hover:bg-indigo-700 transition disabled:opacity-50 disabled:cursor-not-allowed font-medium"
             >
-              {loading || step === 'processing' ? (
+              {loading ? (
                 <span className="flex items-center justify-center gap-2">
                   <Loader2 className="w-4 h-4 animate-spin" />
                   Setting up...
