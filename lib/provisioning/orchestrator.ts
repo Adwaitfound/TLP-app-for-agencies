@@ -22,6 +22,7 @@ export interface ProvisioningRequest {
   agencyName: string;
   ownerEmail: string;
   ownerName: string;
+  tier?: 'standard' | 'premium';
 }
 
 export interface ProvisioningResult {
@@ -165,7 +166,8 @@ export async function provisionAgency(request: ProvisioningRequest): Promise<Pro
         supabaseUrl,
         supabaseServiceKey,
         request.ownerEmail,
-        request.agencyName
+        request.agencyName,
+        request.tier || 'standard'
       );
     } else {
       console.log(`   ♻️  Reusing existing admin user setup`);

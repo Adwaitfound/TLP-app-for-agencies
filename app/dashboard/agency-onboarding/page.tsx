@@ -6,6 +6,14 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Loader2, CheckCircle2, XCircle, Clock } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 interface RequestRow {
   id: string;
@@ -38,6 +46,9 @@ export default function AgencyOnboardingAdminPage() {
   const [rows, setRows] = useState<RequestRow[]>([]);
   const [actingId, setActingId] = useState<string | null>(null);
   const [provisioningStatus, setProvisioningStatus] = useState<Record<string, ProvisioningStatus>>({});
+  const [tierModalOpen, setTierModalOpen] = useState(false);
+  const [selectedTier, setSelectedTier] = useState<'standard' | 'premium'>('standard');
+  const [pendingRequestId, setPendingRequestId] = useState<string | null>(null);
 
   useEffect(() => {
     if (authLoading) return;
@@ -76,7 +87,17 @@ export default function AgencyOnboardingAdminPage() {
   }, [user, authLoading]);
 
   const approve = async (requestId: string, plan?: string) => {
-    setActingId(requestId);
+    // Open tier selection modal instead of directly approving
+    setPendingRequestId(requestId);
+    setSelectedTier('standard');
+    setTierModalOpen(true);
+  };
+
+  const confirmApproval = async () => {
+    if (!pendingRequestId) return;
+    
+    setActingId(pendingRequestId);
+    setTierModalOpen(false);
     try {
       const res = await fetch("/api/admin/agency-onboarding/approve", {
         method: "POST",
@@ -84,7 +105,7 @@ export default function AgencyOnboardingAdminPage() {
           "Content-Type": "application/json",
           "x-user-email": user?.email || "",
         },
-        body: JSON.stringify({ requestId }),
+        body: JSON.stringify({ requestId: pendingRequestId, tier: selectedTier }),
       });
       if (!res.ok) {
         const payload = await res.json().catch(() => ({}));
@@ -92,7 +113,7 @@ export default function AgencyOnboardingAdminPage() {
       }
       
       // Start polling for status
-      pollProvisioningStatus(requestId);
+      pollProvisioningStatus(pendingRequestId);
       
       // Refresh list
       const refreshed = await fetch("/api/admin/agency-onboarding", {
@@ -104,6 +125,7 @@ export default function AgencyOnboardingAdminPage() {
       setError(err?.message || "Unexpected error while approving");
     } finally {
       setActingId(null);
+      setPendingRequestId(null);
     }
   };
 
@@ -371,6 +393,99 @@ export default function AgencyOnboardingAdminPage() {
           </CardContent>
         </Card>
       )}
-    </div>
-  );
-}
+
+      {/* Tier Selection Modal */}
+      <Dialog open={tierModalOpen} onOpenChange={setTierModalOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Select Subscription Tier</DialogTitle>
+            <DialogDescription>
+              Choose the plan for this agency
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="grid gap-4 py-4">
+            {/* Standard Tier */}
+            <div 
+              onClick={() => setSelectedTier('standard')}
+              className={`relative p-4 border-2 rounded-lg cursor-pointer transition-colors ${
+                selectedTier === 'standard' 
+                  ? 'border-blue-500 bg-blue-50' 
+                  : 'border-gray-200 hover:border-gray-300'
+              }`}
+            >
+              <div className="flex items-start justify-between mb-2">
+                <div>
+                  <h3 className="font-bold text-lg">Standard</h3>
+                  <p className="text-sm text-gray-600">For small agencies</p>
+                </div>
+                <input 
+                  type="radio" 
+                  checked={selectedTier === 'standard'}
+                  onChange={() => setSelectedTier('standard')}
+                  className="mt-1"
+                />
+              </div>
+              <div className="space-y-2 text-sm text-gray-600">
+                <p>✓ 1 Admin</p>
+                <p>✓ 2 Employees</p>
+                <p>✓ 2 Clients</p>
+                <p>✓ Dashboard, Projects, All Clients, Team Members, All Files, Invoices, Settings</p>
+                <p className="text-xs text-gray-500 pt-2">Extra employees/clients available as paid add-ons</p>
+              </div>
+            </div>
+
+            {/* Premium Tier */}
+            <div 
+              onClick={() => setSelectedTier('premium')}
+              className={`relative p-4 border-2 rounded-lg cursor-pointer transition-colors ${
+                selectedTier === 'premium' 
+                  ? 'border-purple-500 bg-purple-50' 
+                  : 'border-gray-200 hover:border-gray-300'
+              }`}
+            >
+              <div className="flex items-start justify-between mb-2">
+                <div>
+                  <h3 className="font-bold text-lg">Premium</h3>
+                  <p className="text-sm text-gray-600">For growing agencies</p>
+                </div>
+                <input 
+                  type="radio" 
+                  checked={selectedTier === 'premium'}
+                  onChange={() => setSelectedTier('premium')}
+                  className="mt-1"
+                />
+              </div>
+              <div className="space-y-2 text-sm text-gray-600">
+                <p>✓ 2 Admins</p>
+                <p>✓ 4 Employees</p>
+                <p>✓ 4 Clients</p>
+                <p>✓ All Standard features</p>
+                <p>✓ Plus: Comments, Payments & Vendors, Analytics</p>
+                <p className="text-xs text-gray-500 pt-2">Extra employees/clients available as paid add-ons</p>
+              </div>
+            </div>
+          </div>
+
+          <DialogFooter className="gap-2">
+            <Button 
+              variant="outline" 
+              onClick={() => setTierModalOpen(false)}
+            >
+              Cancel
+            </Button>
+            <Button 
+              onClick={confirmApproval}
+              disabled={!pendingRequestId || actingId === pendingRequestId}
+            >
+              {actingId === pendingRequestId ? (
+                <span className="flex items-center gap-2">
+                  <Loader2 className="h-4 w-4 animate-spin" /> Starting...
+                </span>
+              ) : (
+                'Approve & Provision'
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>

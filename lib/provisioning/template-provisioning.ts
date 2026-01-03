@@ -230,9 +230,10 @@ export async function setupClonedDatabase(
   supabaseUrl: string,
   serviceRoleKey: string,
   adminEmail: string,
-  agencyName: string
+  agencyName: string,
+  tier: 'standard' | 'premium' = 'standard'
 ): Promise<void> {
-  console.log(`   🔨 Setting up schema and admin user...`);
+  console.log(`   🔨 Setting up schema and admin user (Tier: ${tier})...`);
 
   // Step 1: Run migrations to set up schema
   try {
@@ -282,7 +283,31 @@ export async function setupClonedDatabase(
 
   const userId = user?.user?.id;
 
-  // Step 3: Assign admin role to the user (optional - table may not exist)
+  // Step 3: Create agency entry with tier
+  console.log(`   🏢 Creating agency record with ${tier} tier...`);
+  try {
+    const tierConfig = tier === 'premium' 
+      ? { employee_seats: 4, client_seats: 4, admin_seats: 2 }
+      : { employee_seats: 2, client_seats: 2, admin_seats: 1 };
+
+    const { error: agencyError } = await supabase
+      .from('agencies')
+      .insert({
+        name: agencyName,
+        tier: tier,
+        ...tierConfig,
+      });
+
+    if (agencyError) {
+      console.warn(`⚠️  Could not create agency record: ${agencyError.message}`);
+    } else {
+      console.log(`   ✅ Agency created with ${tier} tier`);
+    }
+  } catch (err: any) {
+    console.warn(`⚠️  Could not create agency record: ${err.message}`);
+  }
+
+  // Step 4: Assign admin role to the user (optional - table may not exist)
   if (userId) {
     try {
       const { error: roleError } = await supabase

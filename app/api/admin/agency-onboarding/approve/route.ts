@@ -17,6 +17,7 @@ export async function POST(request: Request) {
 
     const body = await request.json().catch(() => null);
     const requestId = body?.requestId as string | undefined;
+    const tier = (body?.tier || 'standard') as 'standard' | 'premium';
 
     if (!requestId) {
       return NextResponse.json({ error: "requestId is required" }, { status: 400 });
@@ -42,10 +43,21 @@ export async function POST(request: Request) {
       }, { status: 400 });
     }
 
+    // Update the onboarding request with the selected tier
+    const { error: updateErr } = await supabase
+      .from("agency_onboarding_requests")
+      .update({ tier })
+      .eq("id", requestId);
+
+    if (updateErr) {
+      console.error("AGENCY_TIER_UPDATE_ERROR", { message: updateErr.message });
+    }
+
     console.log("AGENCY_APPROVED", {
       requestId,
       agencyName: reqRow.agency_name,
       adminEmail: reqRow.admin_email,
+      tier,
     });
 
     // Start provisioning in background
@@ -57,6 +69,7 @@ export async function POST(request: Request) {
           agencyName: reqRow.agency_name!,
           ownerEmail: reqRow.admin_email!,
           ownerName: reqRow.admin_name || 'Agency Admin',
+          tier,
         });
       } catch (error) {
         console.error('PROVISIONING_ERROR', error);
