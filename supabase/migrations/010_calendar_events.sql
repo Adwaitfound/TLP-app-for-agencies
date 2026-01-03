@@ -18,16 +18,20 @@ create table if not exists public.calendar_events (
 alter table public.calendar_events enable row level security;
 
 -- Basic policies: owner or authenticated can read/write for their org; simplistic for now
-create policy if not exists "calendar_events read" on public.calendar_events
+drop policy if exists "calendar_events read" on public.calendar_events;
+create policy "calendar_events read" on public.calendar_events
   for select to authenticated using (true);
 
-create policy if not exists "calendar_events insert" on public.calendar_events
+drop policy if exists "calendar_events insert" on public.calendar_events;
+create policy "calendar_events insert" on public.calendar_events
   for insert to authenticated with check (true);
 
-create policy if not exists "calendar_events update" on public.calendar_events
+drop policy if exists "calendar_events update" on public.calendar_events;
+create policy "calendar_events update" on public.calendar_events
   for update to authenticated using (true) with check (true);
 
-create policy if not exists "calendar_events delete" on public.calendar_events
+drop policy if exists "calendar_events delete" on public.calendar_events;
+create policy "calendar_events delete" on public.calendar_events
   for delete to authenticated using (true);
 
 -- Helpful index
