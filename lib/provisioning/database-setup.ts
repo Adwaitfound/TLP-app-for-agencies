@@ -46,42 +46,38 @@ export function getMigrationFiles(migrationsDir?: string): MigrationFile[] {
 }
 
 /**
- * Run a single migration on a Supabase project
+ * Run a single migration on a Supabase project using direct database connection
  */
 async function runMigration(
-  supabaseUrl: string,
+  projectRef: string,
   serviceRoleKey: string,
   migration: MigrationFile
 ): Promise<void> {
   console.log(`   Running migration: ${migration.filename}`);
 
-  const supabase = createClient(supabaseUrl, serviceRoleKey, {
-    auth: {
-      autoRefreshToken: false,
-      persistSession: false,
-    },
-  });
+  const supabaseAccessToken = process.env.SUPABASE_ACCESS_TOKEN;
+  if (!supabaseAccessToken) {
+    throw new Error('SUPABASE_ACCESS_TOKEN not configured');
+  }
 
-  // Execute the SQL using the service role client
-  const { error } = await supabase.rpc('exec_sql', { sql: migration.sql });
-
-  if (error) {
-    // If exec_sql RPC doesn't exist, try direct SQL execution (Postgres REST API)
-    const response = await fetch(`${supabaseUrl}/rest/v1/rpc/exec`, {
+  // Use Supabase Management API to execute SQL
+  const response = await fetch(
+    `https://api.supabase.com/v1/projects/${projectRef}/database/query`,
+    {
       method: 'POST',
       headers: {
-        'apikey': serviceRoleKey,
-        'Authorization': `Bearer ${serviceRoleKey}`,
+        'Authorization': `Bearer ${supabaseAccessToken}`,
         'Content-Type': 'application/json',
-        'Prefer': 'return=minimal',
       },
-      body: JSON.stringify({ query: migration.sql }),
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(`Migration ${migration.filename} failed: ${errorText}`);
+      body: JSON.stringify({
+        query: migration.sql,
+      }),
     }
+  );
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`Migration ${migration.filename} failed: ${errorText}`);
   }
 
   console.log(`      ✓ Completed: ${migration.filename}`);
@@ -90,12 +86,12 @@ async function runMigration(
 /**
  * Run all migrations on a newly created Supabase project
  * 
- * @param supabaseUrl - The Supabase project URL
+ * @param projectRef - The Supabase project reference ID (e.g., "ruuthrmevllgwrizedfy")
  * @param serviceRoleKey - The service role key (has admin permissions)
  * @param migrationsDir - Optional custom migrations directory
  */
 export async function runMigrations(
-  supabaseUrl: string,
+  projectRef: string,
   serviceRoleKey: string,
   migrationsDir?: string
 ): Promise<void> {
@@ -112,7 +108,7 @@ export async function runMigrations(
 
   // Run migrations sequentially
   for (const migration of migrations) {
-    await runMigration(supabaseUrl, serviceRoleKey, migration);
+    await runMigration(projectRef, serviceRoleKey, migration);
   }
 
   console.log(`✅ All migrations completed successfully`);
@@ -230,13 +226,19 @@ export async function setupDatabase(
 ): Promise<{ userId: string; email: string }> {
   console.log(`\n📦 Setting up database for ${agencyName}...`);
 
-  // TODO: Skip migrations for now - they require a special RPC function
-  // In production, these would be run via the Supabase CLI or a dedicated migration service
-  console.log(`   ⏭️  Skipping migrations (use Supabase CLI: supabase db push --project-ref ${supabaseUrl.split('//')[1].split('.')[0]})`);
+  // Extract project reference from URL (e.g., "https://abc123.supabase.co" -> "abc123")
+  const projectRef = supabaseUrl.split('//')[1].split('.')[0];
 
-  // For now, just return a placeholder admin user
-  // In production, you'd create the actual auth user here
-  console.log(`✅ Database setup complete (migrations skipped - run manually via Supabase CLI)\n`);
+  // Run migrations automatically
+  try {
+    await runMigrations(projectRef, serviceRoleKey);
+  } catch (error: any) {
+    console.error(`❌ Migration failed: ${error.message}`);
+    console.log(`   You can run migrations manually: supabase db push --project-ref ${projectRef}`);
+    throw error;
+  }
+
+  console.log(`✅ Database setup complete (all migrations applied)\n`);
 
   return {
     userId: 'placeholder-id',
