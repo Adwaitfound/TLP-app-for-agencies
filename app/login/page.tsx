@@ -57,8 +57,13 @@ export default function LoginPage() {
         router.push("/dashboard");
       } else if (authContextUser.role === "client") {
         router.push("/dashboard/client");
-      } else {
+      } else if (authContextUser.role === "employee") {
         router.push("/dashboard/employee");
+      } else if (authContextUser.role === "project_manager") {
+        router.push("/dashboard");
+      } else {
+        // Default for any other role
+        router.push("/dashboard");
       }
     }
   }, [authContextUser, authLoading, router]);
@@ -322,8 +327,13 @@ export default function LoginPage() {
         redirectPath = "/dashboard";
       } else if (userData.role === "client") {
         redirectPath = "/dashboard/client";
-      } else {
+      } else if (userData.role === "employee") {
         redirectPath = "/dashboard/employee";
+      } else if (userData.role === "project_manager") {
+        redirectPath = "/dashboard";
+      } else {
+        // Default for any other role
+        redirectPath = "/dashboard";
       }
       
       console.log("Login successful, redirecting to:", redirectPath);
