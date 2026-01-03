@@ -99,28 +99,55 @@ export async function provisionAgency(request: ProvisioningRequest): Promise<Pro
   console.log(`${'='.repeat(60)}\n`);
 
   try {
+    // Check for existing projects in metadata
+    const supabase = createClient(MAIN_SUPABASE_URL, MAIN_SERVICE_KEY);
+    const { data: existingRequest } = await supabase
+      .from('agency_onboarding_requests')
+      .select('metadata')
+      .eq('id', request.requestId)
+      .single();
+
+    const existingMetadata = existingRequest?.metadata || {};
+    
     // Update status to provisioning
     await updateProvisioningStatus(request.requestId, 'provisioning', {
       started_at: new Date().toISOString(),
     });
 
     // ============================================================
-    // STEP 1: Create Supabase Project
+    // STEP 1: Create or Reuse Supabase Project
     // ============================================================
-    console.log(`\n📦 Step 1/5: Creating Supabase project...`);
+    console.log(`\n📦 Step 1/5: Setting up Supabase project...`);
     result.steps.supabaseProject = 'in-progress';
     
-    const supabaseProject = await createSupabaseProject(request.agencyName);
+    let supabaseProject;
+    let supabaseUrl;
+    
+    if (existingMetadata.supabaseProjectId && existingMetadata.supabaseAnonKey && existingMetadata.supabaseServiceKey) {
+      console.log(`   ♻️  Reusing existing Supabase project: ${existingMetadata.supabaseProjectId}`);
+      supabaseProject = {
+        id: existingMetadata.supabaseProjectId,
+        api_keys: {
+          anon: existingMetadata.supabaseAnonKey,
+          service_role: existingMetadata.supabaseServiceKey,
+        }
+      };
+      supabaseUrl = getProjectUrl(supabaseProject.id);
+      console.log(`   ✅ Supabase project ready (existing): ${supabaseUrl}`);
+    } else {
+      console.log(`   🆕 Creating new Supabase project...`);
+      supabaseProject = await createSupabaseProject(request.agencyName);
+      supabaseUrl = getProjectUrl(supabaseProject.id);
+      console.log(`   ✅ Supabase project created: ${supabaseUrl}`);
+    }
+    
     result.supabaseProjectId = supabaseProject.id;
     result.steps.supabaseProject = 'completed';
-    
-    const supabaseUrl = getProjectUrl(supabaseProject.id);
-    console.log(`   ✅ Supabase project ready: ${supabaseUrl}`);
 
     await updateProvisioningStatus(request.requestId, 'provisioning', {
       supabaseProjectId: supabaseProject.id,
       supabaseUrl,
-      step: 'supabase_created',
+      step: 'supabase_ready',
     });
 
     // ============================================================
@@ -146,20 +173,32 @@ export async function provisionAgency(request: ProvisioningRequest): Promise<Pro
     });
 
     // ============================================================
-    // STEP 3: Create Vercel Project
+    // STEP 3: Create or Reuse Vercel Project
     // ============================================================
-    console.log(`\n☁️  Step 3/5: Creating Vercel project...`);
+    console.log(`\n☁️  Step 3/5: Setting up Vercel project...`);
     result.steps.vercelProject = 'in-progress';
     
-    const vercelProject = await createVercelProject(request.agencyName);
+    let vercelProject;
+    
+    if (existingMetadata.vercelProjectId && existingMetadata.instanceUrl) {
+      console.log(`   ♻️  Reusing existing Vercel project: ${existingMetadata.vercelProjectId}`);
+      vercelProject = {
+        id: existingMetadata.vercelProjectId,
+        name: existingMetadata.instanceUrl.replace('https://', '').replace('.vercel.app', ''),
+      };
+      console.log(`   ✅ Vercel project ready (existing): ${vercelProject.name}`);
+    } else {
+      console.log(`   🆕 Creating new Vercel project...`);
+      vercelProject = await createVercelProject(request.agencyName);
+      console.log(`   ✅ Vercel project created: ${vercelProject.name}`);
+    }
+    
     result.vercelProjectId = vercelProject.id;
     result.steps.vercelProject = 'completed';
-    
-    console.log(`   ✅ Vercel project created: ${vercelProject.name}`);
 
     await updateProvisioningStatus(request.requestId, 'provisioning', {
       vercelProjectId: vercelProject.id,
-      step: 'vercel_created',
+      step: 'vercel_ready',
     });
 
     // ============================================================
