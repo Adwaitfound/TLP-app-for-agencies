@@ -46,76 +46,6 @@ export function getMigrationFiles(migrationsDir?: string): MigrationFile[] {
 }
 
 /**
- * Split large SQL into smaller batches based on statements
- */
-function splitSqlIntoBatches(sql: string, maxStatementsPerBatch: number = 10): string[] {
-  // Split by semicolons to get individual statements
-  const statements = sql
-    .split(';')
-    .map(s => s.trim())
-    .filter(s => s.length > 0 && !s.startsWith('--'));
-
-  const batches: string[] = [];
-  for (let i = 0; i < statements.length; i += maxStatementsPerBatch) {
-    const batch = statements.slice(i, i + maxStatementsPerBatch).join(';\n') + ';';
-    batches.push(batch);
-  }
-
-  return batches.length > 0 ? batches : [sql];
-}
-
-/**
- * Run a single migration on a Supabase project using direct database connection
- */
-async function runMigration(
-  projectRef: string,
-  serviceRoleKey: string,
-  migration: MigrationFile
-): Promise<void> {
-  console.log(`   Running migration: ${migration.filename}`);
-
-  const supabaseAccessToken = process.env.SUPABASE_ACCESS_TOKEN;
-  if (!supabaseAccessToken) {
-    throw new Error('SUPABASE_ACCESS_TOKEN not configured');
-  }
-
-  // Split large migrations into smaller batches
-  const batches = splitSqlIntoBatches(migration.sql, 15);
-  console.log(`      Executing in ${batches.length} batch(es)...`);
-
-  for (let i = 0; i < batches.length; i++) {
-    const batch = batches[i];
-    
-    // Use Supabase Management API to execute SQL
-    const response = await fetch(
-      `https://api.supabase.com/v1/projects/${projectRef}/database/query`,
-      {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${supabaseAccessToken}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          query: batch,
-        }),
-        signal: AbortSignal.timeout(30000), // 30 second timeout per batch
-      }
-    );
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(`Migration ${migration.filename} batch ${i + 1}/${batches.length} failed: ${errorText}`);
-    }
-
-    if (batches.length > 1) {
-      console.log(`      ✓ Batch ${i + 1}/${batches.length} complete`);
-    }
-  }
-
-  console.log(`      ✓ Completed: ${migration.filename}`);
-}
-
-/**
  * Run all migrations on a newly created Supabase project
  * 
  * @param projectRef - The Supabase project reference ID (e.g., "ruuthrmevllgwrizedfy")
@@ -138,9 +68,34 @@ export async function runMigrations(
 
   console.log(`   Found ${migrations.length} migration(s)`);
 
-  // Run migrations sequentially
-  for (const migration of migrations) {
-    await runMigration(projectRef, serviceRoleKey, migration);
+  // Combine all migrations into one SQL script
+  const combinedSql = migrations.map(m => m.sql).join('\n\n');
+  console.log(`   Executing all migrations as combined script...`);
+
+  const supabaseAccessToken = process.env.SUPABASE_ACCESS_TOKEN;
+  if (!supabaseAccessToken) {
+    throw new Error('SUPABASE_ACCESS_TOKEN not configured');
+  }
+
+  // Execute the combined SQL
+  const response = await fetch(
+    `https://api.supabase.com/v1/projects/${projectRef}/database/query`,
+    {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${supabaseAccessToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        query: combinedSql,
+      }),
+      signal: AbortSignal.timeout(120000), // 2 minute timeout for all migrations
+    }
+  );
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`Combined migrations failed: ${errorText}`);
   }
 
   console.log(`✅ All migrations completed successfully`);
