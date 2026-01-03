@@ -5,16 +5,12 @@
  * It handles the workflow of creating a new agency instance from start to finish.
  */
 
-import { createSupabaseProject, getProjectUrl, waitForProjectReady } from './supabase-mgmt';
-import { 
-  createVercelProject, 
-  setEnvironmentVariables, 
-  triggerDeployment, 
-  waitForDeployment,
-  linkGitHubRepo,
-  generateVercelProjectName 
-} from './vercel-mgmt';
-import { setupDatabase } from './database-setup';
+import {
+  cloneSupabaseProject,
+  cloneVercelProject,
+  setupClonedDatabase,
+  getSupabaseUrl,
+} from './template-provisioning';
 import { sendWelcomeEmail, sendProvisioningStatusEmail } from './email-service';
 import { createClient } from '@supabase/supabase-js';
 
@@ -115,57 +111,69 @@ export async function provisionAgency(request: ProvisioningRequest): Promise<Pro
     });
 
     // ============================================================
-    // STEP 1: Create or Reuse Supabase Project
+    // STEP 1: Clone Supabase Project from Template
     // ============================================================
-    console.log(`\n📦 Step 1/5: Setting up Supabase project...`);
+    console.log(`\n📦 Step 1/5: Cloning Supabase project from template...`);
     result.steps.supabaseProject = 'in-progress';
     
-    let supabaseProject;
-    let supabaseUrl;
+    let supabaseProjectId: string;
+    let supabaseUrl: string;
+    let supabaseAnonKey: string;
+    let supabaseServiceKey: string;
     
-    if (existingMetadata.supabaseProjectId && existingMetadata.supabaseAnonKey && existingMetadata.supabaseServiceKey) {
-      console.log(`   ♻️  Reusing existing Supabase project: ${existingMetadata.supabaseProjectId}`);
-      supabaseProject = {
-        id: existingMetadata.supabaseProjectId,
-        api_keys: {
-          anon: existingMetadata.supabaseAnonKey,
-          service_role: existingMetadata.supabaseServiceKey,
-        }
-      };
-      supabaseUrl = getProjectUrl(supabaseProject.id);
+    if (
+      existingMetadata.supabaseProjectId &&
+      existingMetadata.supabaseAnonKey &&
+      existingMetadata.supabaseServiceKey
+    ) {
+      console.log(
+        `   ♻️  Reusing existing Supabase project: ${existingMetadata.supabaseProjectId}`
+      );
+      supabaseProjectId = existingMetadata.supabaseProjectId;
+      supabaseUrl = getSupabaseUrl(existingMetadata.supabaseProjectId);
+      supabaseAnonKey = existingMetadata.supabaseAnonKey;
+      supabaseServiceKey = existingMetadata.supabaseServiceKey;
       console.log(`   ✅ Supabase project ready (existing): ${supabaseUrl}`);
     } else {
-      console.log(`   🆕 Creating new Supabase project...`);
-      supabaseProject = await createSupabaseProject(request.agencyName);
-      supabaseUrl = getProjectUrl(supabaseProject.id);
-      console.log(`   ✅ Supabase project created: ${supabaseUrl}`);
+      console.log(`   🔄 Cloning template Supabase project...`);
+      const newProject = await cloneSupabaseProject(request.agencyName);
+      supabaseProjectId = newProject.id;
+      supabaseUrl = getSupabaseUrl(newProject.id);
+      supabaseAnonKey = newProject.api_keys.anon;
+      supabaseServiceKey = newProject.api_keys.service_role;
+      console.log(`   ✅ Supabase project cloned: ${supabaseUrl}`);
     }
-    
-    result.supabaseProjectId = supabaseProject.id;
+
+    result.supabaseProjectId = supabaseProjectId;
     result.steps.supabaseProject = 'completed';
 
     await updateProvisioningStatus(request.requestId, 'provisioning', {
-      supabaseProjectId: supabaseProject.id,
+      supabaseProjectId,
       supabaseUrl,
       step: 'supabase_ready',
     });
 
     // ============================================================
-    // STEP 2: Set Up Database
+    // STEP 2: Set Up Admin User (Minimal Setup)
     // ============================================================
-    console.log(`\n📊 Step 2/5: Setting up database...`);
+    console.log(`\n📊 Step 2/5: Setting up admin user...`);
     result.steps.database = 'in-progress';
-    
-    await setupDatabase(
-      supabaseUrl,
-      supabaseProject.api_keys.service_role,
-      request.ownerEmail,
-      request.agencyName
-    );
-    
+
+    if (!existingMetadata.supabaseProjectId) {
+      // Only set up if this is a new project
+      await setupClonedDatabase(
+        supabaseUrl,
+        supabaseServiceKey,
+        request.ownerEmail,
+        request.agencyName
+      );
+    } else {
+      console.log(`   ♻️  Reusing existing admin user setup`);
+    }
+
     result.adminEmail = request.ownerEmail;
     result.steps.database = 'completed';
-    console.log(`   ✅ Database configured with admin user`);
+    console.log(`   ✅ Admin user configured`);
 
     await updateProvisioningStatus(request.requestId, 'provisioning', {
       step: 'database_configured',
@@ -173,69 +181,57 @@ export async function provisionAgency(request: ProvisioningRequest): Promise<Pro
     });
 
     // ============================================================
-    // STEP 3: Create or Reuse Vercel Project
+    // STEP 3: Clone Vercel Project from Template
     // ============================================================
-    console.log(`\n☁️  Step 3/5: Setting up Vercel project...`);
+    console.log(`\n☁️  Step 3/5: Cloning Vercel project from template...`);
     result.steps.vercelProject = 'in-progress';
-    
-    let vercelProject;
-    
+
+    let vercelProjectId: string;
+    let vercelProjectName: string;
+
     if (existingMetadata.vercelProjectId && existingMetadata.instanceUrl) {
-      console.log(`   ♻️  Reusing existing Vercel project: ${existingMetadata.vercelProjectId}`);
-      vercelProject = {
-        id: existingMetadata.vercelProjectId,
-        name: existingMetadata.instanceUrl.replace('https://', '').replace('.vercel.app', ''),
-      };
-      console.log(`   ✅ Vercel project ready (existing): ${vercelProject.name}`);
+      console.log(
+        `   ♻️  Reusing existing Vercel project: ${existingMetadata.vercelProjectId}`
+      );
+      vercelProjectId = existingMetadata.vercelProjectId;
+      vercelProjectName = existingMetadata.instanceUrl
+        .replace('https://', '')
+        .replace('.vercel.app', '');
+      console.log(`   ✅ Vercel project ready (existing)`);
     } else {
-      console.log(`   🆕 Creating new Vercel project...`);
-      vercelProject = await createVercelProject(request.agencyName);
-      console.log(`   ✅ Vercel project created: ${vercelProject.name}`);
+      console.log(`   🔄 Cloning template Vercel project...`);
+      const newProject = await cloneVercelProject(
+        request.agencyName,
+        supabaseProjectId,
+        supabaseUrl,
+        supabaseAnonKey
+      );
+      vercelProjectId = newProject.id;
+      vercelProjectName = newProject.name;
+      console.log(`   ✅ Vercel project cloned: ${newProject.url}`);
     }
-    
-    result.vercelProjectId = vercelProject.id;
+
+    result.vercelProjectId = vercelProjectId;
     result.steps.vercelProject = 'completed';
 
     await updateProvisioningStatus(request.requestId, 'provisioning', {
-      vercelProjectId: vercelProject.id,
+      vercelProjectId,
       step: 'vercel_ready',
     });
 
     // ============================================================
-    // STEP 4: Configure & Deploy
+    // STEP 4: Wait for Vercel Deployment
     // ============================================================
-    console.log(`\n🔧 Step 4/5: Configuring environment and deploying...`);
+    console.log(`\n🚀 Step 4/5: Waiting for deployment...`);
     result.steps.deployment = 'in-progress';
-    
-    // Set environment variables
-    await setEnvironmentVariables(vercelProject.id, {
-      projectName: vercelProject.name,
-      agencyName: request.agencyName,
-      supabaseUrl: supabaseUrl,
-      supabaseAnonKey: supabaseProject.api_keys.anon,
-      supabaseServiceKey: supabaseProject.api_keys.service_role,
-    });
 
-    // Link GitHub repository
-    await linkGitHubRepo(vercelProject.id, vercelProject.name);
-
-    // Try to trigger deployment, but don't fail if it doesn't work
-    let deploymentUrl = `https://${vercelProject.name}.vercel.app`;
-    try {
-      const deployment = await triggerDeployment(vercelProject.id);
-      const completedDeployment = await waitForDeployment(deployment.id);
-      deploymentUrl = `https://${completedDeployment.url}`;
-      console.log(`   ✅ Deployment complete: ${deploymentUrl}`);
-    } catch (deploymentError: any) {
-      console.warn(`⚠️  Deployment trigger failed (continuing anyway): ${deploymentError.message}`);
-      console.log(`   📌 Using default URL: ${deploymentUrl}`);
-    }
-    
-    result.instanceUrl = deploymentUrl;
+    const instanceUrl = `https://${vercelProjectName}.vercel.app`;
+    result.instanceUrl = instanceUrl;
     result.steps.deployment = 'completed';
+    console.log(`   ✅ Instance ready at: ${instanceUrl}`);
 
     await updateProvisioningStatus(request.requestId, 'provisioning', {
-      instanceUrl: result.instanceUrl,
+      instanceUrl,
       step: 'deployed',
     });
 
@@ -244,24 +240,19 @@ export async function provisionAgency(request: ProvisioningRequest): Promise<Pro
     // ============================================================
     console.log(`\n📧 Step 5/5: Sending welcome email...`);
     result.steps.email = 'in-progress';
-    
+
     try {
-      console.log('📋 Email data being sent:');
-      console.log('   - supabaseProjectId:', supabaseProject.id);
-      console.log('   - anonKey:', supabaseProject.api_keys.anon?.substring?.(0, 20) || 'EMPTY');
-      console.log('   - serviceRoleKey:', supabaseProject.api_keys.service_role?.substring?.(0, 20) || 'EMPTY');
-      
       await sendWelcomeEmail({
         agencyName: request.agencyName,
         adminEmail: request.ownerEmail,
         instanceUrl: result.instanceUrl,
-        supabaseProjectId: supabaseProject.id,
-        supabaseUrl: supabaseUrl,
-        vercelProjectId: vercelProject.id,
-        anonKey: supabaseProject.api_keys.anon,
-        serviceRoleKey: supabaseProject.api_keys.service_role,
+        supabaseProjectId,
+        supabaseUrl,
+        vercelProjectId,
+        anonKey: supabaseAnonKey,
+        serviceRoleKey: supabaseServiceKey,
       });
-      
+
       result.steps.email = 'completed';
       console.log(`   ✅ Welcome email sent to ${request.ownerEmail}`);
     } catch (emailError: any) {
@@ -276,10 +267,10 @@ export async function provisionAgency(request: ProvisioningRequest): Promise<Pro
     
     await updateProvisioningStatus(request.requestId, 'approved', {
       instanceUrl: result.instanceUrl,
-      supabaseProjectId: supabaseProject.id,
-      supabaseAnonKey: supabaseProject.api_keys.anon,
-      supabaseServiceKey: supabaseProject.api_keys.service_role,
-      vercelProjectId: vercelProject.id,
+      supabaseProjectId,
+      supabaseAnonKey,
+      supabaseServiceKey,
+      vercelProjectId,
       completed_at: new Date().toISOString(),
     });
 
