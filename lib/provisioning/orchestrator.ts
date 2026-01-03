@@ -250,27 +250,19 @@ export async function provisionAgency(request: ProvisioningRequest): Promise<Pro
     console.log('   - anonKey:', supabaseProject.api_keys.anon?.substring?.(0, 20) || 'EMPTY');
     console.log('   - serviceRoleKey:', supabaseProject.api_keys.service_role?.substring?.(0, 20) || 'EMPTY');
     
-    try {
-      await sendWelcomeEmail({
-        agencyName: request.agencyName,
-        adminEmail: request.ownerEmail,
-        instanceUrl: result.instanceUrl,
-        supabaseProjectId: supabaseProject.id,
-        supabaseUrl: supabaseUrl,
-        vercelProjectId: vercelProject.id,
-        anonKey: supabaseProject.api_keys.anon,
-        serviceRoleKey: supabaseProject.api_keys.service_role,
-      });
-      
-      result.steps.email = 'completed';
-      console.log(`   ✅ Welcome email sent to ${request.ownerEmail}`);
-    } catch (emailError: any) {
-      console.warn(`   ⚠️  Email sending failed (non-blocking): ${emailError.message}`);
-      console.warn(`   💡 User can access instance directly at: ${result.instanceUrl}`);
-      // Mark email step failed but do not halt provisioning
-      result.steps.email = 'failed';
-      // Don't throw - email failure shouldn't block provisioning
-    }
+    await sendWelcomeEmail({
+      agencyName: request.agencyName,
+      adminEmail: request.ownerEmail,
+      instanceUrl: result.instanceUrl,
+      supabaseProjectId: supabaseProject.id,
+      supabaseUrl: supabaseUrl,
+      vercelProjectId: vercelProject.id,
+      anonKey: supabaseProject.api_keys.anon,
+      serviceRoleKey: supabaseProject.api_keys.service_role,
+    });
+    
+    result.steps.email = 'completed';
+    console.log(`   ✅ Welcome email sent to ${request.ownerEmail}`);
 
     // ============================================================
     // COMPLETE
