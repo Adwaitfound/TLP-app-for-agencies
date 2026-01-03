@@ -21,10 +21,10 @@ export default function DashboardPage() {
     // Redirect based on user role from Supabase
     if (user.role === "client") {
       router.replace("/dashboard/client");
-    } else if (user.role === "employee" || user.role === "project_manager") {
+    } else if (user.role === "employee") {
       router.replace("/dashboard/employee");
     }
-    // Admin stays on this page (admin-view)
+    // Admin and project_manager stay on this page (admin-view)
   }, [authLoading, user, router]);
 
   if (authLoading) {
@@ -35,8 +35,8 @@ export default function DashboardPage() {
     );
   }
 
-  // Only show admin dashboard for admin role
-  if (user?.role === "admin") {
+  // Show admin dashboard for admin and project_manager roles
+  if (user?.role === "admin" || user?.role === "project_manager") {
     return <AdminDashboard />;
   }
 
