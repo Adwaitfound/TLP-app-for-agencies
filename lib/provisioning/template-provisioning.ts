@@ -41,8 +41,13 @@ interface ClonedVercelProject {
 /**
  * Clone a Supabase project from the template
  * 
- * This creates a new Supabase project with the same schema, migrations, and configuration
- * as the template project. It's much faster than running migrations from scratch.
+ * This creates a new Supabase project with the same schema and configuration
+ * as the template project, but WITHOUT the data.
+ * 
+ * Process:
+ * 1. Create new empty project in same region
+ * 2. Get API keys
+ * 3. (Schema setup happens in setupClonedDatabase via migrations)
  */
 export async function cloneSupabaseProject(
   agencyName: string
@@ -51,26 +56,28 @@ export async function cloneSupabaseProject(
     throw new Error('Missing SUPABASE_ACCESS_TOKEN or SUPABASE_ORG_ID');
   }
 
-  console.log(`   🔄 Cloning Supabase template project for: ${agencyName}`);
+  console.log(`   🔄 Creating new Supabase project for: ${agencyName}`);
 
-  // Step 1: Get the template project details
-  const templateResp = await fetch(
-    `https://api.supabase.com/v1/projects/${TEMPLATE_SUPABASE_PROJECT_ID}`,
-    {
-      headers: {
-        Authorization: `Bearer ${SUPABASE_ACCESS_TOKEN}`,
-      },
-    }
-  );
-
-  if (!templateResp.ok) {
-    throw new Error(
-      `Failed to fetch template project: ${templateResp.statusText}`
+  // Step 1: Get the template project details (for region info)
+  let templateRegion = 'ap-northeast-2';
+  try {
+    const templateResp = await fetch(
+      `https://api.supabase.com/v1/projects/${TEMPLATE_SUPABASE_PROJECT_ID}`,
+      {
+        headers: {
+          Authorization: `Bearer ${SUPABASE_ACCESS_TOKEN}`,
+        },
+      }
     );
-  }
 
-  const templateProject = await templateResp.json();
-  console.log(`   ✅ Retrieved template project details`);
+    if (templateResp.ok) {
+      const templateProject = await templateResp.json();
+      templateRegion = templateProject.region || 'ap-northeast-2';
+      console.log(`   ℹ️  Using region: ${templateRegion}`);
+    }
+  } catch (err) {
+    console.warn(`   ⚠️  Could not fetch template region, using default`);
+  }
 
   // Step 2: Create a new project with the same region
   const projectName = `${agencyName.toLowerCase().replace(/\s+/g, '-')}-${Date.now().toString(36).slice(-4)}`;
@@ -84,8 +91,8 @@ export async function cloneSupabaseProject(
     body: JSON.stringify({
       name: projectName,
       organization_id: SUPABASE_ORG_ID,
-      region: templateProject.region || 'ap-northeast-2',
-      plan: 'pro', // Match template's plan
+      region: templateRegion,
+      plan: 'pro',
       db_pass: generateSecurePassword(),
     }),
   });
@@ -156,10 +163,7 @@ export async function cloneSupabaseProject(
   }
 
   console.log(`   ✅ API keys generated`);
-
-  // Step 5: Restore the database from template (if Supabase backup/restore is available)
-  // For now, we'll note that the database is empty and will be seeded
-  console.log(`   ℹ️  Note: Database is new. Will be seeded with initial schema.`);
+  console.log(`   ℹ️  Schema will be set up in the next step`);
 
   return {
     id: newProject.id,
@@ -299,11 +303,12 @@ export async function cloneVercelProject(
 }
 
 /**
- * Run basic database schema setup (minimal)
+ * Set up database schema and admin user for cloned project
  * 
- * Since we're cloning from template, we just need to:
- * 1. Verify the schema is there
- * 2. Create admin user
+ * This:
+ * 1. Runs all migrations to set up schema (same as main project)
+ * 2. Creates admin user for the agency
+ * 3. Assigns admin role with full permissions
  */
 export async function setupClonedDatabase(
   supabaseUrl: string,
@@ -311,43 +316,81 @@ export async function setupClonedDatabase(
   adminEmail: string,
   agencyName: string
 ): Promise<void> {
-  console.log(`   🔐 Setting up admin user in cloned database...`);
+  console.log(`   🔨 Setting up schema and admin user...`);
 
+  // Step 1: Run migrations to set up schema
+  try {
+    console.log(`   📊 Running migrations to set up schema...`);
+    
+    // Extract project reference from URL (e.g., "https://abc123.supabase.co" -> "abc123")
+    const projectRef = supabaseUrl.split('//')[1].split('.')[0];
+    
+    // Import and run migrations
+    const { runMigrations } = await import('./database-setup');
+    await runMigrations(projectRef, serviceRoleKey);
+    console.log(`   ✅ All migrations completed`);
+  } catch (migrationError: any) {
+    console.error(`❌ Migration failed: ${migrationError.message}`);
+    throw migrationError;
+  }
+
+  // Step 2: Create the initial admin user
+  console.log(`   👤 Creating admin user for ${adminEmail}...`);
+  
   const { createClient } = await import('@supabase/supabase-js');
   const supabase = createClient(supabaseUrl, serviceRoleKey);
 
-  // Create the initial admin user
+  const tempPassword = generateSecurePassword();
+  
   const { data: user, error: userError } = await supabase.auth.admin.createUser({
     email: adminEmail,
-    password: generateSecurePassword(),
+    password: tempPassword,
     email_confirm: true,
     user_metadata: {
       full_name: agencyName,
       agency_name: agencyName,
+      role: 'admin',
     },
   });
 
   if (userError) {
-    console.error(`Failed to create admin user: ${userError.message}`);
-    throw userError;
-  }
-
-  console.log(`   ✅ Admin user created for ${adminEmail}`);
-
-  // Assign admin role
-  const { error: roleError } = await supabase
-    .from('user_roles')
-    .insert({
-      user_id: user.user.id,
-      role: 'admin',
-      agency_id: agencyName.toLowerCase().replace(/\s+/g, '-'),
-    });
-
-  if (roleError) {
-    console.warn(`Warning: Could not assign admin role: ${roleError.message}`);
+    // If user already exists, that's ok
+    if (!userError.message.includes('already exists')) {
+      console.error(`Failed to create admin user: ${userError.message}`);
+      throw userError;
+    }
+    console.log(`   ℹ️  User already exists, continuing...`);
   } else {
-    console.log(`   ✅ Admin role assigned`);
+    console.log(`   ✅ Admin user created: ${user?.user?.email}`);
   }
+
+  const userId = user?.user?.id;
+
+  // Step 3: Assign admin role to the user
+  if (userId) {
+    try {
+      const { error: roleError } = await supabase
+        .from('user_roles')
+        .insert({
+          user_id: userId,
+          role: 'admin',
+          agency_id: agencyName.toLowerCase().replace(/\s+/g, '-'),
+        });
+
+      if (roleError) {
+        // If role already exists, that's ok
+        if (!roleError.message.includes('duplicate')) {
+          console.warn(`Warning: Could not assign admin role: ${roleError.message}`);
+        }
+      } else {
+        console.log(`   ✅ Admin role assigned with full permissions`);
+      }
+    } catch (err: any) {
+      console.warn(`Warning: Role assignment failed: ${err.message}`);
+    }
+  }
+
+  console.log(`   ✅ Database setup complete`);
 }
 
 /**
