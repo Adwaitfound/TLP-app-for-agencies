@@ -267,7 +267,8 @@ export async function provisionAgency(request: ProvisioningRequest): Promise<Pro
     } catch (emailError: any) {
       console.warn(`   ⚠️  Email sending failed (non-blocking): ${emailError.message}`);
       console.warn(`   💡 User can access instance directly at: ${result.instanceUrl}`);
-      result.steps.email = 'skipped';
+      // Mark email step failed but do not halt provisioning
+      result.steps.email = 'failed';
       // Don't throw - email failure shouldn't block provisioning
     }
 
