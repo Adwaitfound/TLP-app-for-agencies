@@ -36,3 +36,13 @@ configure-*.sh
 
 # Temporary scripts
 reconstruct-*.mjs
+test-*.mjs
+test-*.js
+check-*.mjs
+create-*.mjs
+run-*.mjs
+sync-*.mjs
+execute-*.js
+extract-*.mjs
+populate-*.mjs
+*.txt

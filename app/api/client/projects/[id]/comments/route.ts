@@ -211,7 +211,7 @@ export async function POST(
       }
 
       // Send to team members
-      const teamEmails = teamMembers?.map(tm => tm.users) || [];
+      const teamEmails = teamMembers?.map((tm: any) => tm.users) || [];
       for (const member of teamEmails) {
         if (member?.email) {
           await sendCommentNotification({

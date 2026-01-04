@@ -41,7 +41,7 @@ export default function CommentsAdminPage() {
   const [expandedComments, setExpandedComments] = useState<Set<string>>(new Set());
   const [statusFilter, setStatusFilter] = useState<string>("all");
 
-  const isAdmin = user?.role === "admin" || user?.role === "agency_admin" || user?.role === "project_manager";
+  const isAdmin = user?.role === "admin" || user?.role === "project_manager";
 
   useEffect(() => {
     async function fetchData() {
