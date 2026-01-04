@@ -21,6 +21,10 @@ import {
 import { assignCommentToEmployee } from "@/app/actions/client-comments";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { Badge } from "@/components/ui/badge";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { MessageSquare, UserPlus, Send, ChevronDown, ChevronUp, Users, Clock, CheckCircle2 } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 export default function CommentsAdminPage() {
   const { user } = useAuth();
@@ -35,6 +39,9 @@ export default function CommentsAdminPage() {
   const [replies, setReplies] = useState<Record<string, string>>({});
   const [repliesData, setRepliesData] = useState<Record<string, any[]>>({});
   const [expandedComments, setExpandedComments] = useState<Set<string>>(new Set());
+  const [statusFilter, setStatusFilter] = useState<string>("all");
+
+  const isAdmin = user?.role === "admin" || user?.role === "agency_admin" || user?.role === "project_manager";
 
   useEffect(() => {
     async function fetchData() {
@@ -138,6 +145,100 @@ export default function CommentsAdminPage() {
         setProjects(projectsData || []);
         setComments(commentsData || []);
         setTeamByProject(groupedTeam);
+
+        // Set up real-time subscriptions
+        const commentsChannel = supabase
+          .channel("comments-changes")
+          .on(
+            "postgres_changes",
+            {
+              event: "*",
+              schema: "public",
+              table: "project_comments",
+              filter: `project_id=in.(${projectIds.join(",")})`,
+            },
+            async (payload) => {
+              if (payload.eventType === "INSERT") {
+                // Fetch full comment data with relations
+                const { data: newComment } = await supabase
+                  .from("project_comments")
+                  .select(
+                    `
+                    id,
+                    project_id,
+                    user_id,
+                    comment_text,
+                    assigned_user_id,
+                    status,
+                    created_at,
+                    author:user_id(full_name, email),
+                    assignee:assigned_user_id(full_name, email),
+                    projects(name, clients(company_name)),
+                    comment_replies(id, reply_text, created_at, author:user_id(full_name, email))
+                  `,
+                  )
+                  .eq("id", payload.new.id)
+                  .single();
+
+                if (newComment) {
+                  setComments((prev) => [newComment, ...prev]);
+                  setRepliesData((prev) => ({
+                    ...prev,
+                    [newComment.id]: newComment.comment_replies || [],
+                  }));
+                }
+              } else if (payload.eventType === "UPDATE") {
+                setComments((prev) =>
+                  prev.map((c) =>
+                    c.id === payload.new.id
+                      ? { ...c, ...payload.new }
+                      : c,
+                  ),
+                );
+              } else if (payload.eventType === "DELETE") {
+                setComments((prev) => prev.filter((c) => c.id !== payload.old.id));
+              }
+            },
+          )
+          .on(
+            "postgres_changes",
+            {
+              event: "INSERT",
+              schema: "public",
+              table: "comment_replies",
+            },
+            async (payload) => {
+              // Fetch full reply data
+              const { data: newReply } = await supabase
+                .from("comment_replies")
+                .select(
+                  `
+                  id,
+                  reply_text,
+                  created_at,
+                  comment_id,
+                  author:user_id(full_name, email)
+                `,
+                )
+                .eq("id", payload.new.id)
+                .single();
+
+              if (newReply) {
+                setRepliesData((prev) => ({
+                  ...prev,
+                  [newReply.comment_id]: [
+                    ...(prev[newReply.comment_id] || []),
+                    newReply,
+                  ],
+                }));
+              }
+            },
+          )
+          .subscribe();
+
+        return () => {
+          supabase.removeChannel(commentsChannel);
+        };
       } catch (e) {
         console.error("Failed to fetch comments admin view", e);
       } finally {
@@ -151,12 +252,14 @@ export default function CommentsAdminPage() {
     return comments.filter((c) => {
       const matchesProject =
         projectFilter === "all" || c.project_id === projectFilter;
+      const matchesStatus =
+        statusFilter === "all" || c.status === statusFilter;
       const haystack =
         `${c.comment_text || ""} ${c.projects?.name || ""} ${c.author?.full_name || ""} ${c.author?.email || ""}`.toLowerCase();
       const matchesSearch = haystack.includes(search.toLowerCase());
-      return matchesProject && matchesSearch;
+      return matchesProject && matchesSearch && matchesStatus;
     });
-  }, [comments, projectFilter, search]);
+  }, [comments, projectFilter, search, statusFilter]);
 
   const assign = async (commentId: string, userId: string) => {
     if (!userId) return;
@@ -208,8 +311,43 @@ export default function CommentsAdminPage() {
         ...prev,
         [commentId]: [...(prev[commentId] || []), newReply],
       }));
+      
+      // Auto-expand after replying
+      setExpandedComments((prev) => new Set(prev).add(commentId));
     } catch (e) {
       console.error("Failed to add reply", e);
+    }
+  };
+
+  const updateStatus = async (commentId: string, newStatus: string) => {
+    const supabase = createClient();
+    try {
+      const { error } = await supabase
+        .from("project_comments")
+        .update({ status: newStatus })
+        .eq("id", commentId);
+
+      if (error) throw error;
+
+      setComments((prev) =>
+        prev.map((c) =>
+          c.id === commentId ? { ...c, status: newStatus } : c
+        )
+      );
+    } catch (e) {
+      console.error("Failed to update status", e);
+    }
+  };
+
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case "resolved":
+        return "bg-green-500/10 text-green-500 border-green-500/20";
+      case "in_progress":
+        return "bg-blue-500/10 text-blue-500 border-blue-500/20";
+      case "pending":
+      default:
+        return "bg-yellow-500/10 text-yellow-500 border-yellow-500/20";
     }
   };
 
@@ -226,156 +364,300 @@ export default function CommentsAdminPage() {
   };
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-6">
       <Card>
-        <CardHeader className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <CardTitle>Project Comments</CardTitle>
-            <CardDescription>
-              Admin/PM view of all comments across projects
-            </CardDescription>
-          </div>
-          <div className="flex gap-2">
-            <Select value={projectFilter} onValueChange={setProjectFilter}>
-              <SelectTrigger className="w-40">
-                <SelectValue placeholder="Filter by project" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All projects</SelectItem>
-                {projects.map((p) => (
-                  <SelectItem key={p.id} value={p.id}>
-                    {p.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <Input
-              placeholder="Search comments or authors"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="w-60"
-            />
+        <CardHeader>
+          <div className="flex flex-col gap-4">
+            <div className="flex items-start justify-between">
+              <div>
+                <CardTitle className="flex items-center gap-2">
+                  <MessageSquare className="h-5 w-5" />
+                  Client Feedback & Comments
+                </CardTitle>
+                <CardDescription className="mt-1">
+                  {isAdmin ? "Manage and respond to client feedback" : "View comments and feedback"}
+                </CardDescription>
+              </div>
+              <Badge variant="secondary" className="text-lg px-3 py-1">
+                {filtered.length} {filtered.length === 1 ? "Comment" : "Comments"}
+              </Badge>
+            </div>
+            
+            {/* Filters */}
+            <div className="flex flex-wrap gap-3">
+              <Select value={projectFilter} onValueChange={setProjectFilter}>
+                <SelectTrigger className="w-[200px]">
+                  <SelectValue placeholder="All Projects" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Projects</SelectItem>
+                  {projects.map((p) => (
+                    <SelectItem key={p.id} value={p.id}>
+                      {p.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              
+              <Select value={statusFilter} onValueChange={setStatusFilter}>
+                <SelectTrigger className="w-[160px]">
+                  <SelectValue placeholder="All Status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Status</SelectItem>
+                  <SelectItem value="pending">Pending</SelectItem>
+                  <SelectItem value="in_progress">In Progress</SelectItem>
+                  <SelectItem value="resolved">Resolved</SelectItem>
+                </SelectContent>
+              </Select>
+              
+              <Input
+                placeholder="Search comments..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="flex-1 min-w-[200px]"
+              />
+            </div>
           </div>
         </CardHeader>
-        <CardContent className="space-y-3">
+        
+        <CardContent className="space-y-4">
           {loading ? (
-            <p className="text-sm text-muted-foreground">Loading…</p>
+            <div className="text-center py-12">
+              <p className="text-muted-foreground">Loading comments...</p>
+            </div>
           ) : filtered.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No comments found</p>
+            <div className="text-center py-12">
+              <MessageSquare className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
+              <p className="text-muted-foreground">No comments found</p>
+            </div>
           ) : (
-            filtered.map((c) => (
-              <div key={c.id} className="p-3 border rounded-lg space-y-2">
-                <div className="flex items-center justify-between text-xs text-muted-foreground">
-                  <span>
-                    {c.author?.full_name || c.author?.email || "Unknown user"}
-                  </span>
-                  <span>{new Date(c.created_at).toLocaleString()}</span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="font-medium text-sm">
-                      {c.projects?.name || "Project"}
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      {c.projects?.clients?.company_name}
-                    </p>
-                  </div>
-                  <span className="text-xs text-muted-foreground">
-                    {c.status}
-                  </span>
-                </div>
-                <p className="text-sm">{c.comment_text}</p>
-                {c.assignee && (
-                  <p className="text-xs text-muted-foreground">
-                    Assigned to {c.assignee.full_name || c.assignee.email}
-                  </p>
-                )}
-                {teamByProject[c.project_id]?.length ? (
-                  <div className="flex items-center gap-2 pt-1">
-                    <select
-                      className="border rounded px-2 py-1 text-sm"
-                      value={assignees[c.id] ?? c.assigned_user_id ?? ""}
-                      onChange={(e) =>
-                        setAssignees((prev) => ({
-                          ...prev,
-                          [c.id]: e.target.value,
-                        }))
-                      }
-                    >
-                      <option value="">Select assignee</option>
-                      {teamByProject[c.project_id].map((m) => (
-                        <option key={m.user_id} value={m.user_id}>
-                          {m.users?.full_name || m.users?.email || "Member"}
-                        </option>
-                      ))}
-                    </select>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() =>
-                        assignees[c.id] && assign(c.id, assignees[c.id])
-                      }
-                    >
-                      Assign
-                    </Button>
-                  </div>
-                ) : null}
-
-                {/* Replies Section */}
-                <div className="mt-4 pt-4 border-t space-y-3">
-                  <div className="space-y-2">
-                    <h4 className="text-sm font-medium">
-                      Replies ({repliesData[c.id]?.length || 0})
-                    </h4>
-                    {repliesData[c.id]?.length > 0 && expandedComments.has(c.id) && (
-                      <div className="space-y-2 bg-muted/30 p-2 rounded">
-                        {repliesData[c.id].map((reply) => (
-                          <div key={reply.id} className="text-xs border-l-2 border-primary pl-2">
-                            <p className="font-medium">
-                              {reply.author?.full_name || reply.author?.email}
+            filtered.map((c) => {
+              const replyCount = repliesData[c.id]?.length || 0;
+              const isExpanded = expandedComments.has(c.id);
+              
+              return (
+                <Card key={c.id} className="overflow-hidden">
+                  <CardContent className="p-6 space-y-4">
+                    {/* Comment Header */}
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="flex items-start gap-3 flex-1">
+                        <Avatar className="h-10 w-10 border-2">
+                          <AvatarFallback className="bg-primary/10 text-primary font-semibold">
+                            {c.author?.full_name?.[0] || c.author?.email?.[0] || "U"}
+                          </AvatarFallback>
+                        </Avatar>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <p className="font-semibold">
+                              {c.author?.full_name || c.author?.email || "Unknown"}
                             </p>
-                            <p className="text-muted-foreground">
-                              {new Date(reply.created_at).toLocaleString()}
-                            </p>
-                            <p className="mt-1">{reply.reply_text}</p>
+                            <Badge variant="outline" className="text-xs">
+                              Client
+                            </Badge>
                           </div>
-                        ))}
+                          <div className="flex items-center gap-2 mt-1 text-xs text-muted-foreground">
+                            <Clock className="h-3 w-3" />
+                            {new Date(c.created_at).toLocaleString()}
+                          </div>
+                        </div>
+                      </div>
+                      
+                      <Badge className={cn("border", getStatusColor(c.status))}>
+                        {c.status || "pending"}
+                      </Badge>
+                    </div>
+
+                    {/* Project Info */}
+                    <div className="bg-muted/50 rounded-lg p-3">
+                      <div className="flex items-center gap-2">
+                        <p className="text-sm font-medium">{c.projects?.name}</p>
+                        {c.projects?.clients?.company_name && (
+                          <>
+                            <span className="text-muted-foreground">•</span>
+                            <p className="text-sm text-muted-foreground">
+                              {c.projects.clients.company_name}
+                            </p>
+                          </>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Comment Text */}
+                    <div className="bg-muted/30 rounded-lg p-4">
+                      <p className="text-sm leading-relaxed whitespace-pre-wrap">
+                        {c.comment_text}
+                      </p>
+                    </div>
+
+                    {/* Assignment Section - Admin Only */}
+                    {isAdmin && (
+                      <div className="flex flex-wrap items-center gap-3 pt-3 border-t">
+                        <div className="flex items-center gap-2">
+                          <Users className="h-4 w-4 text-muted-foreground" />
+                          <span className="text-sm text-muted-foreground">Assign to:</span>
+                        </div>
+                        
+                        {teamByProject[c.project_id]?.length ? (
+                          <>
+                            <Select
+                              value={assignees[c.id] ?? c.assigned_user_id ?? ""}
+                              onValueChange={(value) =>
+                                setAssignees((prev) => ({ ...prev, [c.id]: value }))
+                              }
+                            >
+                              <SelectTrigger className="w-[200px]">
+                                <SelectValue placeholder="Select team member" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {teamByProject[c.project_id].map((m) => (
+                                  <SelectItem key={m.user_id} value={m.user_id}>
+                                    {m.users?.full_name || m.users?.email || "Member"}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                            
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => assignees[c.id] && assign(c.id, assignees[c.id])}
+                              disabled={!assignees[c.id]}
+                            >
+                              <UserPlus className="h-3 w-3 mr-1" />
+                              Assign
+                            </Button>
+                          </>
+                        ) : (
+                          <p className="text-xs text-muted-foreground">No team members available</p>
+                        )}
+                        
+                        {c.assignee && (
+                          <Badge variant="secondary" className="ml-auto">
+                            Assigned: {c.assignee.full_name || c.assignee.email}
+                          </Badge>
+                        )}
+                        
+                        {/* Status Update - Admin Only */}
+                        <div className="flex items-center gap-2 ml-auto">
+                          <Select
+                            value={c.status || "pending"}
+                            onValueChange={(value) => updateStatus(c.id, value)}
+                          >
+                            <SelectTrigger className="w-[140px]">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="pending">Pending</SelectItem>
+                              <SelectItem value="in_progress">In Progress</SelectItem>
+                              <SelectItem value="resolved">Resolved</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
                       </div>
                     )}
-                  </div>
 
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    onClick={() => toggleExpanded(c.id)}
-                  >
-                    {expandedComments.has(c.id) ? "Hide Replies" : "Show Replies"}
-                  </Button>
+                    {/* Replies Section */}
+                    <div className="space-y-3 pt-4 border-t">
+                      <div className="flex items-center justify-between">
+                        <h4 className="text-sm font-semibold flex items-center gap-2">
+                          <MessageSquare className="h-4 w-4" />
+                          Conversation ({replyCount})
+                        </h4>
+                        
+                        {replyCount > 0 && (
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => toggleExpanded(c.id)}
+                          >
+                            {isExpanded ? (
+                              <>
+                                <ChevronUp className="h-4 w-4 mr-1" />
+                                Hide
+                              </>
+                            ) : (
+                              <>
+                                <ChevronDown className="h-4 w-4 mr-1" />
+                                Show {replyCount} {replyCount === 1 ? "Reply" : "Replies"}
+                              </>
+                            )}
+                          </Button>
+                        )}
+                      </div>
 
-                  <div className="flex flex-col gap-2">
-                    <Textarea
-                      placeholder="Write a reply..."
-                      value={replies[c.id] || ""}
-                      onChange={(e) =>
-                        setReplies((prev) => ({
-                          ...prev,
-                          [c.id]: e.target.value,
-                        }))
-                      }
-                      className="text-sm"
-                      rows={2}
-                    />
-                    <Button
-                      size="sm"
-                      onClick={() => addReply(c.id)}
-                      disabled={!replies[c.id]?.trim()}
-                    >
-                      Post Reply
-                    </Button>
-                  </div>
-                </div>
-              </div>
-            ))
+                      {/* Replies List */}
+                      {isExpanded && replyCount > 0 && (
+                        <div className="space-y-3 pl-4 border-l-2 border-primary/20">
+                          {repliesData[c.id].map((reply) => (
+                            <div key={reply.id} className="bg-muted/50 rounded-lg p-3">
+                              <div className="flex items-start gap-3">
+                                <Avatar className="h-8 w-8">
+                                  <AvatarFallback className="bg-primary/10 text-primary text-xs font-semibold">
+                                    {reply.author?.full_name?.[0] || reply.author?.email?.[0] || "A"}
+                                  </AvatarFallback>
+                                </Avatar>
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center gap-2 flex-wrap">
+                                    <p className="text-sm font-medium">
+                                      {reply.author?.full_name || reply.author?.email}
+                                    </p>
+                                    <Badge variant="secondary" className="text-xs">
+                                      Admin
+                                    </Badge>
+                                    <span className="text-xs text-muted-foreground">
+                                      {new Date(reply.created_at).toLocaleString()}
+                                    </span>
+                                  </div>
+                                  <p className="text-sm mt-2 whitespace-pre-wrap">
+                                    {reply.reply_text}
+                                  </p>
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      {/* Reply Input - Admin Only */}
+                      {isAdmin && (
+                        <div className="space-y-2 bg-muted/30 rounded-lg p-3">
+                          <Textarea
+                            placeholder="Write your response to the client..."
+                            value={replies[c.id] || ""}
+                            onChange={(e) =>
+                              setReplies((prev) => ({
+                                ...prev,
+                                [c.id]: e.target.value,
+                              }))
+                            }
+                            className="text-sm min-h-[80px] bg-background"
+                            rows={3}
+                          />
+                          <div className="flex justify-end">
+                            <Button
+                              size="sm"
+                              onClick={() => addReply(c.id)}
+                              disabled={!replies[c.id]?.trim()}
+                            >
+                              <Send className="h-3 w-3 mr-2" />
+                              Send Reply
+                            </Button>
+                          </div>
+                        </div>
+                      )}
+                      
+                      {/* View Only Message for Team */}
+                      {!isAdmin && (
+                        <p className="text-xs text-muted-foreground italic">
+                          You can view this conversation. Only admins can reply.
+                        </p>
+                      )}
+                    </div>
+                  </CardContent>
+                </Card>
+              );
+            })
           )}
         </CardContent>
       </Card>

@@ -44,11 +44,13 @@ import { deleteVendor } from "@/app/actions/vendor-operations";
 interface VendorListProps {
   vendors: Vendor[];
   onRefresh: () => void;
+  onEditVendor?: (vendor: Vendor) => void;
 }
 
 export function VendorList({
   vendors,
   onRefresh,
+  onEditVendor,
 }: VendorListProps) {
   const [search, setSearch] = useState("");
   const [filterType, setFilterType] = useState<string>("all");
@@ -109,9 +111,10 @@ export function VendorList({
           </div>
         </div>
       </CardHeader>
-      <CardContent>
-        <Table>
-          <TableHeader>
+      <CardContent className="overflow-x-auto">
+        <div className="min-w-[800px]">
+          <Table>
+            <TableHeader>
             <TableRow>
               <TableHead>Name</TableHead>
               <TableHead>Type</TableHead>
@@ -196,7 +199,9 @@ export function VendorList({
                       <DropdownMenuContent align="end">
                         <DropdownMenuLabel>Actions</DropdownMenuLabel>
                         <DropdownMenuSeparator />
-                        <DropdownMenuItem>
+                        <DropdownMenuItem
+                          onClick={() => onEditVendor?.(vendor)}
+                        >
                           <Edit className="mr-2 h-4 w-4" />
                           Edit
                         </DropdownMenuItem>
@@ -218,6 +223,7 @@ export function VendorList({
             )}
           </TableBody>
         </Table>
+        </div>
       </CardContent>
     </Card>
   );

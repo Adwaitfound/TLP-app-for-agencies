@@ -102,6 +102,7 @@ export default function AdminDashboard() {
     due_date: "",
   });
   const [milestoneSubmitting, setMilestoneSubmitting] = useState(false);
+  const [isEmailConfirmDialogOpen, setIsEmailConfirmDialogOpen] = useState(false);
 
   const userId = user?.id;
 
@@ -653,53 +654,68 @@ export default function AdminDashboard() {
       </Dialog>
 
       {/* Time Period Filter */}
-      <div className="flex gap-2 flex-wrap">
-        {[
-          { label: "Day", value: "day" },
-          { label: "Week", value: "week" },
-          { label: "Month", value: "month" },
-          { label: "Quarter", value: "quarter" },
-          { label: "Year", value: "year" },
-          { label: "All", value: "all" },
-        ].map((period) => (
-          <Button
-            key={period.value}
-            variant={timePeriodFilter === period.value ? "default" : "outline"}
-            size="sm"
-            onClick={() => setTimePeriodFilter(period.value)}
-          >
-            {period.label}
-          </Button>
-        ))}
+      <div className="flex gap-2 flex-wrap items-center justify-between">
+        <div className="flex gap-2 flex-wrap">
+          {[
+            { label: "Day", value: "day" },
+            { label: "Week", value: "week" },
+            { label: "Month", value: "month" },
+            { label: "Quarter", value: "quarter" },
+            { label: "Year", value: "year" },
+            { label: "All", value: "all" },
+          ].map((period) => (
+            <Button
+              key={period.value}
+              variant={timePeriodFilter === period.value ? "default" : "outline"}
+              size="sm"
+              onClick={() => setTimePeriodFilter(period.value)}
+            >
+              {period.label}
+            </Button>
+          ))}
+        </div>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => setIsEmailConfirmDialogOpen(true)}
+          className="border-yellow-400 text-yellow-700 hover:bg-yellow-50 dark:text-yellow-400 dark:hover:bg-yellow-900/20"
+        >
+          <CheckCircle2 className="h-4 w-4 mr-2" />
+          Email Confirmation Tool
+        </Button>
       </div>
 
-      {/* Email Confirmation Banner */}
-      <Card className="border-yellow-300 bg-yellow-50 dark:bg-yellow-900/20">
-        <CardHeader className="space-y-1">
-          <CardTitle className="text-sm md:text-base">
-            Unconfirmed accounts
-          </CardTitle>
-          <CardDescription className="text-xs md:text-sm">
-            Some legacy signups may still require email confirmation. Quickly
-            confirm and approve a client by email.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="flex flex-col sm:flex-row gap-2">
-          <Input
-            placeholder="client@example.com"
-            type="email"
-            value={bannerEmail}
-            onChange={(e) => setBannerEmail(e.target.value)}
-            className="sm:max-w-xs"
-          />
-          <Button
-            onClick={handleConfirmAndApproveByEmail}
-            disabled={bannerProcessing || !bannerEmail}
-          >
-            {bannerProcessing ? "Processing…" : "Confirm + Approve"}
-          </Button>
-        </CardContent>
-      </Card>
+      {/* Email Confirmation Dialog */}
+      <Dialog open={isEmailConfirmDialogOpen} onOpenChange={setIsEmailConfirmDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Email Confirmation Tool</DialogTitle>
+            <DialogDescription>
+              Some legacy signups may still require email confirmation. Quickly
+              confirm and approve a client by email.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="confirm-email">Client Email</Label>
+              <Input
+                id="confirm-email"
+                placeholder="client@example.com"
+                type="email"
+                value={bannerEmail}
+                onChange={(e) => setBannerEmail(e.target.value)}
+              />
+            </div>
+            <Button
+              onClick={handleConfirmAndApproveByEmail}
+              disabled={bannerProcessing || !bannerEmail}
+              className="w-full"
+            >
+              {bannerProcessing ? "Processing…" : "Confirm + Approve"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Stats Grid */}
       <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 auto-rows-max">
@@ -1050,12 +1066,14 @@ export default function AdminDashboard() {
           </CardHeader>
           <CardContent>
             <Tabs defaultValue="video_production" className="w-full">
-              <TabsList className="flex flex-wrap">
-                <TabsTrigger value="video_production">
+              <TabsList className="grid w-full grid-cols-1 sm:grid-cols-3 gap-2 h-auto p-1">
+                <TabsTrigger value="video_production" className="text-xs sm:text-sm">
                   Video Production
                 </TabsTrigger>
-                <TabsTrigger value="social_media">Social Media</TabsTrigger>
-                <TabsTrigger value="design_branding">
+                <TabsTrigger value="social_media" className="text-xs sm:text-sm">
+                  Social Media
+                </TabsTrigger>
+                <TabsTrigger value="design_branding" className="text-xs sm:text-sm">
                   Design & Branding
                 </TabsTrigger>
               </TabsList>

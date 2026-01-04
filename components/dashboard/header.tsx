@@ -37,7 +37,7 @@ export function Header() {
   };
 
   return (
-    <header className="flex h-14 items-center gap-4 border-b bg-muted/40 px-4 lg:h-[60px] lg:px-6">
+    <header className="flex h-14 items-center gap-4 border-b bg-background/80 backdrop-blur-md px-4 lg:h-[60px] lg:px-6 supports-[backdrop-filter]:bg-background/60">
       {/* Mobile Menu */}
       <Sheet>
         <SheetTrigger asChild>

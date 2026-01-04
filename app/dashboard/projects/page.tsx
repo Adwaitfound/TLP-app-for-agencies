@@ -88,6 +88,12 @@ import {
   updateMilestoneStatus,
   deleteMilestone,
 } from "@/app/actions/milestones";
+import { deleteProject } from "@/app/actions/delete-project";
+import {
+  assignTeamMember,
+  removeTeamMember,
+  getProjectTeamMembers,
+} from "@/app/actions/team-management";
 
 function ProjectsPageContent() {
   const { user } = useAuth();
@@ -193,6 +199,11 @@ function ProjectsPageContent() {
   const [replyInputs, setReplyInputs] = useState<Record<string, string>>({});
   const [newProjectComment, setNewProjectComment] = useState("");
   const [commentSubmitting, setCommentSubmitting] = useState(false);
+  const [deleteConfirmation, setDeleteConfirmation] = useState<{
+    projectId: string;
+    projectName: string;
+  } | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   // Form state
   const [formData, setFormData] = useState({
@@ -438,45 +449,47 @@ function ProjectsPageContent() {
         }
       }
 
-      // Fetch project team members
+      // Fetch project team members using server action
       if (projectsData && projectsData.length > 0) {
         debug.log("FETCH_DATA", "Fetching team members for projects...", {
           projectIds: projectsData.map((p) => p.id),
         });
-        const projectIds = projectsData.map((p) => p.id);
-        const { data: teamData, error: teamError } = await supabase
-          .from("project_team")
-          .select(
-            "project_id, user_id, user:users!user_id(id, email, full_name, avatar_url, role)",
-          )
-          .in("project_id", projectIds);
-
-        if (teamError) {
-          debug.warn("FETCH_DATA", "Team fetch error:", teamError);
-          console.warn("Project team table not available:", teamError.message);
-        } else {
-          debug.log("FETCH_DATA", "Team data received", {
-            rawCount: teamData?.length,
-          });
-          const teamMap = (teamData || []).reduce(
-            (acc, assignment: any) => {
-              if (!acc[assignment.project_id]) {
-                acc[assignment.project_id] = [];
+        
+        // Fetch team members for all projects
+        const teamPromises = projectsData.map((project) => 
+          getProjectTeamMembers(project.id)
+        );
+        
+        const teamResults = await Promise.all(teamPromises);
+        
+        const teamMap: Record<string, User[]> = {};
+        const rolesMap: Record<string, Record<string, string>> = {};
+        
+        projectsData.forEach((project, index) => {
+          const result = teamResults[index];
+          if (result.success && result.data) {
+            const members = result.data
+              .map((assignment: any) => assignment.user as User)
+              .filter(Boolean);
+            
+            teamMap[project.id] = members;
+            
+            const projectRoles: Record<string, string> = {};
+            result.data.forEach((assignment: any) => {
+              if (assignment.user_id) {
+                projectRoles[assignment.user_id] = assignment.role || "";
               }
-              if (assignment.user) {
-                acc[assignment.project_id].push(assignment.user as User);
-              }
-              return acc;
-            },
-            {} as Record<string, User[]>,
-          );
+            });
+            rolesMap[project.id] = projectRoles;
+          }
+        });
 
-          debug.success("FETCH_DATA", "Team members mapped", {
-            projectsWithTeam: Object.keys(teamMap).length,
-            teamMap,
-          });
-          setProjectTeam(teamMap);
-        }
+        debug.success("FETCH_DATA", "Team members mapped", {
+          projectsWithTeam: Object.keys(teamMap).length,
+          teamMap,
+        });
+        setProjectTeam(teamMap);
+        setProjectTeamRoles(rolesMap);
       }
 
       // Fetch all users for team assignment (only admins/PMs)
@@ -639,6 +652,33 @@ function ProjectsPageContent() {
     }));
   }
 
+  async function handleDeleteProject(projectId: string) {
+    setIsDeleting(true);
+    try {
+      debug.log("PROJECTS", "Deleting project", { projectId });
+      const result = await deleteProject(projectId);
+
+      if (!result.success) {
+        debug.error("PROJECTS", "Failed to delete project", result.error);
+        alert(result.error || "Failed to delete project");
+        return;
+      }
+
+      debug.success("PROJECTS", "Project deleted successfully");
+      setDeleteConfirmation(null);
+      setIsDetailModalOpen(false);
+      setSelectedProject(null);
+      await fetchData();
+      alert("Project deleted successfully");
+    } catch (error: any) {
+      console.error("Error deleting project:", error);
+      debug.error("PROJECTS", "Delete error", { error: error?.message });
+      alert(error?.message || "Failed to delete project");
+    } finally {
+      setIsDeleting(false);
+    }
+  }
+
   async function handleAssignTeamMember(e: React.FormEvent) {
     e.preventDefault();
     if (!selectedProject || !selectedUserId || submitting) return;
@@ -667,21 +707,15 @@ function ProjectsPageContent() {
     setSubmitting(true);
 
     try {
-      const { error } = await supabase.from("project_team").insert({
+      const result = await assignTeamMember({
         project_id: selectedProject.id,
         user_id: selectedUserId,
         role: viewerOnly ? "viewer" : teamRole || null,
         assigned_by: user?.id,
       });
 
-      if (error) {
-        // Handle duplicate key error specifically
-        if (error.code === "23505") {
-          throw new Error(
-            "This team member is already assigned to this project",
-          );
-        }
-        throw error;
+      if (!result.success) {
+        throw new Error(result.error || "Failed to assign team member");
       }
 
       debug.success("ASSIGN_TEAM", "Team member inserted", {
@@ -726,13 +760,11 @@ function ProjectsPageContent() {
     if (!confirm("Remove this team member from the project?")) return;
 
     try {
-      const { error } = await supabase
-        .from("project_team")
-        .delete()
-        .eq("project_id", selectedProject.id)
-        .eq("user_id", userId);
+      const result = await removeTeamMember(selectedProject.id, userId);
 
-      if (error) throw error;
+      if (!result.success) {
+        throw new Error(result.error || "Failed to remove team member");
+      }
 
       // Update local state immediately
       setProjectTeam((prev) => ({
@@ -742,37 +774,36 @@ function ProjectsPageContent() {
       }));
     } catch (error: any) {
       console.error("Error removing team member:", error);
-      alert("Failed to remove team member");
+      alert(error?.message || "Failed to remove team member");
     }
   }
 
   async function fetchProjectTeamMembers(projectId: string) {
     try {
-      const { data, error } = await supabase
-        .from("project_team")
-        .select("*, user:users!user_id(id, email, full_name, avatar_url, role)")
-        .eq("project_id", projectId);
+      const result = await getProjectTeamMembers(projectId);
 
-      if (error) {
-        debug.error("FETCH_TEAM", "Query error:", error);
-        console.error("Error fetching team members:", error);
-        throw error;
+      if (!result.success) {
+        debug.error("FETCH_TEAM", "Failed to fetch team members:", result.error);
+        console.error("Error fetching team members:", result.error);
+        return [];
       }
 
       debug.log("FETCH_TEAM", "Raw data from query:", {
         projectId,
-        count: data?.length,
+        count: result.data?.length,
       });
-      console.log("Fetched team data:", data);
-      const members = (data || [])
+      console.log("Fetched team data:", result.data);
+      
+      const members = (result.data || [])
         .map((assignment: any) => assignment.user as User)
         .filter(Boolean);
       const rolesMap: Record<string, string> = {};
-      (data || []).forEach((assignment: any) => {
+      (result.data || []).forEach((assignment: any) => {
         if (assignment.user_id) {
           rolesMap[assignment.user_id] = assignment.role || "";
         }
       });
+      
       debug.success("FETCH_TEAM", "Members processed", {
         projectId,
         members: members.map((m) => ({ id: m.id, email: m.email })),
@@ -1925,7 +1956,7 @@ function ProjectsPageContent() {
   };
 
   return (
-    <div className="flex flex-col gap-4 md:gap-6">
+    <div className="flex flex-col gap-4 md:gap-6 overflow-x-hidden">
       {toast ? (
         <div
           className={`fixed bottom-4 right-4 z-50 rounded-md px-4 py-3 shadow-lg text-sm text-white ${toast.type === "success" ? "bg-green-600" : "bg-red-600"}`}
@@ -2204,67 +2235,64 @@ function ProjectsPageContent() {
       )}
 
       {/* Service Type Filter Cards */}
-      <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
-        {Object.values(SERVICE_TYPES).map((service) => {
-          const serviceProjects = projects.filter(
-            (p) => p.service_type === service.value,
-          );
-          const isSelected = serviceFilter === service.value;
-          return (
-            <Card
-              key={service.value}
-              className={`cursor-pointer transition-all hover:shadow-lg ${isSelected ? "ring-2 ring-primary" : ""}`}
-              onClick={() =>
-                setServiceFilter(isSelected ? "all" : service.value)
-              }
-            >
-              <CardHeader
-                className={`pb-3 bg-gradient-to-br ${service.color} text-white rounded-t-lg`}
+      <div className="px-1 sm:px-0">
+        <div className="flex gap-4 overflow-x-auto pl-4 pr-3 sm:px-0 py-1 pb-4 snap-x snap-mandatory scrollbar-hide lg:grid lg:grid-cols-3 lg:gap-4 lg:overflow-visible lg:py-0">
+          {Object.values(SERVICE_TYPES).map((service) => {
+            const serviceProjects = projects.filter(
+              (p) => p.service_type === service.value,
+            );
+            const isSelected = serviceFilter === service.value;
+            return (
+              <Card
+                key={service.value}
+                className={`flex-shrink-0 w-[calc(100vw-4rem)] sm:w-[300px] lg:w-auto cursor-pointer transition-all hover:shadow-lg snap-start ${isSelected ? "ring-2 ring-primary" : ""}`}
+                onClick={() =>
+                  setServiceFilter(isSelected ? "all" : service.value)
+                }
               >
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2 sm:gap-3">
-                    <div className="text-2xl sm:text-3xl">{service.icon}</div>
-                    <div className="min-w-0">
-                      <CardTitle className="text-base sm:text-lg text-white truncate">
+                <CardHeader
+                  className={`pb-3 bg-gradient-to-br ${service.color} text-white rounded-t-lg`}
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="text-3xl">{service.icon}</div>
+                    <div className="flex-1 min-w-0">
+                      <CardTitle className="text-lg text-white">
                         {service.label}
                       </CardTitle>
-                      <CardDescription className="text-white/90 text-xs line-clamp-1">
-                        {service.description}
-                      </CardDescription>
                     </div>
                   </div>
-                </div>
-              </CardHeader>
-              <CardContent className="pt-4">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-xl sm:text-2xl font-bold">
-                      {serviceProjects.length}
-                    </p>
-                    <p className="text-xs text-muted-foreground">Projects</p>
+                </CardHeader>
+                <CardContent className="pt-4 pb-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-3xl font-bold">
+                        {serviceProjects.length}
+                      </p>
+                      <p className="text-xs text-muted-foreground">Projects</p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-sm font-semibold text-green-600">
+                        {
+                          serviceProjects.filter((p) => p.status === "completed")
+                            .length
+                        }{" "}
+                        Completed
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        {
+                          serviceProjects.filter(
+                            (p) => p.status === "in_progress",
+                          ).length
+                        }{" "}
+                        In Progress
+                      </p>
+                    </div>
                   </div>
-                  <div className="text-right">
-                    <p className="text-xs sm:text-sm font-semibold text-green-600">
-                      {
-                        serviceProjects.filter((p) => p.status === "completed")
-                          .length
-                      }{" "}
-                      Completed
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      {
-                        serviceProjects.filter(
-                          (p) => p.status === "in_progress",
-                        ).length
-                      }{" "}
-                      In Progress
-                    </p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          );
-        })}
+                </CardContent>
+              </Card>
+            );
+          })}
+        </div>
       </div>
 
       <div className="flex flex-col gap-4 md:flex-row md:items-center">
@@ -2343,7 +2371,7 @@ function ProjectsPageContent() {
           </CardContent>
         </Card>
       ) : (
-        <div className="grid gap-4">
+        <div className="space-y-4">
           {filteredProjects.length === 0 ? (
             <Card>
               <CardContent className="flex flex-col items-center justify-center py-12">
@@ -2353,204 +2381,133 @@ function ProjectsPageContent() {
               </CardContent>
             </Card>
           ) : (
-            filteredProjects.map((project) => (
-              <Card
-                key={project.id}
-                role="button"
-                tabIndex={0}
-                onClick={() => openProjectDetails(project)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" || e.key === " ") {
-                    e.preventDefault();
-                    openProjectDetails(project);
-                  }
-                }}
-                className="group relative overflow-hidden cursor-pointer rounded-2xl bg-white/10 dark:bg-white/5 border border-white/20 ring-1 ring-white/10 hover:ring-white/20 hover:bg-white/15 shadow-lg hover:shadow-xl transition-all duration-200 supports-[backdrop-filter]:backdrop-blur-lg hover:-translate-y-0.5"
-              >
-                <div
-                  aria-hidden
-                  className="pointer-events-none absolute inset-x-0 top-0 h-1/2 bg-gradient-to-b from-white/20 to-transparent dark:from-white/10 dark:to-transparent"
-                />
-                <CardHeader className="relative z-10">
-                  <div className="flex flex-col md:flex-row gap-4">
-                    {/* Thumbnail */}
-                    {project.thumbnail_url && (
-                      <div className="w-full md:w-32 h-32 rounded-lg overflow-hidden border bg-muted flex-shrink-0">
-                        <img
-                          src={project.thumbnail_url}
-                          alt={project.name}
-                          className="w-full h-full object-cover"
-                        />
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {filteredProjects.map((project) => (
+                <Card
+                  key={project.id}
+                  className="cursor-pointer hover:shadow-md transition-shadow"
+                  onClick={() => openProjectDetails(project)}
+                >
+                  <CardHeader className="pb-3">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex-1 min-w-0">
+                        <CardTitle className="text-base truncate">{project.name}</CardTitle>
+                        <CardDescription className="text-xs mt-1">
+                          {project.clients?.company_name || "No client"}
+                        </CardDescription>
                       </div>
-                    )}
-
-                    <div className="flex-1 space-y-3">
-                      <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-3">
-                        <div
-                          className="flex-1 cursor-pointer"
-                          onClick={() => openProjectDetails(project)}
-                        >
-                          <div className="flex items-center gap-2 mb-1">
-                            <CardTitle className="text-lg md:text-xl">{project.name}</CardTitle>
-                          </div>
-                          <CardDescription className="mt-1">
-                            {project.clients?.company_name || "No client"}
-                          </CardDescription>
+                      {project.thumbnail_url && (
+                        <div className="w-12 h-12 rounded overflow-hidden border bg-muted flex-shrink-0">
+                          <img
+                            src={project.thumbnail_url}
+                            alt={project.name}
+                            className="w-full h-full object-cover"
+                          />
                         </div>
-                        <div className="flex flex-wrap items-center gap-2">
-                          <Badge
-                            variant={getServiceBadgeVariant(
-                              project.service_type,
-                            )}
-                            className="text-xs"
-                          >
-                            <span className="mr-1">
-                              {getServiceIcon(project.service_type)}
-                            </span>
-                            <span className="hidden sm:inline">{getServiceLabel(project.service_type)}</span>
-                          </Badge>
-                          <StatusBadge status={project.status} />
-                        </div>
-                      </div>
-
-                      {/* Team & Progress Row */}
-                      <div className="flex flex-col gap-3 text-sm">
-                        {/* Creator */}
-                        {project.created_by &&
-                          projectCreators[project.created_by] && (
-                            <div className="flex items-center gap-2">
-                              <UserCheck className="h-4 w-4 text-muted-foreground" />
-                              <span className="text-muted-foreground">
-                                {projectCreators[project.created_by].full_name}
-                              </span>
-                            </div>
-                          )}
-
-                        {/* Team Members */}
-                        {projectTeam[project.id] &&
-                          projectTeam[project.id].length > 0 && (
-                            <div className="flex items-center gap-2 flex-wrap">
-                              <Users className="h-4 w-4 text-muted-foreground flex-shrink-0" />
-                              <div className="flex gap-1 flex-wrap">
-                                {projectTeam[project.id].map((member) => (
-                                  <Badge
-                                    key={member.id}
-                                    variant="secondary"
-                                    className="text-xs"
-                                  >
-                                    {member.full_name ||
-                                      member.email.split("@")[0]}
-                                  </Badge>
-                                ))}
-                              </div>
-                            </div>
-                          )}
-
-                        {/* Progress */}
-                        <div className="flex items-center gap-2">
-                          <TrendingUp className="h-4 w-4 text-muted-foreground" />
-                          <span className="text-muted-foreground">
-                            {project.progress_percentage}% complete
-                          </span>
-                        </div>
-                      </div>
+                      )}
                     </div>
-                  </div>
-                </CardHeader>
-                <CardContent className="relative z-10 space-y-3">
-                  {project.description && (
-                    <p className="text-sm text-muted-foreground line-clamp-2">
-                      {project.description}
-                    </p>
-                  )}
-                  <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                    {project.deadline && (
-                      <div>
-                        <div className="flex items-center gap-2 text-xs text-muted-foreground mb-1">
-                          <Calendar className="h-3 w-3" />
-                          Deadline
-                        </div>
-                        <p className="font-medium">
-                          {new Date(project.deadline).toLocaleDateString()}
-                        </p>
-                      </div>
-                    )}
-                    {project.budget && (
-                      <div>
-                        <div className="flex items-center gap-2 text-xs text-muted-foreground mb-1">
-                          <IndianRupee className="h-3 w-3" />
-                          Budget
-                        </div>
-                        <p className="font-medium">
-                          ₹{project.budget.toLocaleString()}
-                        </p>
-                      </div>
-                    )}
-                    <div>
-                      <div className="flex items-center justify-between text-xs text-muted-foreground mb-1">
-                        <span>Progress</span>
-                        <span className="font-medium">
-                          {project.progress_percentage}%
+                    <div className="flex flex-wrap gap-2 mt-3">
+                      <Badge
+                        variant={getServiceBadgeVariant(project.service_type)}
+                        className="text-xs"
+                      >
+                        <span className="mr-1">
+                          {getServiceIcon(project.service_type)}
                         </span>
-                      </div>
-                      <Progress
-                        value={project.progress_percentage}
-                        className="h-1.5"
-                      />
+                        {getServiceLabel(project.service_type)}
+                      </Badge>
+                      <StatusBadge status={project.status} />
                     </div>
-                  </div>
-                  <div className="flex gap-2 overflow-x-auto pb-2 -mx-2 px-2">
-                    <Button
-                      variant="secondary"
-                      size="sm"
-                      className="flex-shrink-0"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        openProjectDetails(project);
-                      }}
-                    >
-                      <Eye className="h-3 w-3 mr-1" />
-                      <span className="hidden sm:inline">View</span>
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="flex-shrink-0"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        openEditDialog(project);
-                      }}
-                    >
-                      <Edit className="h-3 w-3 mr-1" />
-                      <span className="hidden sm:inline">Edit</span>
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="flex-shrink-0"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        openTeamDialog(project);
-                      }}
-                    >
-                      <Users className="h-3 w-3 mr-1" />
-                      Team
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        openInvoices(project);
-                      }}
-                    >
-                      <FileText className="h-3 w-3 mr-1" />
-                      Invoice
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
-            ))
+                  </CardHeader>
+                  <CardContent className="space-y-3 pt-0">
+                    {/* Progress */}
+                    <div>
+                      <div className="flex items-center justify-between text-xs text-muted-foreground mb-1.5">
+                        <span>Progress</span>
+                        <span className="font-medium">{project.progress_percentage}%</span>
+                      </div>
+                      <Progress value={project.progress_percentage} className="h-1.5" />
+                    </div>
+
+                    {/* Deadline & Budget */}
+                    <div className="grid grid-cols-2 gap-3 text-sm">
+                      {project.deadline && (
+                        <div>
+                          <div className="flex items-center gap-1 text-xs text-muted-foreground mb-1">
+                            <Calendar className="h-3 w-3" />
+                            Deadline
+                          </div>
+                          <p className="text-xs font-medium">
+                            {new Date(project.deadline).toLocaleDateString()}
+                          </p>
+                        </div>
+                      )}
+                      {project.budget && (
+                        <div>
+                          <div className="flex items-center gap-1 text-xs text-muted-foreground mb-1">
+                            <IndianRupee className="h-3 w-3" />
+                            Budget
+                          </div>
+                          <p className="text-xs font-medium">
+                            ₹{project.budget.toLocaleString()}
+                          </p>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Actions */}
+                    <div className="flex gap-1 pt-2 border-t">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="flex-1 h-8"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          openProjectDetails(project);
+                        }}
+                      >
+                        <Eye className="h-3 w-3 mr-1" />
+                        View
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="flex-1 h-8"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          openEditDialog(project);
+                        }}
+                      >
+                        <Edit className="h-3 w-3 mr-1" />
+                        Edit
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-8"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          openTeamDialog(project);
+                        }}
+                      >
+                        <Users className="h-3 w-3" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-8"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          openInvoices(project);
+                        }}
+                      >
+                        <FileText className="h-3 w-3" />
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
           )}
         </div>
       )}
@@ -3146,16 +3103,49 @@ function ProjectsPageContent() {
               </div>
 
               <DialogFooter>
-                <Button
-                  variant="outline"
-                  onClick={() => setIsDetailModalOpen(false)}
-                >
-                  Close
-                </Button>
-                <Button>
-                  <Edit className="h-4 w-4 mr-2" />
-                  Edit Project
-                </Button>
+                <div className="flex justify-between w-full">
+                  <Button
+                    variant="destructive"
+                    onClick={() => {
+                      setDeleteConfirmation({
+                        projectId: selectedProject.id,
+                        projectName: selectedProject.name,
+                      });
+                    }}
+                  >
+                    <Trash2 className="h-4 w-4 mr-2" />
+                    Delete Project
+                  </Button>
+                  <div className="flex gap-2">
+                    <Button
+                      variant="outline"
+                      onClick={() => setIsDetailModalOpen(false)}
+                    >
+                      Close
+                    </Button>
+                    <Button
+                      onClick={() => {
+                        setEditFormData({
+                          name: selectedProject.name,
+                          client_id: selectedProject.client_id,
+                          description: selectedProject.description || "",
+                          service_type: selectedProject.service_type,
+                          budget: selectedProject.budget?.toString() || "",
+                          start_date: selectedProject.start_date || "",
+                          deadline: selectedProject.deadline || "",
+                          status: selectedProject.status,
+                          progress_percentage:
+                            selectedProject.progress_percentage || 0,
+                        });
+                        setIsEditDialogOpen(true);
+                        setIsDetailModalOpen(false);
+                      }}
+                    >
+                      <Edit className="h-4 w-4 mr-2" />
+                      Edit Project
+                    </Button>
+                  </div>
+                </div>
               </DialogFooter>
             </div>
           )}
@@ -4209,6 +4199,51 @@ function ProjectsPageContent() {
               </Button>
             </DialogFooter>
           </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Project Confirmation Dialog */}
+      <Dialog
+        open={!!deleteConfirmation}
+        onOpenChange={(open) => !open && setDeleteConfirmation(null)}
+      >
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Delete Project</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to delete{" "}
+              <strong>{deleteConfirmation?.projectName}</strong>? This action
+              cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="bg-red-50 dark:bg-red-950/50 border border-red-200 dark:border-red-800 rounded-lg p-3">
+            <p className="text-sm text-red-800 dark:text-red-200">
+              <strong>Warning:</strong> This will delete the project and all
+              associated files, milestones, tasks, and comments.
+            </p>
+          </div>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setDeleteConfirmation(null)}
+              disabled={isDeleting}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              onClick={() =>
+                deleteConfirmation &&
+                handleDeleteProject(deleteConfirmation.projectId)
+              }
+              disabled={isDeleting}
+            >
+              {isDeleting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              {isDeleting ? "Deleting..." : "Delete Project"}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

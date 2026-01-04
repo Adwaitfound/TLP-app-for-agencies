@@ -1,0 +1,38 @@
+# Tauri (Desktop app)
+src-tauri/
+src-tauri/**
+
+# Android
+android/
+android.bak.*
+android/**
+
+# Build artifacts
+*.apk
+*.dmg
+*.app
+dist/
+build/
+out/
+target/
+
+# Development
+*.log
+.DS_Store
+node_modules/.cache
+
+# Documentation
+*.md
+!README.md
+
+# Scripts
+*.sh
+build-*.sh
+check-*.sh
+configure-*.sh
+
+# SQL files
+*.sql
+
+# Temporary scripts
+reconstruct-*.mjs

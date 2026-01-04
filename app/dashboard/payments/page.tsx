@@ -27,6 +27,7 @@ import {
 } from "@/app/actions/vendor-operations";
 import { VendorList } from "@/components/payments/vendor-list";
 import { PaymentList } from "@/components/payments/payment-list";
+import { PaymentCharts } from "@/components/payments/payment-charts";
 import { ProjectBudgetTracker } from "@/components/payments/project-budget-tracker";
 import { AddVendorDialog } from "@/components/payments/add-vendor-dialog";
 import { AddPaymentDialog } from "@/components/payments/add-payment-dialog";
@@ -48,6 +49,8 @@ export default function PaymentsPage() {
   const [pageLoading, setPageLoading] = useState(true);
   const [showAddVendor, setShowAddVendor] = useState(false);
   const [showAddPayment, setShowAddPayment] = useState(false);
+  const [editingVendor, setEditingVendor] = useState<Vendor | null>(null);
+  const [editingPayment, setEditingPayment] = useState<VendorPayment | null>(null);
   const [filterVertical, setFilterVertical] = useState<ServiceType | "all">(
     "all",
   );
@@ -68,8 +71,14 @@ export default function PaymentsPage() {
           fetchVendorAssignments(),
         ]);
 
+      console.log("Payments Response:", paymentsRes);
+      console.log("Vendors Response:", vendorsRes);
+
       if (vendorsRes.vendors) setVendors(vendorsRes.vendors);
-      if (paymentsRes.payments) setPayments(paymentsRes.payments);
+      if (paymentsRes.payments) {
+        console.log("Setting payments:", paymentsRes.payments.length);
+        setPayments(paymentsRes.payments);
+      }
       if (assignmentsRes.assignments)
         setAssignments(assignmentsRes.assignments);
       if (analyticsRes) setAnalytics(analyticsRes);
@@ -195,11 +204,11 @@ export default function PaymentsPage() {
 
       {/* Main Content Tabs */}
       <Tabs defaultValue="overview" className="space-y-4">
-        <TabsList className="flex-wrap overflow-x-auto">
-          <TabsTrigger value="overview">Overview</TabsTrigger>
-          <TabsTrigger value="vendors">Vendors</TabsTrigger>
-          <TabsTrigger value="payments">Payments</TabsTrigger>
-          <TabsTrigger value="budgets">Project Budgets</TabsTrigger>
+        <TabsList className="w-full grid grid-cols-2 md:grid-cols-4 h-auto">
+          <TabsTrigger value="overview" className="whitespace-nowrap">Overview</TabsTrigger>
+          <TabsTrigger value="vendors" className="whitespace-nowrap">Vendors</TabsTrigger>
+          <TabsTrigger value="payments" className="whitespace-nowrap">Payments</TabsTrigger>
+          <TabsTrigger value="budgets" className="whitespace-nowrap">Budgets</TabsTrigger>
         </TabsList>
 
         <TabsContent value="overview" className="space-y-4">
@@ -235,6 +244,9 @@ export default function PaymentsPage() {
               </div>
             </CardContent>
           </Card>
+
+          {/* Payment Charts */}
+          <PaymentCharts payments={payments} vendors={vendors} />
 
           {/* Recent Payments */}
           <Card>
@@ -301,11 +313,22 @@ export default function PaymentsPage() {
           <VendorList
             vendors={vendors}
             onRefresh={loadData}
+            onEditVendor={(vendor) => {
+              setEditingVendor(vendor);
+              setShowAddVendor(true);
+            }}
           />
         </TabsContent>
 
         <TabsContent value="payments" className="space-y-4">
-          <PaymentList payments={payments} onRefresh={loadData} />
+          <PaymentList
+            payments={payments}
+            onRefresh={loadData}
+            onEditPayment={(payment) => {
+              setEditingPayment(payment);
+              setShowAddPayment(true);
+            }}
+          />
         </TabsContent>
 
         <TabsContent value="budgets" className="space-y-4">
@@ -316,15 +339,23 @@ export default function PaymentsPage() {
       {/* Dialogs */}
       <AddVendorDialog
         open={showAddVendor}
-        onOpenChange={setShowAddVendor}
+        onOpenChange={(open) => {
+          setShowAddVendor(open);
+          if (!open) setEditingVendor(null);
+        }}
         onSuccess={loadData}
+        editingVendor={editingVendor}
       />
 
       <AddPaymentDialog
         open={showAddPayment}
-        onOpenChange={setShowAddPayment}
+        onOpenChange={(open) => {
+          setShowAddPayment(open);
+          if (!open) setEditingPayment(null);
+        }}
         vendors={vendors}
         onSuccess={loadData}
+        editingPayment={editingPayment}
       />
     </div>
   );

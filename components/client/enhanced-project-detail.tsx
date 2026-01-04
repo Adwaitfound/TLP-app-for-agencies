@@ -692,8 +692,11 @@ export default function EnhancedClientProjectDetail({
                             (file.storage_type === "gdrive" ? getGoogleDriveThumbnailUrl(file.file_url, 160) : null) ||
                             (isImage ? file.file_url : null) ||
                             (isVideo && file.video_thumbnail_url ? file.video_thumbnail_url : null);
+                          
                           return thumb ? (
-                            <img src={thumb} alt={file.file_name || "File"} className="h-10 w-10 rounded object-cover flex-shrink-0" />
+                            <div className="w-64 h-48 rounded overflow-hidden bg-black flex-shrink-0 flex items-center justify-center">
+                              <img src={thumb} alt={file.file_name || "File"} className="max-h-full max-w-full object-contain" />
+                            </div>
                           ) : (
                             <FileText className="h-8 w-8 text-muted-foreground flex-shrink-0" />
                           );

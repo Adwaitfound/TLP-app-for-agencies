@@ -31,6 +31,7 @@ export interface ProvisioningResult {
   agencyName: string;
   instanceUrl?: string;
   supabaseProjectId?: string;
+  reusedTemplate?: boolean;
   vercelProjectId?: string;
   adminEmail?: string;
   error?: string;
@@ -138,11 +139,18 @@ export async function provisionAgency(request: ProvisioningRequest): Promise<Pro
     } else {
       console.log(`   🔄 Cloning template Supabase project...`);
       const newProject = await cloneSupabaseProject(request.agencyName);
+      const reusedTemplate = newProject.reusedTemplate === true;
       supabaseProjectId = newProject.id;
       supabaseUrl = getSupabaseUrl(newProject.id);
       supabaseAnonKey = newProject.api_keys.anon;
       supabaseServiceKey = newProject.api_keys.service_role;
-      console.log(`   ✅ Supabase project cloned: ${supabaseUrl}`);
+      if (reusedTemplate) {
+        console.log(`   ♻️  Reusing template project (fallback mode): ${supabaseUrl}`);
+      } else {
+        console.log(`   ✅ Supabase project cloned: ${supabaseUrl}`);
+      }
+      // store flag for later steps
+      result.reusedTemplate = reusedTemplate;
     }
 
     result.supabaseProjectId = supabaseProjectId;
@@ -167,7 +175,8 @@ export async function provisionAgency(request: ProvisioningRequest): Promise<Pro
         supabaseServiceKey,
         request.ownerEmail,
         request.agencyName,
-        request.tier || 'standard'
+        request.tier || 'standard',
+        { skipMigrations: result.reusedTemplate === true }
       );
     } else {
       console.log(`   ♻️  Reusing existing admin user setup`);

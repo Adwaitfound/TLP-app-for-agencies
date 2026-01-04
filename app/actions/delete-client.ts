@@ -1,6 +1,6 @@
 "use server";
 
-import { createClient } from "@supabase/supabase-js";
+import { createServiceClient } from "@/lib/supabase/server";
 
 type DeleteClientResult = {
   success: boolean;
@@ -13,32 +13,7 @@ export async function deleteClient(
   try {
     console.log("[SERVER] deleteClient called for client:", clientId);
 
-    // Validate environment variables
-    const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-    const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
-
-    if (!url) {
-      console.error("[SERVER] Missing NEXT_PUBLIC_SUPABASE_URL");
-      return {
-        success: false,
-        error: "NEXT_PUBLIC_SUPABASE_URL is not configured",
-      };
-    }
-
-    if (!key) {
-      console.error("[SERVER] Missing SUPABASE_SERVICE_ROLE_KEY");
-      return {
-        success: false,
-        error: "SUPABASE_SERVICE_ROLE_KEY is not configured",
-      };
-    }
-
-    const supabaseAdmin = createClient(url, key, {
-      auth: {
-        autoRefreshToken: false,
-        persistSession: false,
-      },
-    });
+    const supabaseAdmin = createServiceClient();
 
     // Get the client record to find the associated user
     const { data: clientData, error: getClientError } = await supabaseAdmin

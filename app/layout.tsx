@@ -108,56 +108,7 @@ export default function RootLayout({
             </ErrorBoundary>
           </AuthProvider>
         </ThemeProvider>
-        <script
-          dangerouslySetInnerHTML={{
-            __html: `
-              // Register service worker only in production to avoid dev caching issues
-              (function(){
-                try {
-                  var env = ${JSON.stringify(process.env.NODE_ENV)};
-                  var isProd = env === 'production';
-
-                  // In dev (including LAN/IP access), make sure no old SW/caches interfere with styling/assets.
-                  if (!isProd) {
-                    if ('serviceWorker' in navigator) {
-                      navigator.serviceWorker.getRegistrations().then(function (regs) {
-                        regs.forEach(function (reg) {
-                          reg.unregister();
-                        });
-                      }).catch(function () {});
-                    }
-                    if (typeof caches !== 'undefined' && caches && caches.keys) {
-                      caches.keys().then(function (keys) {
-                        keys.forEach(function (key) {
-                          caches.delete(key);
-                        });
-                      }).catch(function () {});
-                    }
-                    return;
-                  }
-
-                  if ('serviceWorker' in navigator) {
-                    window.addEventListener('load', function () {
-                      navigator.serviceWorker.register('/sw.js').then(function(reg) {
-                        console.log("🔄 SW: registered successfully", reg);
-                        // Check for updates immediately and then every minute
-                        reg.update().catch(function(err) {
-                          console.warn("🔄 SW: immediate update check failed", err);
-                        });
-                        setInterval(function() {
-                          console.log("🔄 SW: periodic update check");
-                          reg.update().catch(function() {});
-                        }, 60000);
-                      }).catch(function (err) {
-                        console.warn("🔄 SW: registration failed", err);
-                      });
-                    });
-                  }
-                } catch (e) {}
-              })();
-            `,
-          }}
-        />
+        {/* Temporarily disable service worker registration to avoid sw.js parse errors in production. */}
       </body>
     </html>
   );

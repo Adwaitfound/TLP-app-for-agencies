@@ -187,7 +187,7 @@ export default function ClientDashboardTabs() {
       return (
         <video
           src={src}
-          className="w-full h-full object-cover bg-black/20"
+          className="w-full h-full object-cover"
           preload="metadata"
           playsInline
           muted
@@ -342,9 +342,8 @@ export default function ClientDashboardTabs() {
         invoicesClientResult as any;
       if (invoicesByClientError) {
         console.error("[3/6] Invoices (by client) query failed:", invoicesByClientError);
-        setError(`Failed to load invoices: ${invoicesByClientError.message}`);
-        setLoading(false);
-        return;
+        // Don't fail completely - just use empty array
+        console.warn("Continuing with empty invoices array");
       }
       console.debug("[3/6] Invoices (by client) query OK:", invoicesByClient?.length || 0);
 
@@ -1537,7 +1536,7 @@ export default function ClientDashboardTabs() {
                               return (
                                 <Card key={f.id} className="overflow-hidden">
                                   <CardContent className="p-0">
-                                    <div className="relative aspect-video bg-muted">
+                                    <div className="relative aspect-video bg-muted flex items-center justify-center overflow-hidden">
                                       <FileThumb file={f} />
                                       <div className="absolute top-2 left-2 flex gap-1">
                                         <Badge variant="secondary" className="text-[10px] px-1.5 py-0">

@@ -34,6 +34,7 @@ import {
   CheckCircle,
   Clock,
   XCircle,
+  Edit,
 } from "lucide-react";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import type { VendorPayment } from "@/types";
@@ -42,6 +43,7 @@ import { updatePayment, deletePayment } from "@/app/actions/vendor-operations";
 interface PaymentListProps {
   payments: VendorPayment[];
   onRefresh: () => void;
+  onEditPayment?: (payment: VendorPayment) => void;
   compact?: boolean;
 }
 
@@ -69,11 +71,12 @@ const statusConfig = {
 export function PaymentList({
   payments,
   onRefresh,
+  onEditPayment,
   compact = false,
 }: PaymentListProps) {
   const [search, setSearch] = useState("");
   const [filterStatus, setFilterStatus] = useState<string>("all");
-
+  console.log("PaymentList received:", payments.length, "payments", compact ? "(compact)" : "(full)");
   const filteredPayments = payments.filter((payment) => {
     const matchesSearch =
       payment.description.toLowerCase().includes(search.toLowerCase()) ||
@@ -181,9 +184,10 @@ export function PaymentList({
           </div>
         </div>
       </CardHeader>
-      <CardContent>
-        <Table>
-          <TableHeader>
+      <CardContent className="overflow-x-auto">
+        <div className="min-w-[900px]">
+          <Table>
+            <TableHeader>
             <TableRow>
               <TableHead>Date</TableHead>
               <TableHead>Vendor</TableHead>
@@ -249,6 +253,12 @@ export function PaymentList({
                         <DropdownMenuLabel>Actions</DropdownMenuLabel>
                         <DropdownMenuSeparator />
                         <DropdownMenuItem
+                          onClick={() => onEditPayment?.(payment)}
+                        >
+                          <Edit className="mr-2 h-4 w-4" />
+                          Edit
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
                           onClick={() =>
                             handleStatusChange(payment.id, "completed")
                           }
@@ -284,6 +294,7 @@ export function PaymentList({
             )}
           </TableBody>
         </Table>
+        </div>
       </CardContent>
     </Card>
   );

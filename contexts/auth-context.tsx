@@ -85,6 +85,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (userData) {
             debug.success('AUTH', 'User profile loaded', { email: userData.email, role: userData.role })
             
+            // For client users, fetch company_name from clients table
+            if (userData.role === 'client') {
+                const { data: clientData } = await supabase
+                    .from('clients')
+                    .select('company_name')
+                    .eq('user_id', userData.id)
+                    .maybeSingle()
+                
+                if (clientData?.company_name) {
+                    userData.company_name = clientData.company_name
+                }
+            }
+            
             setProfileCache(prev => new Map(prev).set(sessionUser.id, userData))
             try {
                 localStorage.setItem('tlp_auth_profile', JSON.stringify(userData))
@@ -128,6 +141,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const profile = createdProfile || null
         if (profile) {
             debug.success('AUTH', 'User profile created', { email: profile.email, role: profile.role })
+            
+            // For client users, fetch company_name from clients table
+            if (profile.role === 'client') {
+                const { data: clientData } = await supabase
+                    .from('clients')
+                    .select('company_name')
+                    .eq('user_id', profile.id)
+                    .maybeSingle()
+                
+                if (clientData?.company_name) {
+                    profile.company_name = clientData.company_name
+                }
+            }
+            
             setProfileCache(prev => new Map(prev).set(sessionUser.id, profile))
             try {
                 localStorage.setItem('tlp_auth_profile', JSON.stringify(profile))

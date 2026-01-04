@@ -1,6 +1,6 @@
 {
   "name": "video-production-app",
-  "version": "0.1.85",
+  "version": "0.1.86",
   "private": true,
   "engines": {
     "node": "20.x"
@@ -53,6 +53,7 @@
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "date-fns": "^4.1.0",
+    "dotenv": "^17.2.3",
     "framer-motion": "^12.23.26",
     "jsonwebtoken": "^9.0.3",
     "lucide-react": "^0.561.0",

@@ -51,12 +51,14 @@ import {
   Eye,
   Trash2,
   Key,
+  Edit,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import type { Client, Project, Invoice, ServiceType } from "@/types";
 import { SERVICE_TYPES } from "@/types";
 import { createClientAccount } from "@/app/actions/create-client";
 import { deleteClient } from "@/app/actions/delete-client";
+import { updateClient } from "@/app/actions/update-client";
 import { resetClientPassword } from "@/app/actions/reset-client-password";
 import { Badge } from "@/components/ui/badge";
 import { debug } from "@/lib/debug";
@@ -91,9 +93,20 @@ export default function ClientsPage() {
   } | null>(null);
   const [resettingPassword, setResettingPassword] = useState(false);
   const [resetPasswordEmail, setResetPasswordEmail] = useState<string | null>(null);
+  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
+  const [editingClient, setEditingClient] = useState<ClientWithDetails | null>(null);
 
   // Form state
   const [formData, setFormData] = useState({
+    company_name: "",
+    contact_person: "",
+    email: "",
+    phone: "",
+    address: "",
+  });
+
+  // Edit form state
+  const [editFormData, setEditFormData] = useState({
     company_name: "",
     contact_person: "",
     email: "",
@@ -358,6 +371,48 @@ export default function ClientsPage() {
     }
   }
 
+  function openEditDialog(client: ClientWithDetails) {
+    setEditingClient(client);
+    setEditFormData({
+      company_name: client.company_name,
+      contact_person: client.contact_person,
+      email: client.email,
+      phone: client.phone || "",
+      address: client.address || "",
+    });
+    setIsEditDialogOpen(true);
+  }
+
+  async function handleEditClient(e: React.FormEvent) {
+    e.preventDefault();
+    if (submitting || !editingClient) return;
+
+    setSubmitting(true);
+
+    try {
+      debug.log("CLIENTS", "Updating client", { clientId: editingClient.id, data: editFormData });
+      const result = await updateClient(editingClient.id, editFormData);
+
+      if (!result.success) {
+        debug.error("CLIENTS", "Failed to update client", result.error);
+        alert(result.error || "Failed to update client");
+        return;
+      }
+
+      debug.success("CLIENTS", "Client updated successfully");
+      setIsEditDialogOpen(false);
+      setEditingClient(null);
+      await fetchClients();
+      alert("Client updated successfully");
+    } catch (error: any) {
+      console.error("Error updating client:", error);
+      debug.error("CLIENTS", "Update error", { error: error?.message });
+      alert(error?.message || "Failed to update client");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
   return (
     <div className="flex flex-col gap-4 md:gap-6">
       <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
@@ -595,6 +650,35 @@ export default function ClientsPage() {
                       </p>
                     </div>
                   </div>
+                  <div className="flex gap-2 pt-2 border-t">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="flex-1"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        openEditDialog(client);
+                      }}
+                    >
+                      <Edit className="h-4 w-4 mr-1" />
+                      Edit
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="flex-1 text-destructive hover:text-destructive"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setDeleteConfirmation({
+                          clientId: client.id,
+                          clientName: client.company_name,
+                        });
+                      }}
+                    >
+                      <Trash2 className="h-4 w-4 mr-1" />
+                      Delete
+                    </Button>
+                  </div>
                 </CardContent>
               </Card>
             ))}
@@ -705,6 +789,16 @@ export default function ClientsPage() {
                             size="sm"
                             onClick={(e) => {
                               e.stopPropagation();
+                              openEditDialog(client);
+                            }}
+                          >
+                            <Edit className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={(e) => {
+                              e.stopPropagation();
                               setDeleteConfirmation({
                                 clientId: client.id,
                                 clientName: client.company_name,
@@ -747,6 +841,17 @@ export default function ClientsPage() {
                     </div>
                   </div>
                   <div className="flex gap-2">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => {
+                        openEditDialog(selectedClient);
+                        setIsDetailModalOpen(false);
+                      }}
+                    >
+                      <Edit className="h-4 w-4 mr-2" />
+                      Edit
+                    </Button>
                     <Button
                       variant="ghost"
                       size="sm"
@@ -936,6 +1041,98 @@ export default function ClientsPage() {
               </div>
             </>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Client Dialog */}
+      <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
+        <DialogContent className="max-w-md md:max-w-2xl max-h-[90vh] overflow-y-auto">
+          <form onSubmit={handleEditClient}>
+            <DialogHeader>
+              <DialogTitle>Edit Client</DialogTitle>
+              <DialogDescription>
+                Update the client details below.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="grid gap-4 py-4">
+              <div className="grid gap-2">
+                <Label htmlFor="edit-company">Company Name *</Label>
+                <Input
+                  id="edit-company"
+                  placeholder="Acme Corporation"
+                  required
+                  value={editFormData.company_name}
+                  onChange={(e) =>
+                    setEditFormData({ ...editFormData, company_name: e.target.value })
+                  }
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="edit-contact">Contact Person *</Label>
+                <Input
+                  id="edit-contact"
+                  placeholder="John Doe"
+                  required
+                  value={editFormData.contact_person}
+                  onChange={(e) =>
+                    setEditFormData({
+                      ...editFormData,
+                      contact_person: e.target.value,
+                    })
+                  }
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="edit-email">Email *</Label>
+                <Input
+                  id="edit-email"
+                  type="email"
+                  placeholder="john@acme.com"
+                  required
+                  value={editFormData.email}
+                  onChange={(e) =>
+                    setEditFormData({ ...editFormData, email: e.target.value })
+                  }
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="edit-phone">Phone</Label>
+                <Input
+                  id="edit-phone"
+                  placeholder="+1 (555) 123-4567"
+                  value={editFormData.phone}
+                  onChange={(e) =>
+                    setEditFormData({ ...editFormData, phone: e.target.value })
+                  }
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="edit-address">Address</Label>
+                <Textarea
+                  id="edit-address"
+                  placeholder="123 Main St, City, State"
+                  value={editFormData.address}
+                  onChange={(e) =>
+                    setEditFormData({ ...editFormData, address: e.target.value })
+                  }
+                />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setIsEditDialogOpen(false)}
+                disabled={submitting}
+              >
+                Cancel
+              </Button>
+              <Button type="submit" disabled={submitting}>
+                {submitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                {submitting ? "Saving..." : "Save Changes"}
+              </Button>
+            </DialogFooter>
+          </form>
         </DialogContent>
       </Dialog>
 

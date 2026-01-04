@@ -107,24 +107,64 @@ export async function fetchPayments(filters?: {
 }) {
   const supabase = await createClient();
 
-  let query = supabase
-    .from("vendor_payments")
-    .select(
-      `
-      *,
-      vendors (
-        id,
-        name,
-        vendor_type
-      ),
-      projects (
-        id,
-        name,
-        service_type
+  // Get current user to check role
+  const {
+    data: { user },
+    error: authError,
+  } = await supabase.auth.getUser();
+
+  let query;
+
+  // Use service role client if user is admin to bypass RLS
+  if (user) {
+    const service = createServiceClient();
+    const { data: userRow } = await service
+      .from("users")
+      .select("role")
+      .eq("id", user.id)
+      .single();
+
+    const isAdmin = userRow?.role === "admin";
+    const client = isAdmin ? service : supabase;
+
+    query = client
+      .from("vendor_payments")
+      .select(
+        `
+        *,
+        vendors (
+          id,
+          name,
+          vendor_type
+        ),
+        projects (
+          id,
+          name,
+          service_type
+        )
+      `,
       )
-    `,
-    )
-    .order("created_at", { ascending: false });
+      .order("created_at", { ascending: false });
+  } else {
+    query = supabase
+      .from("vendor_payments")
+      .select(
+        `
+        *,
+        vendors (
+          id,
+          name,
+          vendor_type
+        ),
+        projects (
+          id,
+          name,
+          service_type
+        )
+      `,
+      )
+      .order("created_at", { ascending: false });
+  }
 
   if (filters?.vendorId) {
     query = query.eq("vendor_id", filters.vendorId);
@@ -138,8 +178,13 @@ export async function fetchPayments(filters?: {
 
   const { data, error } = await query;
 
-  if (error) return { error: error.message };
-  return { payments: data as VendorPayment[] };
+  if (error) {
+    console.error("Fetch payments error:", error);
+    return { error: error.message };
+  }
+  
+  console.log("Fetched payments:", data?.length || 0);
+  return { payments: (data || []) as VendorPayment[] };
 }
 
 export async function createPayment(payment: Partial<VendorPayment>) {

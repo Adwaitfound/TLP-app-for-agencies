@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
+import { sendCommentNotification } from "@/lib/provisioning/email-service";
 
 async function requireClientAndProject(projectId: string) {
   const supabase = await createClient();
@@ -161,6 +162,75 @@ export async function POST(
         { error: error.message },
         { status: 500, headers: { "Cache-Control": "no-store" } },
       );
+    }
+
+    // Send email notifications to admins and project team
+    try {
+      // Get project details with client info
+      const { data: projectData } = await admin
+        .from("projects")
+        .select("name, clients(company_name, users(full_name, email))")
+        .eq("id", projectId)
+        .single();
+
+      // Get all admins
+      const { data: admins } = await admin
+        .from("users")
+        .select("email, full_name")
+        .in("role", ["admin", "agency_admin", "project_manager"]);
+
+      // Get project team members
+      const { data: teamMembers } = await admin
+        .from("project_team")
+        .select("users(email, full_name)")
+        .eq("project_id", projectId);
+
+      const appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+      const commentUrl = `${appUrl}/dashboard/comments`;
+
+      const clientName = projectData?.clients?.users?.full_name || 
+                        projectData?.clients?.company_name || 
+                        "A client";
+      const projectName = projectData?.name || "a project";
+
+      // Send to admins
+      const adminEmails = admins || [];
+      for (const admin of adminEmails) {
+        if (admin.email) {
+          await sendCommentNotification({
+            recipientEmail: admin.email,
+            recipientName: admin.full_name || "Admin",
+            clientName,
+            projectName,
+            commentText: commentText,
+            commentUrl,
+          }).catch(err => {
+            console.error(`Failed to send email to ${admin.email}:`, err);
+          });
+        }
+      }
+
+      // Send to team members
+      const teamEmails = teamMembers?.map(tm => tm.users) || [];
+      for (const member of teamEmails) {
+        if (member?.email) {
+          await sendCommentNotification({
+            recipientEmail: member.email,
+            recipientName: member.full_name || "Team Member",
+            clientName,
+            projectName,
+            commentText: commentText,
+            commentUrl,
+          }).catch(err => {
+            console.error(`Failed to send email to ${member.email}:`, err);
+          });
+        }
+      }
+
+      console.log(`📧 Sent comment notifications for project ${projectId}`);
+    } catch (emailError) {
+      // Don't fail the request if email fails
+      console.error("Failed to send comment notification emails:", emailError);
     }
 
     return NextResponse.json(

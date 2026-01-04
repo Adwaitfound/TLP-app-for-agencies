@@ -115,7 +115,7 @@ export async function sendWelcomeEmail(data: WelcomeEmailData): Promise<void> {
 
   // Generate setup token with all necessary data
   const setupToken = generateSetupToken(
-    data.agencyName,
+    data.supabaseProjectId,
     data.adminEmail,
     data.supabaseProjectId,
     data.anonKey,
@@ -336,4 +336,163 @@ export function generateTempPassword(length = 16): string {
   
   // Shuffle the password
   return password.split('').sort(() => Math.random() - 0.5).join('');
+}
+
+interface CommentNotificationData {
+  recipientEmail: string;
+  recipientName: string;
+  clientName: string;
+  projectName: string;
+  commentText: string;
+  commentUrl: string;
+}
+
+/**
+ * Send email notification when a new comment is posted
+ */
+export async function sendCommentNotification(data: CommentNotificationData): Promise<void> {
+  if (!RESEND_API_KEY) {
+    console.warn('⚠️  Skipping comment notification - RESEND_API_KEY not configured');
+    return;
+  }
+
+  console.log(`📧 Sending comment notification to ${data.recipientEmail}`);
+
+  const htmlContent = `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+      line-height: 1.6;
+      color: #333;
+      max-width: 600px;
+      margin: 0 auto;
+      padding: 20px;
+      background-color: #f9fafb;
+    }
+    .container {
+      background: white;
+      border-radius: 12px;
+      overflow: hidden;
+      box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    }
+    .header {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      padding: 30px;
+      text-align: center;
+    }
+    .content {
+      padding: 30px;
+    }
+    .comment-box {
+      background: #f3f4f6;
+      border-left: 4px solid #667eea;
+      padding: 20px;
+      margin: 20px 0;
+      border-radius: 6px;
+    }
+    .button {
+      display: inline-block;
+      background: #667eea;
+      color: white !important;
+      padding: 14px 32px;
+      text-decoration: none;
+      border-radius: 6px;
+      margin: 20px 0;
+      font-weight: 600;
+      font-size: 16px;
+      text-align: center;
+    }
+    .button:hover {
+      background: #764ba2;
+    }
+    .footer {
+      text-align: center;
+      color: #6b7280;
+      font-size: 14px;
+      padding: 20px;
+      border-top: 1px solid #e5e7eb;
+    }
+    .meta {
+      color: #6b7280;
+      font-size: 14px;
+      margin-bottom: 10px;
+    }
+    h1 { 
+      color: white; 
+      margin: 0;
+      font-size: 24px;
+    }
+    h2 { 
+      color: #667eea;
+      font-size: 18px;
+      margin-top: 0;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>💬 New Client Feedback</h1>
+    </div>
+    
+    <div class="content">
+      <p>Hi ${data.recipientName},</p>
+      
+      <p><strong>${data.clientName}</strong> has posted a new comment on <strong>${data.projectName}</strong>:</p>
+      
+      <div class="comment-box">
+        <div class="meta">
+          <strong>Project:</strong> ${data.projectName}<br>
+          <strong>From:</strong> ${data.clientName}
+        </div>
+        <p style="margin: 15px 0 0 0; white-space: pre-wrap;">${data.commentText}</p>
+      </div>
+      
+      <p>Click the button below to view and respond to this comment:</p>
+      
+      <div style="text-align: center;">
+        <a href="${data.commentUrl}" class="button">View Comment</a>
+      </div>
+      
+      <p style="color: #6b7280; font-size: 14px; margin-top: 30px;">
+        💡 <strong>Tip:</strong> Respond quickly to client feedback to maintain great relationships and project momentum!
+      </p>
+    </div>
+    
+    <div class="footer">
+      <p>This is an automated notification from The Lost Project</p>
+      <p style="margin: 5px 0 0 0;">
+        <a href="${data.commentUrl}" style="color: #667eea; text-decoration: none;">View Dashboard</a>
+      </p>
+    </div>
+  </div>
+</body>
+</html>
+  `;
+
+  const response = await fetch('https://api.resend.com/emails', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${RESEND_API_KEY}`,
+    },
+    body: JSON.stringify({
+      from: RESEND_FROM_EMAIL,
+      to: data.recipientEmail,
+      subject: `New feedback from ${data.clientName} on ${data.projectName}`,
+      html: htmlContent,
+    }),
+  });
+
+  if (!response.ok) {
+    const error = await response.text();
+    console.error(`Failed to send comment notification: ${response.status} ${error}`);
+  } else {
+    console.log(`✅ Comment notification sent to ${data.recipientEmail}`);
+  }
 }

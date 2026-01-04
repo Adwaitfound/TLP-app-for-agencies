@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   Dialog,
   DialogContent,
@@ -20,20 +20,22 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { VENDOR_TYPES } from "@/types";
-import type { VendorType, PaymentFrequency } from "@/types";
-import { createVendor } from "@/app/actions/vendor-operations";
+import type { Vendor, VendorType, PaymentFrequency } from "@/types";
+import { createVendor, updateVendor } from "@/app/actions/vendor-operations";
 import { Loader2 } from "lucide-react";
 
 interface AddVendorDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSuccess: () => void;
+  editingVendor?: Vendor | null;
 }
 
 export function AddVendorDialog({
   open,
   onOpenChange,
   onSuccess,
+  editingVendor = null,
 }: AddVendorDialogProps) {
   const [loading, setLoading] = useState(false);
   const [toast, setToast] = useState<{
@@ -57,45 +59,91 @@ export function AddVendorDialog({
     preferred_vendor: false,
   });
 
+  // Load vendor data when editing
+  useEffect(() => {
+    if (editingVendor) {
+      setFormData({
+        name: editingVendor.name || "",
+        vendor_type: editingVendor.vendor_type as VendorType,
+        phone: editingVendor.phone || "",
+        email: editingVendor.email || "",
+        upi_id: editingVendor.upi_id || "",
+        bank_account_number: editingVendor.bank_account_number || "",
+        bank_ifsc_code: editingVendor.bank_ifsc_code || "",
+        bank_account_name: editingVendor.bank_account_name || "",
+        address: editingVendor.address || "",
+        notes: editingVendor.notes || "",
+        work_frequency: (editingVendor.work_frequency || "per_project") as PaymentFrequency,
+        is_active: editingVendor.is_active ?? true,
+        preferred_vendor: editingVendor.preferred_vendor ?? false,
+      });
+    } else {
+      resetForm();
+    }
+  }, [editingVendor, open]);
+
+  function resetForm() {
+    setFormData({
+      name: "",
+      vendor_type: "videographer",
+      phone: "",
+      email: "",
+      upi_id: "",
+      bank_account_number: "",
+      bank_ifsc_code: "",
+      bank_account_name: "",
+      address: "",
+      notes: "",
+      work_frequency: "per_project",
+      is_active: true,
+      preferred_vendor: false,
+    });
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setLoading(true);
 
-    const result = await createVendor(formData);
+    let result;
+    if (editingVendor) {
+      // Update existing vendor
+      result = await updateVendor(editingVendor.id, formData);
+      const successMessage = result.success ? "Vendor updated successfully" : result.error || "Failed to update vendor";
+      const isSuccess = result.success;
 
-    if (result.success) {
-      onSuccess();
-      onOpenChange(false);
-      // Reset form
-      setFormData({
-        name: "",
-        vendor_type: "videographer",
-        phone: "",
-        email: "",
-        upi_id: "",
-        bank_account_number: "",
-        bank_ifsc_code: "",
-        bank_account_name: "",
-        address: "",
-        notes: "",
-        work_frequency: "per_project",
-        is_active: true,
-        preferred_vendor: false,
-      });
-      // Show success toast
+      if (isSuccess) {
+        onSuccess();
+        onOpenChange(false);
+      }
+
+      // Show toast
       if (toastTimer) clearTimeout(toastTimer);
-      setToast({ message: "Vendor added successfully", type: "success" });
+      setToast({ message: successMessage, type: isSuccess ? "success" : "error" });
       const t = setTimeout(() => setToast(null), 3000);
       setToastTimer(t);
     } else {
-      // Show error toast
-      if (toastTimer) clearTimeout(toastTimer);
-      setToast({
-        message: result.error || "Failed to create vendor",
-        type: "error",
-      });
-      const t = setTimeout(() => setToast(null), 3000);
-      setToastTimer(t);
+      // Create new vendor
+      result = await createVendor(formData);
+
+      if (result.success) {
+        onSuccess();
+        onOpenChange(false);
+        resetForm();
+        // Show success toast
+        if (toastTimer) clearTimeout(toastTimer);
+        setToast({ message: "Vendor added successfully", type: "success" });
+        const t = setTimeout(() => setToast(null), 3000);
+        setToastTimer(t);
+      } else {
+        // Show error toast
+        if (toastTimer) clearTimeout(toastTimer);
+        setToast({
+          message: result.error || "Failed to create vendor",
+          type: "error",
+        });
+        const t = setTimeout(() => setToast(null), 3000);
+        setToastTimer(t);
+      }
     }
 
     setLoading(false);
@@ -105,9 +153,13 @@ export function AddVendorDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Add New Vendor</DialogTitle>
+          <DialogTitle>
+            {editingVendor ? "Edit Vendor" : "Add New Vendor"}
+          </DialogTitle>
           <DialogDescription>
-            Add a new vendor to your database
+            {editingVendor
+              ? "Update vendor information"
+              : "Add a new vendor to your database"}
           </DialogDescription>
         </DialogHeader>
 
@@ -334,7 +386,7 @@ export function AddVendorDialog({
             </Button>
             <Button type="submit" disabled={loading}>
               {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              Add Vendor
+              {editingVendor ? "Update Vendor" : "Add Vendor"}
             </Button>
           </div>
         </form>

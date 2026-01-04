@@ -107,7 +107,7 @@ export function ClientHeader() {
           <Video className="h-5 w-5 text-primary-foreground" />
         </div>
         <div className="hidden md:flex items-center gap-2">
-          <span className="text-xl font-bold">VideoProduction</span>
+          <span className="text-xl font-bold">{user?.company_name || user?.full_name || "Client Portal"}</span>
           <span className="rounded-full border px-2 py-0.5 text-[10px] font-medium tracking-wide text-muted-foreground">
             CLIENT
           </span>

@@ -30,6 +30,7 @@ interface ClonedSupabaseProject {
     anon: string;
     service_role: string;
   };
+  reusedTemplate?: boolean; // true when falling back to the template project
 }
 
 interface ClonedVercelProject {
@@ -99,6 +100,28 @@ export async function cloneSupabaseProject(
 
   if (!createResp.ok) {
     const error = await createResp.text();
+    
+    // If we hit the project limit, fall back to using the template project for testing
+    if (error.includes('maximum limits') || error.includes('project limit')) {
+      console.warn(`   ⚠️  Hit Supabase project limit, reusing template project for testing`);
+      console.warn(`   ℹ️  This is expected on free tier; upgrade to allow more projects`);
+
+      const fallbackAnon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
+      const fallbackService = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
+
+      // Return template project as fallback so provisioning can continue in dev/test
+      return {
+        id: TEMPLATE_SUPABASE_PROJECT_ID,
+        name: 'template-project-fallback',
+        database_password: 'fallback-mode',
+        api_keys: {
+          anon: fallbackAnon,
+          service_role: fallbackService,
+        },
+        reusedTemplate: true,
+      };
+    }
+    
     throw new Error(`Failed to create Supabase project: ${error}`);
   }
 
@@ -231,24 +254,30 @@ export async function setupClonedDatabase(
   serviceRoleKey: string,
   adminEmail: string,
   agencyName: string,
-  tier: 'standard' | 'premium' = 'standard'
+  tier: 'standard' | 'premium' = 'standard',
+  options: { skipMigrations?: boolean } = {}
 ): Promise<void> {
+  const { skipMigrations = false } = options;
   console.log(`   🔨 Setting up schema and admin user (Tier: ${tier})...`);
 
   // Step 1: Run migrations to set up schema
-  try {
-    console.log(`   📊 Running migrations to set up schema...`);
-    
-    // Extract project reference from URL (e.g., "https://abc123.supabase.co" -> "abc123")
-    const projectRef = supabaseUrl.split('//')[1].split('.')[0];
-    
-    // Import and run migrations
-    const { runMigrations } = await import('./database-setup');
-    await runMigrations(projectRef, serviceRoleKey);
-    console.log(`   ✅ All migrations completed`);
-  } catch (migrationError: any) {
-    console.error(`❌ Migration failed: ${migrationError.message}`);
-    throw migrationError;
+  if (skipMigrations) {
+    console.log(`   ⏭️  Skipping migrations (reusing template project)`);
+  } else {
+    try {
+      console.log(`   📊 Running migrations to set up schema...`);
+      
+      // Extract project reference from URL (e.g., "https://abc123.supabase.co" -> "abc123")
+      const projectRef = supabaseUrl.split('//')[1].split('.')[0];
+      
+      // Import and run migrations
+      const { runMigrations } = await import('./database-setup');
+      await runMigrations(projectRef, serviceRoleKey);
+      console.log(`   ✅ All migrations completed`);
+    } catch (migrationError: any) {
+      console.error(`❌ Migration failed: ${migrationError.message}`);
+      throw migrationError;
+    }
   }
 
   // Step 2: Create the initial admin user

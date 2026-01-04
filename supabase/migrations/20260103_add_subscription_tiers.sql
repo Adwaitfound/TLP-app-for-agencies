@@ -1,6 +1,20 @@
--- Add agency subscription tiers
-CREATE TYPE agency_tier AS ENUM ('standard', 'premium');
-ALTER TYPE agency_tier OWNER TO postgres;
+-- Ensure enum exists (idempotent for reruns)
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'agency_tier') THEN
+    CREATE TYPE agency_tier AS ENUM ('standard', 'premium');
+    ALTER TYPE agency_tier OWNER TO postgres;
+  END IF;
+END$$;
+
+-- Ensure user_memberships exists (some older templates may miss it)
+CREATE TABLE IF NOT EXISTS user_memberships (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  agency_id uuid NOT NULL REFERENCES agencies(id) ON DELETE CASCADE,
+  user_id uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  role TEXT DEFAULT 'employee',
+  created_at timestamptz DEFAULT now()
+);
 
 -- Add tier info to agencies table
 ALTER TABLE agencies ADD COLUMN tier agency_tier DEFAULT 'standard';
@@ -44,7 +58,7 @@ CREATE POLICY "Users can see subscription of their agency"
   );
 
 -- Add tier info to user_memberships
-ALTER TABLE user_memberships ADD COLUMN role TEXT DEFAULT 'employee'; -- admin, employee, client
+ALTER TABLE user_memberships ADD COLUMN IF NOT EXISTS role TEXT DEFAULT 'employee'; -- admin, employee, client
 
 -- Constraints for seat limits
 CREATE FUNCTION check_seat_limits() RETURNS TRIGGER AS $$

@@ -19,8 +19,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import type { Vendor, PaymentStatus } from "@/types";
-import { createPayment } from "@/app/actions/vendor-operations";
+import type { Vendor, PaymentStatus, VendorPayment } from "@/types";
+import { createPayment, updatePayment } from "@/app/actions/vendor-operations";
 import { createClient } from "@/lib/supabase/client";
 import { Loader2 } from "lucide-react";
 
@@ -29,6 +29,7 @@ interface AddPaymentDialogProps {
   onOpenChange: (open: boolean) => void;
   vendors: Vendor[];
   onSuccess: () => void;
+  editingPayment?: VendorPayment | null;
 }
 
 interface Project {
@@ -41,6 +42,7 @@ export function AddPaymentDialog({
   onOpenChange,
   vendors,
   onSuccess,
+  editingPayment = null,
 }: AddPaymentDialogProps) {
   const [loading, setLoading] = useState(false);
   const [projects, setProjects] = useState<Project[]>([]);
@@ -71,14 +73,47 @@ export function AddPaymentDialog({
   useEffect(() => {
     if (open) {
       void loadProjects();
+      if (editingPayment) {
+        setFormData({
+          vendor_id: editingPayment.vendor_id || "",
+          project_id: editingPayment.project_id || "",
+          amount: editingPayment.amount?.toString() || "",
+          payment_date: editingPayment.payment_date || "",
+          scheduled_date: editingPayment.scheduled_date || "",
+          status: (editingPayment.status as PaymentStatus) || "pending",
+          payment_method: editingPayment.payment_method || "UPI",
+          transaction_id: editingPayment.transaction_id || "",
+          description: editingPayment.description || "",
+          payment_reason: editingPayment.payment_reason || "",
+          invoice_number: editingPayment.invoice_number || "",
+        });
+      } else {
+        resetForm();
+      }
     }
-  }, [open, loadProjects]);
+  }, [open, loadProjects, editingPayment]);
+
+  function resetForm() {
+    setFormData({
+      vendor_id: "",
+      project_id: "",
+      amount: "",
+      payment_date: "",
+      scheduled_date: "",
+      status: "pending",
+      payment_method: "UPI",
+      transaction_id: "",
+      description: "",
+      payment_reason: "",
+      invoice_number: "",
+    });
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setLoading(true);
 
-    const result = await createPayment({
+    const paymentData = {
       vendor_id: formData.vendor_id,
       project_id: formData.project_id || undefined,
       amount: parseFloat(formData.amount),
@@ -90,27 +125,30 @@ export function AddPaymentDialog({
       description: formData.description,
       payment_reason: formData.payment_reason || undefined,
       invoice_number: formData.invoice_number || undefined,
-    });
+    };
 
-    if (result.success) {
-      onSuccess();
-      onOpenChange(false);
-      // Reset form
-      setFormData({
-        vendor_id: "",
-        project_id: "",
-        amount: "",
-        payment_date: "",
-        scheduled_date: "",
-        status: "pending",
-        payment_method: "UPI",
-        transaction_id: "",
-        description: "",
-        payment_reason: "",
-        invoice_number: "",
-      });
+    let result;
+
+    if (editingPayment) {
+      // Update existing payment
+      result = await updatePayment(editingPayment.id, paymentData);
+      if (result.success) {
+        onSuccess();
+        onOpenChange(false);
+      } else {
+        alert(result.error || "Failed to update payment");
+      }
     } else {
-      alert(result.error || "Failed to create payment");
+      // Create new payment
+      result = await createPayment(paymentData);
+
+      if (result.success) {
+        onSuccess();
+        onOpenChange(false);
+        resetForm();
+      } else {
+        alert(result.error || "Failed to create payment");
+      }
     }
 
     setLoading(false);
@@ -120,9 +158,13 @@ export function AddPaymentDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Record Payment</DialogTitle>
+          <DialogTitle>
+            {editingPayment ? "Edit Payment" : "Record Payment"}
+          </DialogTitle>
           <DialogDescription>
-            Record a new payment to a vendor
+            {editingPayment
+              ? "Update payment information"
+              : "Record a new payment to a vendor"}
           </DialogDescription>
         </DialogHeader>
 
@@ -329,7 +371,7 @@ export function AddPaymentDialog({
             </Button>
             <Button type="submit" disabled={loading}>
               {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              Record Payment
+              {editingPayment ? "Update Payment" : "Record Payment"}
             </Button>
           </div>
         </form>
