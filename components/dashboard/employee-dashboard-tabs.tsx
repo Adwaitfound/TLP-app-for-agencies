@@ -433,7 +433,10 @@ export function EmployeeDashboardTabs() {
                   <p className="text-muted-foreground mb-4">
                     No projects assigned yet
                   </p>
-                  <Button variant="outline">
+                  <Button 
+                    variant="outline"
+                    onClick={() => setActiveTab("tasks")}
+                  >
                     <Plus className="h-4 w-4 mr-2" />
                     Request a Project
                   </Button>

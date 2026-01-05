@@ -259,7 +259,33 @@ export async function updatePayment(
 ) {
   const supabase = await createClient();
 
-  const { data, error } = await supabase
+  // Get current user to verify they have permission
+  const {
+    data: { user },
+    error: authError,
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    return { error: "Unauthorized - please log in" };
+  }
+
+  // Use service role for update to bypass RLS if admin
+  const service = createServiceClient();
+  const { data: userRow } = await service
+    .from("users")
+    .select("role")
+    .eq("id", user.id)
+    .single();
+
+  const isAdmin = userRow?.role === "admin";
+  
+  if (!isAdmin) {
+    return { error: "Admins only" };
+  }
+
+  const client = isAdmin ? service : supabase;
+
+  const { data, error } = await client
     .from("vendor_payments")
     .update(updates)
     .eq("id", id)
