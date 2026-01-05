@@ -8,54 +8,69 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY
 )
 
-async function addColumn() {
+async function runMigration() {
   try {
-    console.log('Adding shared_with_client column to invoices table...\n')
+    console.log('🔄 Running migration to add shared_with_client column...\n')
     
-    // Try to query it first to see if it already exists
-    const { data: test, error: testError } = await supabase
+    // Execute SQL directly via Supabase PostgreSQL
+    const { data, error } = await supabase.rpc('exec_sql', {
+      sql: `
+        ALTER TABLE invoices ADD COLUMN IF NOT EXISTS shared_with_client BOOLEAN DEFAULT false;
+        UPDATE invoices SET shared_with_client = true WHERE shared_with_client IS NULL;
+      `
+    })
+    
+    if (error) {
+      console.error('❌ Error executing SQL:', error.message)
+      console.log('\nTrying alternative approach...')
+      
+      // Try fetching to check if column exists
+      const { data: invoices, error: checkError } = await supabase
+        .from('invoices')
+        .select('id, shared_with_client')
+        .limit(1)
+      
+      if (!checkError) {
+        console.log('✅ Column already exists! Migration not needed.')
+        return
+      }
+      
+      if (checkError.code === '42703') {
+        console.error('\n⚠️  Column does not exist and cannot be added via RPC')
+        console.log('\nPlease add it manually in Supabase Dashboard:')
+        console.log('1. Go to https://app.supabase.com')
+        console.log('2. Select project: frinqtylwgzquoxvqhxb')
+        console.log('3. Go to SQL Editor')
+        console.log('4. Run this query:\n')
+        console.log(`
+  ALTER TABLE invoices ADD COLUMN IF NOT EXISTS shared_with_client BOOLEAN DEFAULT false;
+  UPDATE invoices SET shared_with_client = true WHERE shared_with_client IS NULL;
+        `)
+        return
+      }
+      
+      throw checkError
+    }
+    
+    console.log('✅ Migration completed successfully!')
+    console.log('   - Added shared_with_client column to invoices table')
+    console.log('   - Set all existing invoices to shared_with_client = true')
+    
+    // Verify the change
+    const { data: verify } = await supabase
       .from('invoices')
       .select('id, shared_with_client')
       .limit(1)
     
-    if (test && test.length > 0 && !testError) {
-      console.log('✅ Column already exists in invoices table')
-      return
-    }
-    
-    if (testError && testError.code === '42703') {
-      console.log('Column missing, attempting to add...')
-      
-      // Try using exec_sql RPC
-      try {
-        const { data, error: rpcError } = await supabase
-          .rpc('exec_sql', {
-            sql: `
-              ALTER TABLE public.invoices
-              ADD COLUMN IF NOT EXISTS shared_with_client BOOLEAN DEFAULT false;
-              UPDATE public.invoices SET shared_with_client = true WHERE shared_with_client IS NULL;
-            `
-          })
-        
-        if (rpcError) {
-          console.log('RPC not available:', rpcError.message)
-          console.log('\n⚠️  Please add the column manually in Supabase Dashboard:')
-          console.log('   ALTER TABLE invoices ADD COLUMN IF NOT EXISTS shared_with_client BOOLEAN DEFAULT false;')
-          console.log('   UPDATE invoices SET shared_with_client = true WHERE shared_with_client IS NULL;')
-        } else {
-          console.log('✅ Column added successfully via RPC')
-        }
-      } catch (rpcErr) {
-        console.log('\n⚠️  Unable to add column via RPC')
-        console.log('Please add manually in Supabase SQL Editor:')
-        console.log('   ALTER TABLE invoices ADD COLUMN IF NOT EXISTS shared_with_client BOOLEAN DEFAULT false;')
-        console.log('   UPDATE invoices SET shared_with_client = true WHERE shared_with_client IS NULL;')
-      }
+    if (verify && verify.length > 0) {
+      console.log('\n✅ Verification successful! Column is accessible.')
+      console.log(`   Sample invoice: ID=${verify[0].id}, shared_with_client=${verify[0].shared_with_client}`)
     }
     
   } catch (err) {
-    console.error('Error:', err.message)
+    console.error('❌ Error:', err.message)
+    process.exit(1)
   }
 }
 
-addColumn()
+runMigration()

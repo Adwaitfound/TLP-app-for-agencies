@@ -46,6 +46,7 @@ import {
   Target,
   ShieldCheck,
   User,
+  X,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { useAuth } from "@/contexts/auth-context";
@@ -381,22 +382,29 @@ export default function EnhancedClientProjectDetail({
   return (
     <div className="flex min-h-screen w-full flex-col">
       <ClientHeader />
-      <main className="flex flex-1 flex-col gap-4 p-4 lg:gap-6 lg:p-6">
+      <main className="flex flex-1 flex-col gap-3 p-3 sm:gap-4 sm:p-4 lg:gap-6 lg:p-6">
         {/* Header */}
         <div className="flex flex-col gap-4">
-          <div className="flex items-center gap-4">
-            <Button variant="ghost" size="icon" onClick={() => router.back()}>
-              <ArrowLeft className="h-5 w-5" />
-            </Button>
-            <div className="flex-1">
-              <h1 className="text-3xl font-bold tracking-tight">
-                {project.name}
-              </h1>
-              <p className="text-muted-foreground">
-                {project.clients?.company_name}
-              </p>
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4">
+            <div className="flex items-center gap-2 sm:gap-4 flex-1 min-w-0">
+              <Button variant="ghost" size="icon" onClick={() => router.back()} className="flex-shrink-0">
+                <ArrowLeft className="h-5 w-5" />
+              </Button>
+              <div className="flex-1 min-w-0">
+                <h1 className="text-2xl sm:text-3xl font-bold tracking-tight truncate">
+                  {project.name}
+                </h1>
+                <p className="text-xs sm:text-sm text-muted-foreground truncate">
+                  {project.clients?.company_name}
+                </p>
+              </div>
             </div>
-            <StatusBadge status={project.status} />
+            <div className="flex items-center gap-2 self-end sm:self-auto">
+              <StatusBadge status={project.status} />
+              <Button variant="ghost" size="icon" onClick={() => router.back()} className="flex-shrink-0">
+                <X className="h-5 w-5" />
+              </Button>
+            </div>
           </div>
 
           {restrictAccess && (
@@ -410,17 +418,17 @@ export default function EnhancedClientProjectDetail({
           )}
 
           {/* Quick Stats */}
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+          <div className="grid gap-2 sm:gap-3 grid-cols-2 sm:grid-cols-2 lg:grid-cols-4">
             <Card>
-              <CardContent className="p-6">
+              <CardContent className="p-3 sm:p-4 lg:p-6">
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-sm text-muted-foreground">Progress</p>
-                    <p className="text-2xl font-bold">
+                    <p className="text-xs sm:text-sm text-muted-foreground">Progress</p>
+                    <p className="text-xl sm:text-2xl font-bold">
                       {project.progress_percentage || 0}%
                     </p>
                   </div>
-                  <TrendingUp className="h-8 w-8 text-primary" />
+                  <TrendingUp className="h-6 sm:h-8 w-6 sm:w-8 text-primary flex-shrink-0" />
                 </div>
                 <Progress
                   value={project.progress_percentage || 0}
@@ -430,17 +438,17 @@ export default function EnhancedClientProjectDetail({
             </Card>
 
             <Card>
-              <CardContent className="p-6">
+              <CardContent className="p-3 sm:p-4 lg:p-6">
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-sm text-muted-foreground">
+                    <p className="text-xs sm:text-sm text-muted-foreground">
                       Deliverables
                     </p>
-                    <p className="text-2xl font-bold">
+                    <p className="text-xl sm:text-2xl font-bold">
                       {deliverablesStats.completed}/{deliverablesStats.total}
                     </p>
                   </div>
-                  <Package className="h-8 w-8 text-green-600" />
+                  <Package className="h-6 sm:h-8 w-6 sm:w-8 text-green-600 flex-shrink-0" />
                 </div>
                 <p className="text-xs text-muted-foreground mt-2">
                   {deliverablesStats.completionRate}% complete
@@ -449,15 +457,15 @@ export default function EnhancedClientProjectDetail({
             </Card>
 
             <Card>
-              <CardContent className="p-6">
+              <CardContent className="p-3 sm:p-4 lg:p-6">
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-sm text-muted-foreground">Budget</p>
-                    <p className="text-2xl font-bold">
+                    <p className="text-xs sm:text-sm text-muted-foreground">Budget</p>
+                    <p className="text-xl sm:text-2xl font-bold">
                       ₹{budgetStats.remaining.toLocaleString()}
                     </p>
                   </div>
-                  <IndianRupee className="h-8 w-8 text-blue-600" />
+                  <IndianRupee className="h-6 sm:h-8 w-6 sm:w-8 text-blue-600 flex-shrink-0" />
                 </div>
                 <p className="text-xs text-muted-foreground mt-2">
                   {budgetStats.spentPercentage}% spent
@@ -466,13 +474,13 @@ export default function EnhancedClientProjectDetail({
             </Card>
 
             <Card>
-              <CardContent className="p-6">
+              <CardContent className="p-3 sm:p-4 lg:p-6">
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-sm text-muted-foreground">Team</p>
-                    <p className="text-2xl font-bold">{teamMembers.length}</p>
+                    <p className="text-xs sm:text-sm text-muted-foreground">Team</p>
+                    <p className="text-xl sm:text-2xl font-bold">{teamMembers.length}</p>
                   </div>
-                  <Users className="h-8 w-8 text-purple-600" />
+                  <Users className="h-6 sm:h-8 w-6 sm:w-8 text-purple-600 flex-shrink-0" />
                 </div>
                 <p className="text-xs text-muted-foreground mt-2">
                   Active members
@@ -484,34 +492,34 @@ export default function EnhancedClientProjectDetail({
 
         {/* Tabs */}
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-          <TabsList className="grid w-full grid-cols-2 lg:grid-cols-6">
-            <TabsTrigger value="overview">Overview</TabsTrigger>
-            <TabsTrigger value="deliverables">Deliverables</TabsTrigger>
-            <TabsTrigger value="tasks">Tasks</TabsTrigger>
-            <TabsTrigger value="timeline">Timeline</TabsTrigger>
-            <TabsTrigger value="team">Team</TabsTrigger>
-            <TabsTrigger value="budget">Budget</TabsTrigger>
+          <TabsList className="grid w-full grid-cols-2 lg:grid-cols-6 h-auto">
+            <TabsTrigger value="overview" className="text-xs sm:text-sm py-1.5 sm:py-2">Overview</TabsTrigger>
+            <TabsTrigger value="deliverables" className="text-xs sm:text-sm py-1.5 sm:py-2">Deliverables</TabsTrigger>
+            <TabsTrigger value="tasks" className="text-xs sm:text-sm py-1.5 sm:py-2 hidden sm:inline-flex">Tasks</TabsTrigger>
+            <TabsTrigger value="timeline" className="text-xs sm:text-sm py-1.5 sm:py-2 hidden lg:inline-flex">Timeline</TabsTrigger>
+            <TabsTrigger value="team" className="text-xs sm:text-sm py-1.5 sm:py-2 hidden lg:inline-flex">Team</TabsTrigger>
+            <TabsTrigger value="budget" className="text-xs sm:text-sm py-1.5 sm:py-2">Budget</TabsTrigger>
           </TabsList>
 
           {/* Overview Tab */}
-          <TabsContent value="overview" className="space-y-4">
-            <div className="grid gap-4 lg:grid-cols-2">
+          <TabsContent value="overview" className="space-y-3 sm:space-y-4">
+            <div className="grid gap-3 sm:gap-4 lg:grid-cols-2">
               {/* Project Description */}
               <Card>
                 <CardHeader>
-                  <CardTitle>Project Description</CardTitle>
+                  <CardTitle className="text-lg">Project Description</CardTitle>
                 </CardHeader>
-                <CardContent>
-                  <p className="text-sm text-muted-foreground">
+                <CardContent className="space-y-4">
+                  <p className="text-xs sm:text-sm text-muted-foreground">
                     {project.description || "No description provided"}
                   </p>
-                  <div className="grid grid-cols-2 gap-4 mt-4">
+                  <div className="grid grid-cols-2 gap-3 sm:gap-4">
                     {project.start_date && (
                       <div>
                         <p className="text-xs text-muted-foreground">
                           Start Date
                         </p>
-                        <p className="text-sm font-medium">
+                        <p className="text-xs sm:text-sm font-medium">
                           {new Date(project.start_date).toLocaleDateString()}
                         </p>
                       </div>
@@ -521,7 +529,7 @@ export default function EnhancedClientProjectDetail({
                         <p className="text-xs text-muted-foreground">
                           Deadline
                         </p>
-                        <p className="text-sm font-medium">
+                        <p className="text-xs sm:text-sm font-medium">
                           {new Date(project.deadline).toLocaleDateString()}
                         </p>
                       </div>
@@ -533,28 +541,28 @@ export default function EnhancedClientProjectDetail({
               {/* Today's Activity */}
               <Card>
                 <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <Activity className="h-5 w-5" />
+                  <CardTitle className="flex items-center gap-2 text-lg">
+                    <Activity className="h-4 sm:h-5 w-4 sm:w-5" />
                     Today&apos;s Activity
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-3">
                     <div className="flex items-center justify-between">
-                      <span className="text-sm">Files Uploaded</span>
-                      <Badge variant="outline">
+                      <span className="text-xs sm:text-sm">Files Uploaded</span>
+                      <Badge variant="outline" className="text-xs">
                         {todaysActivity.filesUploaded}
                       </Badge>
                     </div>
                     <div className="flex items-center justify-between">
-                      <span className="text-sm">Comments Added</span>
-                      <Badge variant="outline">
+                      <span className="text-xs sm:text-sm">Comments Added</span>
+                      <Badge variant="outline" className="text-xs">
                         {todaysActivity.commentsAdded}
                       </Badge>
                     </div>
                     <div className="flex items-center justify-between">
-                      <span className="text-sm">Tasks Updated</span>
-                      <Badge variant="outline">
+                      <span className="text-xs sm:text-sm">Tasks Updated</span>
+                      <Badge variant="outline" className="text-xs">
                         {todaysActivity.tasksUpdated}
                       </Badge>
                     </div>
@@ -572,25 +580,25 @@ export default function EnhancedClientProjectDetail({
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                <div className="space-y-4">
+                <div className="space-y-2 sm:space-y-4">
                   {todaysActivity.activities
                     .slice(0, 10)
                     .map((activity, idx) => (
                       <div
                         key={idx}
-                        className="flex items-start gap-3 pb-3 border-b last:border-0"
+                        className="flex items-start gap-2 sm:gap-3 pb-2 sm:pb-3 border-b last:border-0"
                       >
                         {activity.type === "file" && (
-                          <FileText className="h-5 w-5 text-blue-600 mt-0.5" />
+                          <FileText className="h-4 sm:h-5 w-4 sm:w-5 text-blue-600 mt-0.5 flex-shrink-0" />
                         )}
                         {activity.type === "comment" && (
-                          <MessageSquare className="h-5 w-5 text-green-600 mt-0.5" />
+                          <MessageSquare className="h-4 sm:h-5 w-4 sm:w-5 text-green-600 mt-0.5 flex-shrink-0" />
                         )}
                         {activity.type === "task" && (
-                          <CheckSquare className="h-5 w-5 text-purple-600 mt-0.5" />
+                          <CheckSquare className="h-4 sm:h-5 w-4 sm:w-5 text-purple-600 mt-0.5 flex-shrink-0" />
                         )}
-                        <div className="flex-1">
-                          <p className="text-sm font-medium">
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs sm:text-sm font-medium">
                             {activity.type === "file" &&
                               `File uploaded: ${activity.data.file_name}`}
                             {activity.type === "comment" &&
@@ -605,7 +613,7 @@ export default function EnhancedClientProjectDetail({
                       </div>
                     ))}
                   {todaysActivity.activities.length === 0 && (
-                    <p className="text-sm text-muted-foreground text-center py-8">
+                    <p className="text-xs sm:text-sm text-muted-foreground text-center py-8">
                       No activity today
                     </p>
                   )}
@@ -620,22 +628,22 @@ export default function EnhancedClientProjectDetail({
                   <CardTitle>Project Milestones</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <div className="space-y-3">
+                  <div className="space-y-2 sm:space-y-3">
                     {milestones.map((milestone) => (
                       <div
                         key={milestone.id}
-                        className="flex items-center justify-between p-3 rounded-lg border"
+                        className="flex items-start sm:items-center justify-between p-2 sm:p-3 rounded-lg border gap-2"
                       >
-                        <div className="flex items-center gap-3">
+                        <div className="flex items-start sm:items-center gap-2 sm:gap-3 flex-1 min-w-0">
                           {milestone.status === "completed" ? (
-                            <CheckCircle2 className="h-5 w-5 text-green-600" />
+                            <CheckCircle2 className="h-4 sm:h-5 w-4 sm:w-5 text-green-600 flex-shrink-0 mt-0.5 sm:mt-0" />
                           ) : milestone.status === "in_progress" ? (
-                            <Play className="h-5 w-5 text-blue-600" />
+                            <Play className="h-4 sm:h-5 w-4 sm:w-5 text-blue-600 flex-shrink-0 mt-0.5 sm:mt-0" />
                           ) : (
-                            <Clock className="h-5 w-5 text-muted-foreground" />
+                            <Clock className="h-4 sm:h-5 w-4 sm:w-5 text-muted-foreground flex-shrink-0 mt-0.5 sm:mt-0" />
                           )}
-                          <div>
-                            <p className="font-medium text-sm">
+                          <div className="flex-1 min-w-0">
+                            <p className="font-medium text-xs sm:text-sm truncate">
                               {milestone.title}
                             </p>
                             <p className="text-xs text-muted-foreground">
@@ -656,11 +664,11 @@ export default function EnhancedClientProjectDetail({
           </TabsContent>
 
           {/* Deliverables Tab */}
-          <TabsContent value="deliverables" className="space-y-4">
+          <TabsContent value="deliverables" className="space-y-3 sm:space-y-4">
             <Card>
               <CardHeader>
-                <div className="flex items-center justify-between">
-                  <div>
+                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4">
+                  <div className="flex-1">
                     <CardTitle>Deliverables</CardTitle>
                     <CardDescription>
                       {deliverablesStats.completed} of {deliverablesStats.total}{" "}
@@ -680,9 +688,9 @@ export default function EnhancedClientProjectDetail({
                   {files.map((file) => (
                     <div
                       key={file.id}
-                      className="flex items-center justify-between p-4 rounded-lg border hover:bg-accent transition-colors"
+                      className="flex flex-col sm:flex-row sm:items-center justify-between p-3 sm:p-4 rounded-lg border hover:bg-accent transition-colors gap-3"
                     >
-                      <div className="flex items-center gap-3 flex-1">
+                      <div className="flex items-start gap-2 sm:gap-3 flex-1 min-w-0">
                         {(() => {
                           const type = file.file_type || getFileType(file.file_name || "");
                           const isImage = type === "image";
@@ -694,15 +702,15 @@ export default function EnhancedClientProjectDetail({
                             (isVideo && file.video_thumbnail_url ? file.video_thumbnail_url : null);
                           
                           return thumb ? (
-                            <div className="w-64 h-48 rounded overflow-hidden bg-black flex-shrink-0 flex items-center justify-center">
+                            <div className="w-32 h-24 sm:w-64 sm:h-48 rounded overflow-hidden bg-black flex-shrink-0 flex items-center justify-center">
                               <img src={thumb} alt={file.file_name || "File"} className="max-h-full max-w-full object-contain" />
                             </div>
                           ) : (
-                            <FileText className="h-8 w-8 text-muted-foreground flex-shrink-0" />
+                            <FileText className="h-6 sm:h-8 w-6 sm:w-8 text-muted-foreground flex-shrink-0 mt-0.5" />
                           );
                         })()}
                         <div className="flex-1 min-w-0">
-                          <p className="font-medium truncate">
+                          <p className="font-medium text-sm truncate">
                             {file.file_name}
                           </p>
                           <div className="flex items-center gap-2 text-xs text-muted-foreground">
@@ -712,7 +720,7 @@ export default function EnhancedClientProjectDetail({
                             </span>
                             {file.file_size && (
                               <>
-                                <span>•</span>
+                                <span className="hidden sm:inline">•</span>
                                 <span>
                                   {(file.file_size / 1024 / 1024).toFixed(2)} MB
                                 </span>
@@ -721,7 +729,7 @@ export default function EnhancedClientProjectDetail({
                           </div>
                         </div>
                       </div>
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-1 sm:gap-2 flex-shrink-0 flex-wrap sm:flex-nowrap">
                         {file.status && (
                           <Badge
                             variant={
@@ -729,6 +737,7 @@ export default function EnhancedClientProjectDetail({
                                 ? "default"
                                 : "secondary"
                             }
+                            className="text-xs"
                           >
                             {file.status}
                           </Badge>
@@ -738,17 +747,19 @@ export default function EnhancedClientProjectDetail({
                           variant="outline"
                           disabled={restrictAccess}
                           onClick={() => window.open(file.file_url, "_blank")}
+                          className="text-xs"
                         >
-                          <Eye className="h-4 w-4 mr-1" />
-                          View
+                          <Eye className="h-3 w-3 sm:h-4 sm:w-4 mr-1" />
+                          <span className="hidden sm:inline">View</span>
                         </Button>
                         <Button
                           size="sm"
                           disabled={restrictAccess}
                           onClick={() => window.open(file.file_url, "_blank")}
+                          className="text-xs"
                         >
-                          <Download className="h-4 w-4 mr-1" />
-                          Download
+                          <Download className="h-3 w-3 sm:h-4 sm:w-4 mr-1" />
+                          <span className="hidden sm:inline">Download</span>
                         </Button>
                       </div>
                     </div>
@@ -764,11 +775,11 @@ export default function EnhancedClientProjectDetail({
           </TabsContent>
 
           {/* Tasks Tab */}
-          <TabsContent value="tasks" className="space-y-4">
+          <TabsContent value="tasks" className="space-y-3 sm:space-y-4">
             <Card>
               <CardHeader>
-                <div className="flex items-center justify-between">
-                  <div>
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4">
+                  <div className="flex-1">
                     <CardTitle>Project Tasks</CardTitle>
                     <CardDescription>
                       {subProjects.length} total tasks
@@ -779,9 +790,10 @@ export default function EnhancedClientProjectDetail({
                     onOpenChange={setIsTaskDialogOpen}
                   >
                     <DialogTrigger asChild>
-                      <Button>
-                        <Plus className="h-4 w-4 mr-2" />
-                        Request Task
+                      <Button size="sm" className="flex-shrink-0">
+                        <Plus className="h-4 w-4 mr-1 sm:mr-2" />
+                        <span className="hidden sm:inline">Request Task</span>
+                        <span className="sm:hidden">Add</span>
                       </Button>
                     </DialogTrigger>
                     <DialogContent>
@@ -879,13 +891,13 @@ export default function EnhancedClientProjectDetail({
                 </div>
               </CardHeader>
               <CardContent>
-                <div className="space-y-3">
+                <div className="space-y-2 sm:space-y-3">
                   {subProjects.map((task) => (
-                    <div key={task.id} className="p-4 rounded-lg border">
-                      <div className="flex items-start justify-between mb-2">
-                        <div className="flex-1">
-                          <div className="flex items-center gap-2">
-                            <p className="font-medium">{task.name}</p>
+                    <div key={task.id} className="p-3 sm:p-4 rounded-lg border">
+                      <div className="flex items-start justify-between mb-2 gap-2">
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <p className="font-medium text-sm">{task.name}</p>
                             {task.metadata?.client_requested && (
                               <Badge variant="outline" className="text-xs">
                                 <Target className="h-3 w-3 mr-1" />
@@ -894,24 +906,26 @@ export default function EnhancedClientProjectDetail({
                             )}
                           </div>
                           {task.description && (
-                            <p className="text-sm text-muted-foreground mt-1">
+                            <p className="text-xs sm:text-sm text-muted-foreground mt-1">
                               {task.description}
                             </p>
                           )}
                         </div>
-                        <StatusBadge status={task.status} />
+                        <div className="flex-shrink-0">
+                          <StatusBadge status={task.status} />
+                        </div>
                       </div>
-                      <div className="flex items-center gap-4 text-xs text-muted-foreground">
+                      <div className="flex flex-col gap-2 text-xs text-muted-foreground">
                         {task.assigned_to_user && (
                           <span className="flex items-center gap-1">
-                            <Users className="h-3 w-3" />
-                            {task.assigned_to_user.full_name}
+                            <Users className="h-3 w-3 flex-shrink-0" />
+                            <span className="truncate">{task.assigned_to_user.full_name}</span>
                           </span>
                         )}
                         {task.due_date && (
                           <span className="flex items-center gap-1">
-                            <Calendar className="h-3 w-3" />
-                            Due {new Date(task.due_date).toLocaleDateString()}
+                            <Calendar className="h-3 w-3 flex-shrink-0" />
+                            <span className="truncate">Due {new Date(task.due_date).toLocaleDateString()}</span>
                           </span>
                         )}
                         {task.metadata?.priority && (
@@ -923,7 +937,7 @@ export default function EnhancedClientProjectDetail({
                                   ? "default"
                                   : "secondary"
                             }
-                            className="text-xs"
+                            className="text-xs w-fit"
                           >
                             {task.metadata.priority}
                           </Badge>
@@ -932,7 +946,7 @@ export default function EnhancedClientProjectDetail({
                     </div>
                   ))}
                   {subProjects.length === 0 && (
-                    <p className="text-sm text-muted-foreground text-center py-8">
+                    <p className="text-xs sm:text-sm text-muted-foreground text-center py-8">
                       No tasks yet. Request a task to get started.
                     </p>
                   )}
@@ -942,14 +956,14 @@ export default function EnhancedClientProjectDetail({
           </TabsContent>
 
           {/* Timeline Tab */}
-          <TabsContent value="timeline" className="space-y-4">
+          <TabsContent value="timeline" className="space-y-3 sm:space-y-4">
             <Card>
               <CardHeader>
                 <CardTitle>Project Timeline</CardTitle>
                 <CardDescription>All activity and updates</CardDescription>
               </CardHeader>
               <CardContent>
-                <div className="space-y-4">
+                <div className="space-y-3 sm:space-y-4">
                   {[...files, ...comments, ...subProjects]
                     .sort(
                       (a, b) =>
@@ -957,27 +971,27 @@ export default function EnhancedClientProjectDetail({
                         new Date(a.created_at).getTime(),
                     )
                     .map((item, idx) => (
-                      <div key={idx} className="flex gap-4">
+                      <div key={idx} className="flex gap-2 sm:gap-4">
                         <div className="flex flex-col items-center">
-                          <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center">
+                          <div className="h-8 sm:h-10 w-8 sm:w-10 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
                             {"file_name" in item && (
-                              <FileText className="h-5 w-5 text-primary" />
+                              <FileText className="h-4 sm:h-5 w-4 sm:w-5 text-primary" />
                             )}
                             {"comment_text" in item && (
-                              <MessageSquare className="h-5 w-5 text-green-600" />
+                              <MessageSquare className="h-4 sm:h-5 w-4 sm:w-5 text-green-600" />
                             )}
                             {"parent_project_id" in item && (
-                              <ListTodo className="h-5 w-5 text-purple-600" />
+                              <ListTodo className="h-4 sm:h-5 w-4 sm:w-5 text-purple-600" />
                             )}
                           </div>
                           {idx <
                             [...files, ...comments, ...subProjects].length -
                               1 && (
-                            <div className="w-0.5 h-full bg-border flex-1 mt-2" />
+                            <div className="w-0.5 h-full bg-border flex-1 mt-1 sm:mt-2" />
                           )}
                         </div>
-                        <div className="flex-1 pb-4">
-                          <p className="font-medium text-sm">
+                        <div className="flex-1 pb-3 sm:pb-4">
+                          <p className="font-medium text-xs sm:text-sm">
                             {"file_name" in item &&
                               `File uploaded: ${item.file_name}`}
                             {"comment_text" in item && "New comment added"}
@@ -996,7 +1010,7 @@ export default function EnhancedClientProjectDetail({
           </TabsContent>
 
           {/* Team Tab */}
-          <TabsContent value="team" className="space-y-4">
+          <TabsContent value="team" className="space-y-3 sm:space-y-4">
             <Card>
               <CardHeader>
                 <CardTitle>Project Team</CardTitle>
@@ -1005,30 +1019,30 @@ export default function EnhancedClientProjectDetail({
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                <div className="space-y-3">
+                <div className="space-y-2 sm:space-y-3">
                   {teamMembers.map((member) => (
                     <div
                       key={member.user_id}
-                      className="flex items-center justify-between p-4 rounded-lg border"
+                      className="flex flex-col sm:flex-row sm:items-center sm:justify-between p-3 sm:p-4 rounded-lg border gap-3 sm:gap-4"
                     >
-                      <div className="flex items-center gap-3">
-                        <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center">
-                          <Users className="h-5 w-5 text-primary" />
+                      <div className="flex items-center gap-2 sm:gap-3 flex-1 min-w-0">
+                        <div className="h-8 sm:h-10 w-8 sm:w-10 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
+                          <Users className="h-4 sm:h-5 w-4 sm:w-5 text-primary" />
                         </div>
-                        <div>
-                          <p className="font-medium">
+                        <div className="flex-1 min-w-0">
+                          <p className="font-medium text-xs sm:text-sm truncate">
                             {member.users?.full_name || "Team Member"}
                           </p>
-                          <p className="text-sm text-muted-foreground">
+                          <p className="text-xs sm:text-sm text-muted-foreground truncate">
                             {member.users?.email}
                           </p>
                         </div>
                       </div>
-                      <Badge>{member.users?.role || "Member"}</Badge>
+                      <Badge className="w-fit flex-shrink-0">{member.users?.role || "Member"}</Badge>
                     </div>
                   ))}
                   {teamMembers.length === 0 && (
-                    <p className="text-sm text-muted-foreground text-center py-8">
+                    <p className="text-xs sm:text-sm text-muted-foreground text-center py-8">
                       No team members assigned yet
                     </p>
                   )}
@@ -1038,20 +1052,20 @@ export default function EnhancedClientProjectDetail({
           </TabsContent>
 
           {/* Budget Tab */}
-          <TabsContent value="budget" className="space-y-4">
-            <div className="grid gap-4 md:grid-cols-3">
+          <TabsContent value="budget" className="space-y-3 sm:space-y-4">
+            <div className="grid gap-3 sm:gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
               <Card>
-                <CardContent className="p-6">
-                  <p className="text-sm text-muted-foreground">Total Budget</p>
-                  <p className="text-3xl font-bold">
+                <CardContent className="p-3 sm:p-4 lg:p-6">
+                  <p className="text-xs sm:text-sm text-muted-foreground">Total Budget</p>
+                  <p className="text-2xl sm:text-3xl font-bold">
                     ₹{budgetStats.totalBudget.toLocaleString()}
                   </p>
                 </CardContent>
               </Card>
               <Card>
-                <CardContent className="p-6">
-                  <p className="text-sm text-muted-foreground">Spent</p>
-                  <p className="text-3xl font-bold text-red-600">
+                <CardContent className="p-3 sm:p-4 lg:p-6">
+                  <p className="text-xs sm:text-sm text-muted-foreground">Spent</p>
+                  <p className="text-2xl sm:text-3xl font-bold text-red-600">
                     ₹{budgetStats.spent.toLocaleString()}
                   </p>
                   <p className="text-xs text-muted-foreground mt-1">
@@ -1060,9 +1074,9 @@ export default function EnhancedClientProjectDetail({
                 </CardContent>
               </Card>
               <Card>
-                <CardContent className="p-6">
-                  <p className="text-sm text-muted-foreground">Remaining</p>
-                  <p className="text-3xl font-bold text-green-600">
+                <CardContent className="p-3 sm:p-4 lg:p-6">
+                  <p className="text-xs sm:text-sm text-muted-foreground">Remaining</p>
+                  <p className="text-2xl sm:text-3xl font-bold text-green-600">
                     ₹{budgetStats.remaining.toLocaleString()}
                   </p>
                   <p className="text-xs text-muted-foreground mt-1">
@@ -1130,10 +1144,10 @@ export default function EnhancedClientProjectDetail({
         {/* Comments Section - Always visible at bottom */}
         <Card>
           <CardHeader>
-            <CardTitle>Comments & Discussions</CardTitle>
+            <CardTitle className="text-lg sm:text-xl">Comments & Discussions</CardTitle>
             <CardDescription>Communicate with the project team</CardDescription>
           </CardHeader>
-          <CardContent className="space-y-4">
+          <CardContent className="space-y-3 sm:space-y-4">
             <div className="space-y-2">
               <Textarea
                 value={commentText}
@@ -1145,19 +1159,20 @@ export default function EnhancedClientProjectDetail({
                 <Button
                   onClick={handleSubmitComment}
                   disabled={!commentText.trim() || commentSubmitting}
+                  className="text-xs sm:text-sm"
                 >
                   {commentSubmitting ? "Posting..." : "Post Comment"}
                 </Button>
               </div>
             </div>
 
-            <div className="space-y-3">
+            <div className="space-y-2 sm:space-y-3">
               {comments.map((comment) => {
                 const isAdmin = (comment.user?.role || "")
                   .toLowerCase()
                   .includes("admin");
                 const roleLabel = isAdmin ? "Admin" : "Client";
-                const containerClasses = `p-4 rounded-lg border border-l-4 ${
+                const containerClasses = `p-3 sm:p-4 rounded-lg border border-l-4 ${
                   isAdmin
                     ? "border-blue-300 bg-blue-100/70 dark:border-blue-700 dark:bg-blue-900/40 border-l-blue-500"
                     : "border-emerald-300 bg-emerald-100/70 dark:border-emerald-700 dark:bg-emerald-900/40 border-l-emerald-500"
@@ -1166,14 +1181,14 @@ export default function EnhancedClientProjectDetail({
                 return (
                   <div key={comment.id} className={containerClasses}>
                     <div className="flex items-start justify-between mb-2">
-                      <div>
-                        <div className="flex items-center gap-2">
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2 flex-wrap">
                           {isAdmin ? (
-                            <ShieldCheck className="h-3 w-3 text-blue-600 dark:text-blue-400" />
+                            <ShieldCheck className="h-3 w-3 text-blue-600 dark:text-blue-400 flex-shrink-0" />
                           ) : (
-                            <User className="h-3 w-3 text-emerald-600 dark:text-emerald-400" />
+                            <User className="h-3 w-3 text-emerald-600 dark:text-emerald-400 flex-shrink-0" />
                           )}
-                          <p className="font-medium text-sm">
+                          <p className="font-medium text-xs sm:text-sm truncate">
                             {comment.user?.full_name ||
                               comment.user?.email ||
                               "User"}
@@ -1190,12 +1205,12 @@ export default function EnhancedClientProjectDetail({
                         </p>
                       </div>
                     </div>
-                    <p className="text-sm">{comment.comment_text}</p>
+                    <p className="text-xs sm:text-sm">{comment.comment_text}</p>
                   </div>
                 );
               })}
               {comments.length === 0 && (
-                <p className="text-sm text-muted-foreground text-center py-8">
+                <p className="text-xs sm:text-sm text-muted-foreground text-center py-8">
                   No comments yet. Be the first to comment!
                 </p>
               )}
@@ -1206,17 +1221,17 @@ export default function EnhancedClientProjectDetail({
         {/* Approval Section */}
         {!project.client_approved && (
           <Card className="border-primary/20 bg-primary/5">
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between">
+            <CardContent className="p-3 sm:p-4 lg:p-6">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div>
-                  <h3 className="font-semibold text-lg">Ready to Approve?</h3>
-                  <p className="text-sm text-muted-foreground">
+                  <h3 className="font-semibold text-base sm:text-lg">Ready to Approve?</h3>
+                  <p className="text-xs sm:text-sm text-muted-foreground">
                     Approve this project when you&apos;re satisfied with the
                     deliverables
                   </p>
                 </div>
-                <Button onClick={handleApproveProject} size="lg">
-                  <CheckCircle2 className="h-5 w-5 mr-2" />
+                <Button onClick={handleApproveProject} size="lg" className="text-xs sm:text-sm flex-shrink-0">
+                  <CheckCircle2 className="h-4 w-4 sm:h-5 sm:w-5 mr-1 sm:mr-2" />
                   Approve Project
                 </Button>
               </div>
@@ -1226,12 +1241,12 @@ export default function EnhancedClientProjectDetail({
 
         {project.client_approved && (
           <Card className="border-green-500/20 bg-green-500/5">
-            <CardContent className="p-6">
-              <div className="flex items-center gap-3">
-                <CheckCircle2 className="h-8 w-8 text-green-600" />
-                <div>
-                  <p className="font-semibold text-lg">Project Approved</p>
-                  <p className="text-sm text-muted-foreground">
+            <CardContent className="p-3 sm:p-4 lg:p-6">
+              <div className="flex items-start sm:items-center gap-2 sm:gap-3">
+                <CheckCircle2 className="h-6 sm:h-8 w-6 sm:w-8 text-green-600 flex-shrink-0" />
+                <div className="flex-1 min-w-0">
+                  <p className="font-semibold text-base sm:text-lg">Project Approved</p>
+                  <p className="text-xs sm:text-sm text-muted-foreground">
                     Approved on{" "}
                     {new Date(project.client_approved_at).toLocaleString()}
                   </p>
