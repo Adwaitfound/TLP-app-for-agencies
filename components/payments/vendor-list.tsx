@@ -45,12 +45,16 @@ interface VendorListProps {
   vendors: Vendor[];
   onRefresh: () => void;
   onEditVendor?: (vendor: Vendor) => void;
+  onViewDetails?: (vendor: Vendor) => void;
+  onViewPaymentHistory?: (vendor: Vendor) => void;
 }
 
 export function VendorList({
   vendors,
   onRefresh,
   onEditVendor,
+  onViewDetails,
+  onViewPaymentHistory,
 }: VendorListProps) {
   const [search, setSearch] = useState("");
   const [filterType, setFilterType] = useState<string>("all");
@@ -205,8 +209,16 @@ export function VendorList({
                           <Edit className="mr-2 h-4 w-4" />
                           Edit
                         </DropdownMenuItem>
-                        <DropdownMenuItem>View Details</DropdownMenuItem>
-                        <DropdownMenuItem>Payment History</DropdownMenuItem>
+                        <DropdownMenuItem
+                          onClick={() => onViewDetails?.(vendor)}
+                        >
+                          View Details
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          onClick={() => onViewPaymentHistory?.(vendor)}
+                        >
+                          Payment History
+                        </DropdownMenuItem>
                         <DropdownMenuSeparator />
                         <DropdownMenuItem
                           className="text-destructive"

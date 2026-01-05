@@ -188,15 +188,33 @@ CREATE POLICY "Allow authenticated users to view payments"
     ON vendor_payments FOR SELECT
     USING (auth.role() = 'authenticated');
 
-DROP POLICY IF EXISTS "Allow admins to manage payments" ON vendor_payments;
-CREATE POLICY "Allow admins to manage payments"
-    ON vendor_payments FOR ALL
+DROP POLICY IF EXISTS "Allow admins to create payments" ON vendor_payments;
+CREATE POLICY "Allow admins to create payments"
+    ON vendor_payments FOR INSERT
+    WITH CHECK (
+        auth.uid() IN (
+            SELECT id FROM users WHERE role = 'admin'
+        )
+    );
+
+DROP POLICY IF EXISTS "Allow admins to update payments" ON vendor_payments;
+CREATE POLICY "Allow admins to update payments"
+    ON vendor_payments FOR UPDATE
     USING (
         auth.uid() IN (
             SELECT id FROM users WHERE role = 'admin'
         )
     )
     WITH CHECK (
+        auth.uid() IN (
+            SELECT id FROM users WHERE role = 'admin'
+        )
+    );
+
+DROP POLICY IF EXISTS "Allow admins to delete payments" ON vendor_payments;
+CREATE POLICY "Allow admins to delete payments"
+    ON vendor_payments FOR DELETE
+    USING (
         auth.uid() IN (
             SELECT id FROM users WHERE role = 'admin'
         )

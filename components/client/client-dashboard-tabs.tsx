@@ -22,6 +22,7 @@ import {
   DialogDescription,
   DialogHeader,
   DialogTitle,
+  DialogClose,
 } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -36,6 +37,7 @@ import {
   Star,
   ExternalLink,
   Play,
+  X,
 } from "lucide-react";
 import {
   Select,
@@ -1297,19 +1299,27 @@ export default function ClientDashboardTabs() {
       >
         <DialogContent className="w-[95vw] max-w-3xl p-0">
           <DialogHeader className="px-4 py-3 border-b">
-            <DialogTitle className="flex flex-wrap items-center gap-2">
-              <span>{previewFile?.file_name || "Preview"}</span>
-              {previewFile?.file_category ? (
-                <Badge variant="outline" className="text-[11px]">
-                  {previewFile.file_category}
-                </Badge>
-              ) : null}
-              {previewFile?.file_type ? (
-                <Badge variant="secondary" className="text-[11px]">
-                  {previewFile.file_type}
-                </Badge>
-              ) : null}
-            </DialogTitle>
+            <div className="flex items-center justify-between">
+              <DialogTitle className="flex flex-wrap items-center gap-2">
+                <span>{previewFile?.file_name || "Preview"}</span>
+                {previewFile?.file_category ? (
+                  <Badge variant="outline" className="text-[11px]">
+                    {previewFile.file_category}
+                  </Badge>
+                ) : null}
+                {previewFile?.file_type ? (
+                  <Badge variant="secondary" className="text-[11px]">
+                    {previewFile.file_type}
+                  </Badge>
+                ) : null}
+              </DialogTitle>
+              <DialogClose asChild>
+                <button className="inline-flex items-center justify-center h-8 w-8 rounded-md hover:bg-accent text-muted-foreground hover:text-foreground transition-colors">
+                  <X className="h-4 w-4" />
+                  <span className="sr-only">Close</span>
+                </button>
+              </DialogClose>
+            </div>
             <DialogDescription>
               {previewFile?.description || "Preview this file or open it in a new tab."}
             </DialogDescription>
@@ -1381,10 +1391,18 @@ export default function ClientDashboardTabs() {
           {selectedProject ? (
             <>
               <DialogHeader className="sticky top-0 z-10 bg-background/95 backdrop-blur border-b px-4 py-3">
-                <DialogTitle className="flex flex-wrap items-center gap-3 justify-between">
-                  <span className="text-xl font-semibold">{selectedProject.name}</span>
-                  <StatusBadge status={selectedProject.status} />
-                </DialogTitle>
+                <div className="flex items-center justify-between">
+                  <DialogTitle className="flex flex-wrap items-center gap-3">
+                    <span className="text-xl font-semibold">{selectedProject.name}</span>
+                    <StatusBadge status={selectedProject.status} />
+                  </DialogTitle>
+                  <DialogClose asChild>
+                    <button className="inline-flex items-center justify-center h-8 w-8 rounded-md hover:bg-accent text-muted-foreground hover:text-foreground transition-colors">
+                      <X className="h-4 w-4" />
+                      <span className="sr-only">Close</span>
+                    </button>
+                  </DialogClose>
+                </div>
                 <DialogDescription>
                   Project details stay in your dashboard.
                 </DialogDescription>

@@ -31,15 +31,13 @@ export default function CommentsAdminPage() {
   const userId = user?.id;
   const [comments, setComments] = useState<any[]>([]);
   const [projects, setProjects] = useState<any[]>([]);
-  const [teamByProject, setTeamByProject] = useState<Record<string, any[]>>({});
-  const [assignees, setAssignees] = useState<Record<string, string>>({});
   const [projectFilter, setProjectFilter] = useState<string>("all");
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
-  const [replies, setReplies] = useState<Record<string, string>>({});
-  const [repliesData, setRepliesData] = useState<Record<string, any[]>>({});
   const [expandedComments, setExpandedComments] = useState<Set<string>>(new Set());
   const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [replies, setReplies] = useState<Record<string, string>>({});
+  const [repliesData, setRepliesData] = useState<Record<string, any[]>>({});
 
   const isAdmin = user?.role === "admin" || user?.role === "project_manager";
 
@@ -50,7 +48,7 @@ export default function CommentsAdminPage() {
       setLoading(true);
       try {
         // Get user's role and info from auth context or database
-        let userRole = user?.role;
+        let userRole: any = user?.role;
         
         // If no role from context, fetch from database
         if (!userRole) {
@@ -127,7 +125,6 @@ export default function CommentsAdminPage() {
                         project_id,
                         user_id,
                         comment_text,
-                        assigned_user_id,
                         status,
                         created_at
                     `,
@@ -141,7 +138,13 @@ export default function CommentsAdminPage() {
         const { data: commentsData, error: commentsError } = await commentsQuery.order("created_at", { ascending: false });
 
         if (commentsError) {
-          console.error("❌ Error fetching comments:", commentsError);
+          console.error("❌ Error fetching comments:", {
+            code: commentsError.code,
+            message: commentsError.message,
+            details: commentsError.details,
+            hint: commentsError.hint,
+            fullError: commentsError
+          });
         } else {
           console.log("✅ Got comments count:", commentsData?.length);
         }
@@ -160,23 +163,6 @@ export default function CommentsAdminPage() {
           });
         }
 
-        // Fetch assignee data for comments that have assigned_user_id
-        const assigneeIds = commentsData
-          ?.filter((c) => c.assigned_user_id)
-          .map((c) => c.assigned_user_id) || [];
-        
-        let assigneeMap: Record<string, any> = {};
-        if (assigneeIds.length > 0) {
-          const { data: assigneeData } = await supabase
-            .from("users")
-            .select("id, full_name, email")
-            .in("id", assigneeIds);
-          
-          assigneeData?.forEach((user) => {
-            assigneeMap[user.id] = user;
-          });
-        }
-
         // Fetch project details
         const projectIdsFromComments = commentsData?.map((c) => c.project_id).filter(Boolean) || [];
         let projectMap: Record<string, any> = {};
@@ -191,7 +177,14 @@ export default function CommentsAdminPage() {
           });
         }
 
-        // Fetch all replies for these comments
+        // Attach all data to comments
+        const commentsWithAllData = commentsData?.map((comment) => ({
+          ...comment,
+          author: authorMap[comment.user_id] || null,
+          projects: projectMap[comment.project_id] || null,
+        }));
+
+        // Fetch replies for all comments
         const commentIds = commentsData?.map((c) => c.id) || [];
         let repliesData: any[] = [];
         if (commentIds.length > 0) {
@@ -218,70 +211,21 @@ export default function CommentsAdminPage() {
           });
         }
 
-        // Attach author data to replies
-        const repliesWithAuthors = repliesData.map((reply) => ({
-          ...reply,
-          author: replyAuthorMap[reply.user_id] || null,
-        }));
-
-        // Attach all data to comments
-        const commentsWithAllData = commentsData?.map((comment) => ({
-          ...comment,
-          author: authorMap[comment.user_id] || null,
-          assignee: comment.assigned_user_id ? assigneeMap[comment.assigned_user_id] : null,
-          projects: projectMap[comment.project_id] || null,
-          comment_replies: repliesWithAuthors.filter((r) => r.comment_id === comment.id),
-        }));
-
-        // Organize replies by comment ID
+        // Attach replies to comments
         const repliesByComment: Record<string, any[]> = {};
-        commentsWithAllData?.forEach((comment) => {
-          repliesByComment[comment.id] = comment.comment_replies || [];
+        repliesData.forEach((reply) => {
+          if (!repliesByComment[reply.comment_id]) {
+            repliesByComment[reply.comment_id] = [];
+          }
+          repliesByComment[reply.comment_id].push({
+            ...reply,
+            author: replyAuthorMap[reply.user_id] || null,
+          });
         });
         setRepliesData(repliesByComment);
 
-        let teamQuery = supabase
-          .from("project_team")
-          .select("project_id, user_id");
-
-        if (projectIds.length > 0) {
-          teamQuery = teamQuery.in("project_id", projectIds);
-        }
-
-        const { data: teamRows } = await teamQuery;
-
-        // Fetch user details for team members
-        const teamUserIds = teamRows?.map((t) => t.user_id).filter(Boolean) || [];
-        let teamUserMap: Record<string, any> = {};
-        if (teamUserIds.length > 0) {
-          const { data: teamUsers } = await supabase
-            .from("users")
-            .select("id, full_name, email")
-            .in("id", teamUserIds);
-          
-          teamUsers?.forEach((user) => {
-            teamUserMap[user.id] = user;
-          });
-        }
-
-        // Attach user data to team rows
-        const teamRowsWithUsers = teamRows?.map((row) => ({
-          ...row,
-          users: teamUserMap[row.user_id] || null,
-        }));
-
-        const groupedTeam = (teamRowsWithUsers || []).reduce(
-          (acc, row) => {
-            acc[row.project_id] = acc[row.project_id] || [];
-            acc[row.project_id].push(row);
-            return acc;
-          },
-          {} as Record<string, any[]>,
-        );
-
         setProjects(projectsData || []);
         setComments(commentsWithAllData || []);
-        setTeamByProject(groupedTeam);
 
         console.log("✅ Comments Loaded:", {
           projectCount: projectsData?.length,
@@ -307,7 +251,7 @@ export default function CommentsAdminPage() {
                 // Fetch full comment data
                 const { data: newComment } = await supabase
                   .from("project_comments")
-                  .select("id, project_id, user_id, comment_text, assigned_user_id, status, created_at")
+                  .select("id, project_id, user_id, comment_text, status, created_at")
                   .eq("id", payload.new.id)
                   .single();
 
@@ -331,14 +275,9 @@ export default function CommentsAdminPage() {
                     ...newComment,
                     author: author || null,
                     projects: project || null,
-                    comment_replies: [],
                   };
 
                   setComments((prev) => [commentWithData, ...prev]);
-                  setRepliesData((prev) => ({
-                    ...prev,
-                    [commentWithData.id]: [],
-                  }));
                 }
               } else if (payload.eventType === "UPDATE") {
                 setComments((prev) =>
@@ -597,7 +536,6 @@ export default function CommentsAdminPage() {
             </div>
           ) : (
             filtered.map((c) => {
-              const replyCount = repliesData[c.id]?.length || 0;
               const isExpanded = expandedComments.has(c.id);
               
               return (
@@ -654,70 +592,23 @@ export default function CommentsAdminPage() {
                       </p>
                     </div>
 
-                    {/* Assignment Section - Admin Only */}
+                    {/* Status Update - Admin Only */}
                     {isAdmin && (
-                      <div className="flex flex-wrap items-center gap-3 pt-3 border-t">
-                        <div className="flex items-center gap-2">
-                          <Users className="h-4 w-4 text-muted-foreground" />
-                          <span className="text-sm text-muted-foreground">Assign to:</span>
-                        </div>
-                        
-                        {teamByProject[c.project_id]?.length ? (
-                          <>
-                            <Select
-                              value={assignees[c.id] ?? c.assigned_user_id ?? ""}
-                              onValueChange={(value) =>
-                                setAssignees((prev) => ({ ...prev, [c.id]: value }))
-                              }
-                            >
-                              <SelectTrigger className="w-[200px]">
-                                <SelectValue placeholder="Select team member" />
-                              </SelectTrigger>
-                              <SelectContent>
-                                {teamByProject[c.project_id].map((m) => (
-                                  <SelectItem key={m.user_id} value={m.user_id}>
-                                    {m.users?.full_name || m.users?.email || "Member"}
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                            
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => assignees[c.id] && assign(c.id, assignees[c.id])}
-                              disabled={!assignees[c.id]}
-                            >
-                              <UserPlus className="h-3 w-3 mr-1" />
-                              Assign
-                            </Button>
-                          </>
-                        ) : (
-                          <p className="text-xs text-muted-foreground">No team members available</p>
-                        )}
-                        
-                        {c.assignee && (
-                          <Badge variant="secondary" className="ml-auto">
-                            Assigned: {c.assignee.full_name || c.assignee.email}
-                          </Badge>
-                        )}
-                        
-                        {/* Status Update - Admin Only */}
-                        <div className="flex items-center gap-2 ml-auto">
-                          <Select
-                            value={c.status || "pending"}
-                            onValueChange={(value) => updateStatus(c.id, value)}
-                          >
-                            <SelectTrigger className="w-[140px]">
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="pending">Pending</SelectItem>
-                              <SelectItem value="in_progress">In Progress</SelectItem>
-                              <SelectItem value="resolved">Resolved</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </div>
+                      <div className="flex items-center gap-2 pt-3 border-t">
+                        <span className="text-sm text-muted-foreground">Status:</span>
+                        <Select
+                          value={c.status || "pending"}
+                          onValueChange={(value) => updateStatus(c.id, value)}
+                        >
+                          <SelectTrigger className="w-[140px]">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="pending">Pending</SelectItem>
+                            <SelectItem value="in_progress">In Progress</SelectItem>
+                            <SelectItem value="resolved">Resolved</SelectItem>
+                          </SelectContent>
+                        </Select>
                       </div>
                     )}
 
@@ -726,16 +617,16 @@ export default function CommentsAdminPage() {
                       <div className="flex items-center justify-between">
                         <h4 className="text-sm font-semibold flex items-center gap-2">
                           <MessageSquare className="h-4 w-4" />
-                          Conversation ({replyCount})
+                          Responses ({repliesData[c.id]?.length || 0})
                         </h4>
                         
-                        {replyCount > 0 && (
+                        {repliesData[c.id]?.length > 0 && (
                           <Button
                             size="sm"
                             variant="ghost"
                             onClick={() => toggleExpanded(c.id)}
                           >
-                            {isExpanded ? (
+                            {expandedComments.has(c.id) ? (
                               <>
                                 <ChevronUp className="h-4 w-4 mr-1" />
                                 Hide
@@ -743,7 +634,7 @@ export default function CommentsAdminPage() {
                             ) : (
                               <>
                                 <ChevronDown className="h-4 w-4 mr-1" />
-                                Show {replyCount} {replyCount === 1 ? "Reply" : "Replies"}
+                                Show {repliesData[c.id].length} {repliesData[c.id].length === 1 ? "Response" : "Responses"}
                               </>
                             )}
                           </Button>
@@ -751,7 +642,7 @@ export default function CommentsAdminPage() {
                       </div>
 
                       {/* Replies List */}
-                      {isExpanded && replyCount > 0 && (
+                      {expandedComments.has(c.id) && repliesData[c.id]?.length > 0 && (
                         <div className="space-y-3 pl-4 border-l-2 border-primary/20">
                           {repliesData[c.id].map((reply) => (
                             <div key={reply.id} className="bg-muted/50 rounded-lg p-3">
@@ -809,13 +700,6 @@ export default function CommentsAdminPage() {
                             </Button>
                           </div>
                         </div>
-                      )}
-                      
-                      {/* View Only Message for Team */}
-                      {!isAdmin && (
-                        <p className="text-xs text-muted-foreground italic">
-                          You can view this conversation. Only admins can reply.
-                        </p>
                       )}
                     </div>
                   </CardContent>

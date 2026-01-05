@@ -75,9 +75,14 @@ export default function PaymentsPage() {
       console.log("Vendors Response:", vendorsRes);
 
       if (vendorsRes.vendors) setVendors(vendorsRes.vendors);
+      if (paymentsRes.error) {
+        console.error("Error fetching payments:", paymentsRes.error);
+      }
       if (paymentsRes.payments) {
         console.log("Setting payments:", paymentsRes.payments.length);
         setPayments(paymentsRes.payments);
+      } else if (paymentsRes.error) {
+        setPayments([]);
       }
       if (assignmentsRes.assignments)
         setAssignments(assignmentsRes.assignments);
@@ -316,6 +321,15 @@ export default function PaymentsPage() {
             onEditVendor={(vendor) => {
               setEditingVendor(vendor);
               setShowAddVendor(true);
+            }}
+            onViewDetails={(vendor) => {
+              // Show vendor details modal - could be enhanced with a modal dialog
+              alert(`Vendor: ${vendor.name}\n\nType: ${vendor.vendor_type}\nEmail: ${vendor.email}\nPhone: ${vendor.phone}\n\nProjects: ${vendor.total_projects_worked}\nTotal Paid: ₹${vendor.total_amount_paid}`);
+            }}
+            onViewPaymentHistory={(vendor) => {
+              // Filter payments for this vendor
+              const vendorPayments = payments.filter(p => p.vendor_id === vendor.id);
+              alert(`Payment History for ${vendor.name}\n\n${vendorPayments.length} payments found`);
             }}
           />
         </TabsContent>

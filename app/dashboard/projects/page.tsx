@@ -31,6 +31,7 @@ import {
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Progress } from "@/components/ui/progress";
+import { Badge } from "@/components/ui/badge";
 import { debug } from "@/lib/debug";
 // (duplicate Select import removed)
 import {
@@ -80,7 +81,6 @@ import type {
 } from "@/types";
 import { SERVICE_TYPES, SERVICE_TYPE_OPTIONS } from "@/types";
 import { useAuth } from "@/contexts/auth-context";
-import { Badge } from "@/components/ui/badge";
 import { FileManager } from "@/components/projects/file-manager";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
@@ -94,6 +94,12 @@ import {
   removeTeamMember,
   getProjectTeamMembers,
 } from "@/app/actions/team-management";
+import {
+  createCommentReply,
+  getCommentReplies,
+  updateCommentReply,
+  deleteCommentReply,
+} from "@/app/actions/comment-replies";
 
 function ProjectsPageContent() {
   const { user } = useAuth();
@@ -196,9 +202,15 @@ function ProjectsPageContent() {
   const [projectComments, setProjectComments] = useState<Record<string, any[]>>(
     {},
   );
+  const [commentReplies, setCommentReplies] = useState<Record<string, any[]>>(
+    {},
+  );
   const [replyInputs, setReplyInputs] = useState<Record<string, string>>({});
   const [newProjectComment, setNewProjectComment] = useState("");
   const [commentSubmitting, setCommentSubmitting] = useState(false);
+  const [expandedComments, setExpandedComments] = useState<Set<string>>(
+    new Set(),
+  );
   const [deleteConfirmation, setDeleteConfirmation] = useState<{
     projectId: string;
     projectName: string;
@@ -823,7 +835,11 @@ function ProjectsPageContent() {
     try {
       const { data, error } = await supabase
         .from("project_comments")
-        .select("*, user:users!user_id(id, full_name, email, role)")
+        .select(
+          `*,
+           user:users!user_id(id, full_name, email, role),
+           file:project_files!file_id(id, file_name, file_type, file_url)`
+        )
         .eq("project_id", projectId)
         .order("created_at", { ascending: false });
       if (error) throw error;
@@ -913,6 +929,89 @@ function ProjectsPageContent() {
       byParent[key].push(c);
     });
     return byParent;
+  }
+
+  async function fetchCommentReplies(commentId: string) {
+    try {
+      const result = await getCommentReplies(commentId);
+      if (result.success) {
+        setCommentReplies((prev) => ({
+          ...prev,
+          [commentId]: result.replies || [],
+        }));
+      }
+    } catch (error) {
+      console.error("Error fetching comment replies:", error);
+    }
+  }
+
+  async function handleAddCommentReply(commentId: string) {
+    if (!user?.id || commentSubmitting) return;
+    const replyText = (replyInputs[commentId] || "").trim();
+    if (!replyText) return;
+
+    setCommentSubmitting(true);
+    try {
+      const result = await createCommentReply({
+        commentId,
+        replyText,
+        userId: user.id,
+      });
+
+      if (!result.success) {
+        throw new Error(result.error);
+      }
+
+      // Refresh the replies
+      await fetchCommentReplies(commentId);
+
+      // Success toast
+      if (toastTimer) clearTimeout(toastTimer);
+      setToast({ message: "Reply posted", type: "success" });
+      const t = setTimeout(() => setToast(null), 3000);
+      setToastTimer(t);
+
+      // Clear input
+      setReplyInputs((prev) => ({ ...prev, [commentId]: "" }));
+    } catch (error: any) {
+      const msg = error?.message || "Failed to post reply";
+      if (toastTimer) clearTimeout(toastTimer);
+      setToast({ message: msg, type: "error" });
+      const t = setTimeout(() => setToast(null), 4000);
+      setToastTimer(t);
+    } finally {
+      setCommentSubmitting(false);
+    }
+  }
+
+  async function handleDeleteCommentReply(replyId: string, commentId: string) {
+    if (!user?.id || !confirm("Delete this reply?")) return;
+
+    try {
+      const result = await deleteCommentReply({
+        replyId,
+        userId: user.id,
+      });
+
+      if (!result.success) {
+        throw new Error(result.error);
+      }
+
+      // Refresh the replies
+      await fetchCommentReplies(commentId);
+
+      // Success toast
+      if (toastTimer) clearTimeout(toastTimer);
+      setToast({ message: "Reply deleted", type: "success" });
+      const t = setTimeout(() => setToast(null), 3000);
+      setToastTimer(t);
+    } catch (error: any) {
+      const msg = error?.message || "Failed to delete reply";
+      if (toastTimer) clearTimeout(toastTimer);
+      setToast({ message: msg, type: "error" });
+      const t = setTimeout(() => setToast(null), 4000);
+      setToastTimer(t);
+    }
   }
 
   async function fetchSubProjects(projectId: string) {
@@ -2966,6 +3065,81 @@ function ProjectsPageContent() {
                   )}
                 </div>
 
+                {/* Comment Access */}
+                {user?.role === "admin" && (
+                  <div>
+                    <div className="flex items-center justify-between mb-3">
+                      <h3 className="font-semibold">Comment Access</h3>
+                      <p className="text-xs text-muted-foreground">
+                        Manage team member access to client comments
+                      </p>
+                    </div>
+                    <Card>
+                      <CardContent className="p-4">
+                        <div className="space-y-3">
+                          {projectTeam[selectedProject.id] &&
+                          projectTeam[selectedProject.id].length > 0 ? (
+                            <>
+                              <p className="text-sm text-muted-foreground mb-3">
+                                All assigned team members can view and respond to comments by default. Viewers can see comments but cannot reply.
+                              </p>
+                              <div className="space-y-2">
+                                {projectTeam[selectedProject.id].map(
+                                  (member) => {
+                                    const memberRole =
+                                      projectTeamRoles[selectedProject.id]?.[
+                                        member.id
+                                      ] || "";
+                                    return (
+                                      <div
+                                        key={member.id}
+                                        className="flex items-center justify-between p-2 rounded border"
+                                      >
+                                        <div className="flex items-center gap-2">
+                                          <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center text-xs font-medium">
+                                            {member.full_name?.charAt(0) ||
+                                              member.email.charAt(0)}
+                                          </div>
+                                          <span className="text-sm font-medium">
+                                            {member.full_name ||
+                                              member.email}
+                                          </span>
+                                        </div>
+                                        <Badge
+                                          variant={
+                                            memberRole === "viewer"
+                                              ? "secondary"
+                                              : "default"
+                                          }
+                                          className="text-xs"
+                                        >
+                                          {memberRole === "viewer"
+                                            ? "Viewer (Read-Only)"
+                                            : "Full Access"}
+                                        </Badge>
+                                      </div>
+                                    );
+                                  },
+                                )}
+                              </div>
+                              <p className="text-xs text-muted-foreground mt-3 italic">
+                                💡 Tip: Assign team members with "Viewer"
+                                role to restrict comment editing to admins
+                                only.
+                              </p>
+                            </>
+                          ) : (
+                            <p className="text-sm text-muted-foreground text-center py-4">
+                              No team members assigned. Add team members to
+                              grant them comment access.
+                            </p>
+                          )}
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </div>
+                )}
+
                 {/* Files & Documents */}
                 <div>
                   <h3 className="font-semibold mb-3">Files & Documents</h3>
@@ -3002,86 +3176,241 @@ function ProjectsPageContent() {
                 {/* Project Comments */}
                 <div>
                   <h3 className="font-semibold mb-3">Project Comments</h3>
-                  <div className="space-y-3">
-                    {(() => {
-                      const all = projectComments[selectedProject.id] || [];
-                      const grouped = buildThread(all);
-                      const roots = grouped["root"] || [];
-
-                      function renderThread(comment: any, depth = 0) {
-                        const children = grouped[comment.id] || [];
-                        return (
-                          <div key={comment.id} className="space-y-2">
-                            <div
-                              className={`p-3 rounded border ${depth > 0 ? "ml-4 border-muted" : ""}`}
-                            >
-                              <div className="flex items-center justify-between text-xs text-muted-foreground mb-1">
-                                <span>
-                                  {comment.user?.full_name ||
-                                    comment.user?.email ||
-                                    "User"}
-                                </span>
-                                <span>
-                                  {new Date(
-                                    comment.created_at,
-                                  ).toLocaleString()}
-                                </span>
-                              </div>
-                              <p className="text-sm">{comment.comment_text}</p>
-                              {(user?.role === "client" ||
-                                user?.role === "admin") && (
-                                <div className="mt-2">
-                                  <div className="flex items-center gap-2">
-                                    <Input
-                                      value={replyInputs[comment.id] || ""}
-                                      onChange={(e) =>
-                                        setReplyInputs((prev) => ({
-                                          ...prev,
-                                          [comment.id]: e.target.value,
-                                        }))
-                                      }
-                                      placeholder="Reply..."
-                                    />
-                                    <Button
-                                      variant="outline"
-                                      size="sm"
-                                      disabled={
-                                        commentSubmitting ||
-                                        !(replyInputs[comment.id] || "").trim()
-                                      }
-                                      onClick={() => handleAddReply(comment.id)}
-                                    >
-                                      Reply
-                                    </Button>
+                  <div className="space-y-4">
+                    {(projectComments[selectedProject.id] || []).length === 0 ? (
+                      <Card>
+                        <CardContent className="pt-6">
+                          <div className="text-center py-8 text-muted-foreground text-sm">
+                            <p>No comments yet</p>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    ) : (
+                      (projectComments[selectedProject.id] || []).map(
+                        (comment: any) => (
+                          <Card
+                            key={comment.id}
+                            className="hover:border-primary/50 transition-colors"
+                          >
+                            <CardContent className="p-4 space-y-3">
+                              {/* Comment Header */}
+                              <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-2">
+                                  <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center text-xs font-medium">
+                                    {comment.user?.full_name?.[0] ||
+                                      comment.user?.email?.[0] ||
+                                      "U"}
+                                  </div>
+                                  <div>
+                                    <p className="text-sm font-medium">
+                                      {comment.user?.full_name ||
+                                        comment.user?.email ||
+                                        "User"}
+                                    </p>
+                                    <p className="text-xs text-muted-foreground">
+                                      {new Date(
+                                        comment.created_at,
+                                      ).toLocaleString()}
+                                    </p>
                                   </div>
                                 </div>
-                              )}
-                            </div>
-                            {children.length > 0 && (
-                              <div className="space-y-2">
-                                {children.map((child: any) =>
-                                  renderThread(child, depth + 1),
+                                {comment.user?.role && (
+                                  <Badge variant="outline" className="text-xs">
+                                    {comment.user.role}
+                                  </Badge>
                                 )}
                               </div>
-                            )}
-                          </div>
-                        );
-                      }
 
-                      return roots.map((c: any) => renderThread(c));
-                    })()}
-                    {(user?.role === "client" || user?.role === "admin") && (
+                              {/* Comment Text */}
+                              <p className="text-sm whitespace-pre-wrap">
+                                {comment.comment_text}
+                              </p>
+
+                              {/* File & Timestamp Info */}
+                              {(comment.file || comment.timestamp_seconds) && (
+                                <div className="mt-2 p-2 rounded bg-muted/50 space-y-1">
+                                  {comment.file && (
+                                    <div className="flex items-center gap-2 text-xs">
+                                      <FileText className="h-3 w-3 text-blue-500" />
+                                      <span className="font-medium">
+                                        Linked file:
+                                      </span>
+                                      <span className="text-muted-foreground">
+                                        {comment.file.file_name}
+                                      </span>
+                                      {comment.file.file_type && (
+                                        <Badge
+                                          variant="outline"
+                                          className="text-xs ml-auto"
+                                        >
+                                          {comment.file.file_type.toUpperCase()}
+                                        </Badge>
+                                      )}
+                                    </div>
+                                  )}
+                                  {comment.timestamp_seconds && (
+                                    <div className="flex items-center gap-2 text-xs">
+                                      <Clock className="h-3 w-3 text-orange-500" />
+                                      <span className="font-medium">
+                                        Timestamp:
+                                      </span>
+                                      <span className="text-muted-foreground">
+                                        {comment.timestamp_seconds}s
+                                      </span>
+                                    </div>
+                                  )}
+                                </div>
+                              )}
+
+                              {/* Replies Section */}
+                              <div className="mt-3 pt-3 border-t space-y-2">
+                                <button
+                                  onClick={() => {
+                                    setExpandedComments((prev) => {
+                                      const newSet = new Set(prev);
+                                      if (newSet.has(comment.id)) {
+                                        newSet.delete(comment.id);
+                                      } else {
+                                        newSet.add(comment.id);
+                                        // Fetch replies when expanding
+                                        if (!commentReplies[comment.id]) {
+                                          fetchCommentReplies(comment.id);
+                                        }
+                                      }
+                                      return newSet;
+                                    });
+                                  }}
+                                  className="text-xs text-primary hover:underline font-medium"
+                                >
+                                  {expandedComments.has(comment.id)
+                                    ? "Hide"
+                                    : "Show"}{" "}
+                                  Responses (
+                                  {commentReplies[comment.id]?.length || 0})
+                                </button>
+
+                                {expandedComments.has(comment.id) && (
+                                  <div className="mt-3 space-y-2 pl-4 border-l-2">
+                                    {(commentReplies[comment.id] || []).length >
+                                    0 ? (
+                                      (commentReplies[comment.id] || []).map(
+                                        (reply: any) => (
+                                          <div
+                                            key={reply.id}
+                                            className="rounded-md bg-muted/30 p-2 text-sm"
+                                          >
+                                            <div className="flex items-center justify-between mb-1">
+                                              <div>
+                                                <p className="font-medium text-xs">
+                                                  {reply.user?.full_name ||
+                                                    reply.user?.email ||
+                                                    "Admin"}
+                                                </p>
+                                                <p className="text-xs text-muted-foreground">
+                                                  {new Date(
+                                                    reply.created_at,
+                                                  ).toLocaleString()}
+                                                </p>
+                                              </div>
+                                              {user?.id === reply.user_id &&
+                                                (user?.role === "admin" ||
+                                                  user?.role ===
+                                                    "project_manager") && (
+                                                  <Button
+                                                    variant="ghost"
+                                                    size="sm"
+                                                    className="h-6 w-6 p-0"
+                                                    onClick={() =>
+                                                      handleDeleteCommentReply(
+                                                        reply.id,
+                                                        comment.id,
+                                                      )
+                                                    }
+                                                  >
+                                                    <Trash2 className="h-3 w-3" />
+                                                  </Button>
+                                                )}
+                                            </div>
+                                            <p className="text-xs whitespace-pre-wrap">
+                                              {reply.reply_text}
+                                            </p>
+                                          </div>
+                                        ),
+                                      )
+                                    ) : (
+                                      <p className="text-xs text-muted-foreground italic">
+                                        No responses yet
+                                      </p>
+                                    )}
+
+                                    {/* Reply Input - Only for Admin/PM */}
+                                    {(user?.role === "admin" ||
+                                      user?.role === "project_manager") && (
+                                      <div className="mt-3 space-y-2">
+                                        <Textarea
+                                          value={
+                                            replyInputs[comment.id] || ""
+                                          }
+                                          onChange={(e) =>
+                                            setReplyInputs((prev) => ({
+                                              ...prev,
+                                              [comment.id]: e.target.value,
+                                            }))
+                                          }
+                                          placeholder="Type your response..."
+                                          className="text-xs"
+                                          rows={2}
+                                          disabled={commentSubmitting}
+                                        />
+                                        <div className="flex justify-end gap-2">
+                                          <Button
+                                            variant="outline"
+                                            size="sm"
+                                            disabled={
+                                              commentSubmitting ||
+                                              !(
+                                                replyInputs[comment.id] || ""
+                                              ).trim()
+                                            }
+                                            onClick={() =>
+                                              handleAddCommentReply(comment.id)
+                                            }
+                                          >
+                                            {commentSubmitting && (
+                                              <Loader2 className="mr-1 h-3 w-3 animate-spin" />
+                                            )}
+                                            Post Response
+                                          </Button>
+                                        </div>
+                                      </div>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
+                            </CardContent>
+                          </Card>
+                        ),
+                      )
+                    )}
+
+                    {/* Add Comment Form - For Clients and Admins */}
+                    {(user?.role === "client" ||
+                      user?.role === "admin" ||
+                      user?.role === "employee") && (
                       <form
                         onSubmit={handleAddProjectComment}
                         className="space-y-2"
                       >
-                        <Label htmlFor="project-comment">Add Comment</Label>
+                        <Label htmlFor="project-comment" className="font-medium">
+                          Add Comment
+                        </Label>
                         <Textarea
                           id="project-comment"
                           value={newProjectComment}
                           onChange={(e) => setNewProjectComment(e.target.value)}
-                          placeholder="Write your comment..."
+                          placeholder="Share your thoughts or questions..."
                           disabled={commentSubmitting}
+                          rows={3}
                         />
                         <div className="flex justify-end">
                           <Button

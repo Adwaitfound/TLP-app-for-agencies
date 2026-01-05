@@ -127,42 +127,15 @@ export async function fetchPayments(filters?: {
     const isAdmin = userRow?.role === "admin";
     const client = isAdmin ? service : supabase;
 
+    // First try to fetch all payments with relationships
     query = client
       .from("vendor_payments")
-      .select(
-        `
-        *,
-        vendors (
-          id,
-          name,
-          vendor_type
-        ),
-        projects (
-          id,
-          name,
-          service_type
-        )
-      `,
-      )
+      .select(`*`)
       .order("created_at", { ascending: false });
   } else {
     query = supabase
       .from("vendor_payments")
-      .select(
-        `
-        *,
-        vendors (
-          id,
-          name,
-          vendor_type
-        ),
-        projects (
-          id,
-          name,
-          service_type
-        )
-      `,
-      )
+      .select(`*`)
       .order("created_at", { ascending: false });
   }
 
@@ -180,10 +153,63 @@ export async function fetchPayments(filters?: {
 
   if (error) {
     console.error("Fetch payments error:", error);
-    return { error: error.message };
+    console.error("Error details:", {
+      message: error.message,
+      code: (error as any).code,
+      hint: (error as any).hint,
+      details: (error as any).details,
+    });
+    return { 
+      error: error.message,
+      payments: [] 
+    };
   }
   
-  console.log("Fetched payments:", data?.length || 0);
+  console.log("Fetched payments:", data?.length || 0, "payments");
+  if (data && data.length > 0) {
+    console.log("Sample payment:", data[0]);
+  }
+  
+  // Fetch vendor and project details separately if we have payment data
+  if (data && data.length > 0) {
+    const vendorIds = [...new Set(data.map((p: any) => p.vendor_id).filter(Boolean))];
+    const projectIds = [...new Set(data.map((p: any) => p.project_id).filter(Boolean))];
+    
+    let vendors: Record<string, any> = {};
+    let projects: Record<string, any> = {};
+    
+    if (vendorIds.length > 0) {
+      const { data: vendorData } = await supabase
+        .from("vendors")
+        .select("id, name, vendor_type")
+        .in("id", vendorIds);
+      
+      if (vendorData) {
+        vendors = Object.fromEntries(vendorData.map(v => [v.id, v]));
+      }
+    }
+    
+    if (projectIds.length > 0) {
+      const { data: projectData } = await supabase
+        .from("projects")
+        .select("id, name, service_type")
+        .in("id", projectIds);
+      
+      if (projectData) {
+        projects = Object.fromEntries(projectData.map(p => [p.id, p]));
+      }
+    }
+    
+    // Attach vendor and project info to payments
+    const enrichedData = data.map((payment: any) => ({
+      ...payment,
+      vendors: vendors[payment.vendor_id] || null,
+      projects: projects[payment.project_id] || null,
+    }));
+    
+    return { payments: enrichedData as VendorPayment[] };
+  }
+  
   return { payments: (data || []) as VendorPayment[] };
 }
 
@@ -247,12 +273,39 @@ export async function updatePayment(
 export async function deletePayment(id: string) {
   const supabase = await createClient();
 
-  const { error } = await supabase
+  // Get current user to verify they have permission
+  const {
+    data: { user },
+    error: authError,
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    return { error: "Unauthorized - please log in" };
+  }
+
+  // Use service role for deletion to bypass RLS if admin
+  const service = createServiceClient();
+  const { data: userRow } = await service
+    .from("users")
+    .select("role")
+    .eq("id", user.id)
+    .single();
+
+  const isAdmin = userRow?.role === "admin";
+  const client = isAdmin ? service : supabase;
+
+  const { error } = await client
     .from("vendor_payments")
     .delete()
     .eq("id", id);
 
-  if (error) return { error: error.message };
+  if (error) {
+    console.error("Delete payment error:", error);
+    return { 
+      error: error.message || "Failed to delete payment" 
+    };
+  }
+  
   return { success: true };
 }
 
