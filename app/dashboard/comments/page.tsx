@@ -75,8 +75,8 @@ export default function CommentsAdminPage() {
             .order("created_at", { ascending: false });
           projectsData = data || [];
           console.log("✅ Admin fetched projects:", projectsData?.length);
-        } else if (userRole === "agency_admin") {
-          // Agency admin can see only their agency's projects
+        } else if (userRole === "project_manager") {
+          // Project manager can see assigned projects
           const { data: userAgency } = await supabase
             .from("user_agencies")
             .select("agency_id")
