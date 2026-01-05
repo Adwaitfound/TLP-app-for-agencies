@@ -129,10 +129,7 @@ export default function CommentsAdminPage() {
                         comment_text,
                         assigned_user_id,
                         status,
-                        created_at,
-                        author:users!project_comments_user_id_fkey(full_name, email),
-                        projects(name, clients(company_name)),
-                        comment_replies(id, reply_text, created_at, author:users!comment_replies_user_id_fkey(full_name, email))
+                        created_at
                     `,
           );
 
@@ -147,6 +144,20 @@ export default function CommentsAdminPage() {
           console.error("❌ Error fetching comments:", commentsError);
         } else {
           console.log("✅ Got comments count:", commentsData?.length);
+        }
+
+        // Fetch author data for all comments
+        const commentUserIds = commentsData?.map((c) => c.user_id).filter(Boolean) || [];
+        let authorMap: Record<string, any> = {};
+        if (commentUserIds.length > 0) {
+          const { data: authors } = await supabase
+            .from("users")
+            .select("id, full_name, email")
+            .in("id", commentUserIds);
+          
+          authors?.forEach((user) => {
+            authorMap[user.id] = user;
+          });
         }
 
         // Fetch assignee data for comments that have assigned_user_id
@@ -166,22 +177,72 @@ export default function CommentsAdminPage() {
           });
         }
 
-        // Attach assignee data to comments
-        const commentsWithAssignees = commentsData?.map((comment) => ({
+        // Fetch project details
+        const projectIdsFromComments = commentsData?.map((c) => c.project_id).filter(Boolean) || [];
+        let projectMap: Record<string, any> = {};
+        if (projectIdsFromComments.length > 0) {
+          const { data: projectDetails } = await supabase
+            .from("projects")
+            .select("id, name, client_id, clients(company_name)")
+            .in("id", projectIdsFromComments);
+          
+          projectDetails?.forEach((proj) => {
+            projectMap[proj.id] = proj;
+          });
+        }
+
+        // Fetch all replies for these comments
+        const commentIds = commentsData?.map((c) => c.id) || [];
+        let repliesData: any[] = [];
+        if (commentIds.length > 0) {
+          const { data: replies } = await supabase
+            .from("comment_replies")
+            .select("id, comment_id, user_id, reply_text, created_at")
+            .in("comment_id", commentIds)
+            .order("created_at", { ascending: true });
+          
+          repliesData = replies || [];
+        }
+
+        // Fetch reply authors
+        const replyUserIds = repliesData.map((r) => r.user_id).filter(Boolean);
+        let replyAuthorMap: Record<string, any> = {};
+        if (replyUserIds.length > 0) {
+          const { data: replyAuthors } = await supabase
+            .from("users")
+            .select("id, full_name, email")
+            .in("id", replyUserIds);
+          
+          replyAuthors?.forEach((user) => {
+            replyAuthorMap[user.id] = user;
+          });
+        }
+
+        // Attach author data to replies
+        const repliesWithAuthors = repliesData.map((reply) => ({
+          ...reply,
+          author: replyAuthorMap[reply.user_id] || null,
+        }));
+
+        // Attach all data to comments
+        const commentsWithAllData = commentsData?.map((comment) => ({
           ...comment,
+          author: authorMap[comment.user_id] || null,
           assignee: comment.assigned_user_id ? assigneeMap[comment.assigned_user_id] : null,
+          projects: projectMap[comment.project_id] || null,
+          comment_replies: repliesWithAuthors.filter((r) => r.comment_id === comment.id),
         }));
 
         // Organize replies by comment ID
         const repliesByComment: Record<string, any[]> = {};
-        commentsWithAssignees?.forEach((comment) => {
+        commentsWithAllData?.forEach((comment) => {
           repliesByComment[comment.id] = comment.comment_replies || [];
         });
         setRepliesData(repliesByComment);
 
         let teamQuery = supabase
           .from("project_team")
-          .select("project_id, user_id, users!project_team_user_id_fkey(full_name, email)");
+          .select("project_id, user_id");
 
         if (projectIds.length > 0) {
           teamQuery = teamQuery.in("project_id", projectIds);
@@ -189,7 +250,27 @@ export default function CommentsAdminPage() {
 
         const { data: teamRows } = await teamQuery;
 
-        const groupedTeam = (teamRows || []).reduce(
+        // Fetch user details for team members
+        const teamUserIds = teamRows?.map((t) => t.user_id).filter(Boolean) || [];
+        let teamUserMap: Record<string, any> = {};
+        if (teamUserIds.length > 0) {
+          const { data: teamUsers } = await supabase
+            .from("users")
+            .select("id, full_name, email")
+            .in("id", teamUserIds);
+          
+          teamUsers?.forEach((user) => {
+            teamUserMap[user.id] = user;
+          });
+        }
+
+        // Attach user data to team rows
+        const teamRowsWithUsers = teamRows?.map((row) => ({
+          ...row,
+          users: teamUserMap[row.user_id] || null,
+        }));
+
+        const groupedTeam = (teamRowsWithUsers || []).reduce(
           (acc, row) => {
             acc[row.project_id] = acc[row.project_id] || [];
             acc[row.project_id].push(row);
@@ -199,7 +280,7 @@ export default function CommentsAdminPage() {
         );
 
         setProjects(projectsData || []);
-        setComments(commentsWithAssignees || []);
+        setComments(commentsWithAllData || []);
         setTeamByProject(groupedTeam);
 
         console.log("✅ Comments Loaded:", {
@@ -223,31 +304,40 @@ export default function CommentsAdminPage() {
             },
             async (payload) => {
               if (payload.eventType === "INSERT") {
-                // Fetch full comment data with relations
+                // Fetch full comment data
                 const { data: newComment } = await supabase
                   .from("project_comments")
-                  .select(
-                  `
-                  id,
-                  project_id,
-                  user_id,
-                  comment_text,
-                  assigned_user_id,
-                  status,
-                  created_at,
-                  author:users!project_comments_user_id_fkey(full_name, email),
-                  projects(name, clients(company_name)),
-                  comment_replies(id, reply_text, created_at, author:users!comment_replies_user_id_fkey(full_name, email))
-                `,
-                  )
+                  .select("id, project_id, user_id, comment_text, assigned_user_id, status, created_at")
                   .eq("id", payload.new.id)
                   .single();
 
                 if (newComment) {
-                  setComments((prev) => [newComment, ...prev]);
+                  // Fetch author
+                  const { data: author } = await supabase
+                    .from("users")
+                    .select("id, full_name, email")
+                    .eq("id", newComment.user_id)
+                    .single();
+
+                  // Fetch project details
+                  const { data: project } = await supabase
+                    .from("projects")
+                    .select("id, name, client_id, clients(company_name)")
+                    .eq("id", newComment.project_id)
+                    .single();
+
+                  // Attach related data
+                  const commentWithData = {
+                    ...newComment,
+                    author: author || null,
+                    projects: project || null,
+                    comment_replies: [],
+                  };
+
+                  setComments((prev) => [commentWithData, ...prev]);
                   setRepliesData((prev) => ({
                     ...prev,
-                    [newComment.id]: newComment.comment_replies || [],
+                    [commentWithData.id]: [],
                   }));
                 }
               } else if (payload.eventType === "UPDATE") {
@@ -274,24 +364,28 @@ export default function CommentsAdminPage() {
               // Fetch full reply data
               const { data: newReply } = await supabase
                 .from("comment_replies")
-                .select(
-                  `
-                  id,
-                  reply_text,
-                  created_at,
-                  comment_id,
-                  author:users!comment_replies_user_id_fkey(full_name, email)
-                `,
-                )
+                .select("id, reply_text, created_at, comment_id, user_id")
                 .eq("id", payload.new.id)
                 .single();
 
               if (newReply) {
+                // Fetch author
+                const { data: author } = await supabase
+                  .from("users")
+                  .select("id, full_name, email")
+                  .eq("id", newReply.user_id)
+                  .single();
+
+                const replyWithAuthor = {
+                  ...newReply,
+                  author: author || null,
+                };
+
                 setRepliesData((prev) => ({
                   ...prev,
                   [newReply.comment_id]: [
                     ...(prev[newReply.comment_id] || []),
-                    newReply,
+                    replyWithAuthor,
                   ],
                 }));
               }
@@ -348,7 +442,7 @@ export default function CommentsAdminPage() {
 
     const supabase = createClient();
     try {
-      const { data: newReply, error } = await supabase
+      const { data, error } = await supabase
         .from("comment_replies")
         .insert([
           {
@@ -357,26 +451,33 @@ export default function CommentsAdminPage() {
             reply_text: replyText,
           },
         ])
-        .select(
-          `
-          id,
-          reply_text,
-          created_at,
-          author:users!comment_replies_user_id_fkey(full_name, email)
-        `,
-        )
+        .select("id, reply_text, created_at, user_id")
         .single();
 
       if (error) throw error;
 
-      setReplies((prev) => ({ ...prev, [commentId]: "" }));
-      setRepliesData((prev) => ({
-        ...prev,
-        [commentId]: [...(prev[commentId] || []), newReply],
-      }));
-      
-      // Auto-expand after replying
-      setExpandedComments((prev) => new Set(prev).add(commentId));
+      if (data) {
+        // Fetch author data
+        const { data: author } = await supabase
+          .from("users")
+          .select("id, full_name, email")
+          .eq("id", data.user_id)
+          .single();
+
+        const replyWithAuthor = {
+          ...data,
+          author: author || null,
+        };
+
+        setReplies((prev) => ({ ...prev, [commentId]: "" }));
+        setRepliesData((prev) => ({
+          ...prev,
+          [commentId]: [...(prev[commentId] || []), replyWithAuthor],
+        }));
+        
+        // Auto-expand after replying
+        setExpandedComments((prev) => new Set(prev).add(commentId));
+      }
     } catch (e) {
       console.error("Failed to add reply", e);
     }
