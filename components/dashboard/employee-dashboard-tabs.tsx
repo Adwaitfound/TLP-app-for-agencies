@@ -18,6 +18,23 @@ import { StatusBadge } from "@/components/shared/status-badge";
 import { TaskManager } from "@/components/dashboard/task-manager";
 import { AllTasksTab } from "@/components/dashboard/all-tasks-tab";
 import { EmployeeProjectDetailModal } from "@/components/dashboard/employee-project-detail-modal";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { createClient } from "@/lib/supabase/client";
 import { useAuth } from "@/contexts/auth-context";
 import {
@@ -67,6 +84,13 @@ export function EmployeeDashboardTabs() {
   const [milestones, setMilestones] = useState<MilestoneSummary[]>([]);
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
+  const [isRequestProjectOpen, setIsRequestProjectOpen] = useState(false);
+  const [requestProjectFormData, setRequestProjectFormData] = useState({
+    projectName: "",
+    description: "",
+    vertical: "video_production",
+  });
+  const [requestingProject, setRequestingProject] = useState(false);
   const [overview, setOverview] = useState({
     activeProjects: 0,
     tasksToday: 0,
@@ -91,46 +115,40 @@ export function EmployeeDashboardTabs() {
       const today = new Date().toISOString().split("T")[0];
 
       try {
-        // Load projects
-        const [createdBy, teamAssignments] = await Promise.all([
-          supabase
+        // Load projects - first get project IDs from project_team
+        const { data: teamData, error: teamError } = await supabase
+          .from("project_team")
+          .select("project_id")
+          .eq("user_id", userId)
+          .limit(50);
+
+        if (teamError) {
+          console.error("Error fetching project team:", teamError);
+        }
+
+        const projectIds = (teamData || []).map((item: any) => item.project_id).filter(Boolean);
+        
+        let allProjects: ProjectSummary[] = [];
+
+        // Load all projects if employee is assigned to any
+        if (projectIds.length > 0) {
+          const { data: projectsData, error: projectsError } = await supabase
             .from("projects")
             .select(
               "id,name,status,deadline,progress_percentage,start_date,description,clients(company_name)",
             )
-            .eq("created_by", userId)
-            .limit(20),
-          supabase
-            .from("project_team")
-            .select(
-              "project_id,projects(id,name,status,deadline,progress_percentage,start_date,description,clients(company_name))",
-            )
-            .eq("user_id", userId)
-            .limit(20),
-        ]);
+            .in("id", projectIds)
+            .limit(50);
 
-        const combined: ProjectSummary[] = [];
-        const primary = (createdBy.data as any[] | null) || [];
-        const team = ((teamAssignments.data as any[] | null) || [])
-          .map((item: any) => item.projects)
-          .filter(Boolean);
-
-        const normalizeClient = (p: any): ProjectSummary => ({
-          ...p,
-          clients: Array.isArray(p.clients) ? p.clients[0] : p.clients,
-        });
-
-        for (const p of primary) {
-          const norm = normalizeClient(p);
-          if (!combined.find((c) => c.id === norm.id)) combined.push(norm);
+          if (!projectsError && projectsData) {
+            allProjects = projectsData.map((p: any) => ({
+              ...p,
+              clients: Array.isArray(p.clients) ? p.clients[0] : p.clients,
+            }));
+          }
         }
 
-        for (const p of team) {
-          const norm = normalizeClient(p);
-          if (!combined.find((c) => c.id === norm.id)) combined.push(norm);
-        }
-
-        setProjects(combined);
+        setProjects(allProjects);
 
         // Load milestones
         const { data: milestonesData } = await supabase
@@ -177,6 +195,46 @@ export function EmployeeDashboardTabs() {
 
     loadDashboard();
   }, [userId]);
+
+  async function handleRequestProject(e: React.FormEvent) {
+    e.preventDefault();
+    if (!userId || !requestProjectFormData.projectName.trim()) return;
+
+    setRequestingProject(true);
+    const supabase = createClient();
+
+    try {
+      const { error } = await supabase.from("employee_tasks").insert({
+        user_id: userId,
+        title: requestProjectFormData.projectName,
+        description: requestProjectFormData.description,
+        proposed_project_name: requestProjectFormData.projectName,
+        proposed_project_vertical: requestProjectFormData.vertical,
+        proposed_project_status: "pending",
+        status: "todo",
+        priority: "medium",
+      });
+
+      if (error) throw error;
+
+      // Reset form and close dialog
+      setRequestProjectFormData({
+        projectName: "",
+        description: "",
+        vertical: "video_production",
+      });
+      setIsRequestProjectOpen(false);
+
+      // Show success message and reload
+      alert("Project request submitted! Your admin will review and approve it soon.");
+      window.location.reload();
+    } catch (error: any) {
+      console.error("Error requesting project:", error);
+      alert(error?.message || "Failed to request project");
+    } finally {
+      setRequestingProject(false);
+    }
+  }
 
   function openProjectDetail(projectId: string) {
     setSelectedProjectId(projectId);
@@ -435,7 +493,7 @@ export function EmployeeDashboardTabs() {
                   </p>
                   <Button 
                     variant="outline"
-                    onClick={() => setActiveTab("tasks")}
+                    onClick={() => setIsRequestProjectOpen(true)}
                   >
                     <Plus className="h-4 w-4 mr-2" />
                     Request a Project
@@ -602,6 +660,90 @@ export function EmployeeDashboardTabs() {
           </Card>
         </TabsContent>
       </Tabs>
+
+      {/* Request Project Dialog */}
+      <Dialog open={isRequestProjectOpen} onOpenChange={setIsRequestProjectOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Request a New Project</DialogTitle>
+            <DialogDescription>
+              Submit a project request. Your admin will review and create the project if approved.
+            </DialogDescription>
+          </DialogHeader>
+          <form onSubmit={handleRequestProject} className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="project-name">Project Name *</Label>
+              <Input
+                id="project-name"
+                value={requestProjectFormData.projectName}
+                onChange={(e) =>
+                  setRequestProjectFormData({
+                    ...requestProjectFormData,
+                    projectName: e.target.value,
+                  })
+                }
+                placeholder="e.g., New Client Campaign"
+                required
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="project-description">Description</Label>
+              <Textarea
+                id="project-description"
+                value={requestProjectFormData.description}
+                onChange={(e) =>
+                  setRequestProjectFormData({
+                    ...requestProjectFormData,
+                    description: e.target.value,
+                  })
+                }
+                placeholder="Describe the project..."
+                rows={3}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="project-vertical">Service Type *</Label>
+              <Select
+                value={requestProjectFormData.vertical}
+                onValueChange={(value) =>
+                  setRequestProjectFormData({
+                    ...requestProjectFormData,
+                    vertical: value,
+                  })
+                }
+              >
+                <SelectTrigger id="project-vertical">
+                  <SelectValue placeholder="Select service type" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="video_production">Video Production</SelectItem>
+                  <SelectItem value="social_media">Social Media</SelectItem>
+                  <SelectItem value="design_branding">Design & Branding</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="flex gap-2 justify-end pt-4">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setIsRequestProjectOpen(false)}
+                disabled={requestingProject}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="submit"
+                disabled={
+                  requestingProject ||
+                  !requestProjectFormData.projectName.trim()
+                }
+              >
+                {requestingProject ? "Submitting..." : "Submit Request"}
+              </Button>
+            </div>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
