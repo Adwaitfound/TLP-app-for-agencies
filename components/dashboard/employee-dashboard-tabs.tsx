@@ -478,11 +478,22 @@ export function EmployeeDashboardTabs() {
         {/* Projects Tab */}
         <TabsContent value="projects" className="space-y-4">
           <Card>
-            <CardHeader>
-              <CardTitle className="text-xl">All Projects</CardTitle>
-              <CardDescription>
-                All projects assigned to you ({projects.length})
-              </CardDescription>
+            <CardHeader className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+              <div>
+                <CardTitle className="text-xl">All Projects</CardTitle>
+                <CardDescription>
+                  All projects assigned to you ({projects.length})
+                </CardDescription>
+              </div>
+              <Button 
+                variant="outline"
+                size="sm"
+                onClick={() => setIsRequestProjectOpen(true)}
+              >
+                <Plus className="h-4 w-4 mr-2" />
+                <span className="hidden sm:inline">Request a Project</span>
+                <span className="sm:hidden">Request</span>
+              </Button>
             </CardHeader>
             <CardContent>
               {projects.length === 0 ? (
