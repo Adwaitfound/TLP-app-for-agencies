@@ -318,9 +318,10 @@ export default function ClientDashboardTabs() {
           supabase
             .from("invoices")
             .select(
-              "id,project_id,client_id,status,total,invoice_number,created_at,due_date,issue_date",
+              "id,project_id,client_id,status,total,invoice_number,created_at,due_date,issue_date,shared_with_client",
             )
             .eq("client_id", clientId)
+            .eq("shared_with_client", true)
             .order("created_at", { ascending: false })
         ),
         10000
@@ -361,9 +362,10 @@ export default function ClientDashboardTabs() {
               supabase
                 .from("invoices")
                 .select(
-                  "id,project_id,client_id,status,total,invoice_number,created_at,due_date,issue_date",
+                  "id,project_id,client_id,status,total,invoice_number,created_at,due_date,issue_date,shared_with_client",
                 )
                 .in("project_id", projectIds)
+                .eq("shared_with_client", true)
                 .order("created_at", { ascending: false })
             ),
             10000
