@@ -49,24 +49,33 @@ export default function CommentsAdminPage() {
       const supabase = createClient();
       setLoading(true);
       try {
-        // Get user's role and info
-        const { data: userData } = await supabase
-          .from("users")
-          .select("id, role")
-          .eq("id", userId)
-          .single();
+        // Get user's role and info from auth context or database
+        let userRole = user?.role;
+        
+        // If no role from context, fetch from database
+        if (!userRole) {
+          const { data: userData } = await supabase
+            .from("users")
+            .select("id, role")
+            .eq("id", userId)
+            .single();
+          userRole = userData?.role;
+        }
+
+        console.log("👤 User Role Check:", { userId, contextRole: user?.role, userRole });
 
         // If admin/PM, get all projects; if agency_admin get only their agency's projects; otherwise get their assigned projects
         let projectsData: any[] = [];
         
-        if (userData?.role === "admin") {
+        if (userRole === "admin") {
           // System admin can see all projects
           const { data } = await supabase
             .from("projects")
             .select("id, name, client_id, clients(company_name)")
             .order("created_at", { ascending: false });
           projectsData = data || [];
-        } else if (userData?.role === "agency_admin") {
+          console.log("✅ Admin fetched projects:", projectsData?.length);
+        } else if (userRole === "agency_admin") {
           // Agency admin can see only their agency's projects
           const { data: userAgency } = await supabase
             .from("user_agencies")
@@ -82,13 +91,14 @@ export default function CommentsAdminPage() {
               .order("created_at", { ascending: false });
             projectsData = data || [];
           }
-        } else if (userData?.role === "project_manager") {
+        } else if (userRole === "project_manager") {
           // PM can see all projects
           const { data } = await supabase
             .from("projects")
             .select("id, name, client_id, clients(company_name)")
             .order("created_at", { ascending: false });
           projectsData = data || [];
+          console.log("✅ PM fetched projects:", projectsData?.length);
         } else {
           // Regular employee can only see projects they're assigned to
           const { data: assignedProjects } = await supabase
@@ -100,8 +110,16 @@ export default function CommentsAdminPage() {
 
         const projectIds = projectsData?.map((p: any) => p.id) || [];
 
+        console.log("🔍 Fetching comments with:", {
+          userRole,
+          projectCount: projectsData?.length,
+          projectIds,
+          isAdmin: userRole === "admin" || userRole === "project_manager",
+        });
+
         // Fetch all comments for visible projects
-        const { data: commentsData } = await supabase
+        // For admins, fetch without project filter; for others, filter by project
+        let commentsQuery = supabase
           .from("project_comments")
           .select(
             `
@@ -117,9 +135,20 @@ export default function CommentsAdminPage() {
                         projects(name, clients(company_name)),
                         comment_replies(id, reply_text, created_at, author:user_id(full_name, email))
                     `,
-          )
-          .in("project_id", projectIds)
-          .order("created_at", { ascending: false });
+          );
+
+        // Only apply project filter for non-admin users
+        if ((userRole !== "admin" && userRole !== "project_manager") && projectIds.length > 0) {
+          commentsQuery = commentsQuery.in("project_id", projectIds);
+        }
+
+        const { data: commentsData, error: commentsError } = await commentsQuery.order("created_at", { ascending: false });
+
+        if (commentsError) {
+          console.error("❌ Error fetching comments:", commentsError);
+        } else {
+          console.log("✅ Got comments count:", commentsData?.length);
+        }
 
         // Organize replies by comment ID
         const repliesByComment: Record<string, any[]> = {};
@@ -128,10 +157,15 @@ export default function CommentsAdminPage() {
         });
         setRepliesData(repliesByComment);
 
-        const { data: teamRows } = await supabase
+        let teamQuery = supabase
           .from("project_team")
-          .select("project_id, user_id, users(full_name, email)")
-          .in("project_id", projectIds);
+          .select("project_id, user_id, users(full_name, email)");
+
+        if (projectIds.length > 0) {
+          teamQuery = teamQuery.in("project_id", projectIds);
+        }
+
+        const { data: teamRows } = await teamQuery;
 
         const groupedTeam = (teamRows || []).reduce(
           (acc, row) => {
@@ -146,6 +180,15 @@ export default function CommentsAdminPage() {
         setComments(commentsData || []);
         setTeamByProject(groupedTeam);
 
+        console.log("✅ Comments Loaded:", {
+          projectCount: projectsData?.length,
+          commentCount: commentsData?.length,
+          userRole,
+          projectIds,
+          hasComments: (commentsData || []).length > 0,
+          firstComment: commentsData?.[0],
+        });
+
         // Set up real-time subscriptions
         const commentsChannel = supabase
           .channel("comments-changes")
@@ -155,7 +198,6 @@ export default function CommentsAdminPage() {
               event: "*",
               schema: "public",
               table: "project_comments",
-              filter: `project_id=in.(${projectIds.join(",")})`,
             },
             async (payload) => {
               if (payload.eventType === "INSERT") {
@@ -163,19 +205,19 @@ export default function CommentsAdminPage() {
                 const { data: newComment } = await supabase
                   .from("project_comments")
                   .select(
-                    `
-                    id,
-                    project_id,
-                    user_id,
-                    comment_text,
-                    assigned_user_id,
-                    status,
-                    created_at,
-                    author:user_id(full_name, email),
-                    assignee:assigned_user_id(full_name, email),
-                    projects(name, clients(company_name)),
-                    comment_replies(id, reply_text, created_at, author:user_id(full_name, email))
-                  `,
+                  `
+                  id,
+                  project_id,
+                  user_id,
+                  comment_text,
+                  assigned_user_id,
+                  status,
+                  created_at,
+                  author:user_id(full_name, email),
+                  assignee:assigned_user_id(full_name, email),
+                  projects(name, clients(company_name)),
+                  comment_replies(id, reply_text, created_at, author:user_id(full_name, email))
+                `,
                   )
                   .eq("id", payload.new.id)
                   .single();
@@ -240,7 +282,7 @@ export default function CommentsAdminPage() {
           supabase.removeChannel(commentsChannel);
         };
       } catch (e) {
-        console.error("Failed to fetch comments admin view", e);
+        console.error("❌ Failed to fetch comments admin view", e);
       } finally {
         setLoading(false);
       }
