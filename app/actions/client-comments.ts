@@ -66,18 +66,20 @@ export async function createProjectComment(params: {
       comment_text: text,
     });
 
-    // Notify all admins/PMs (in-app notification)
-    const { data: admins } = await supabase
+    // Notify only adwait@thelostproject.in (in-app notification)
+    const { data: adwaitUser } = await supabase
       .from("users")
       .select("id")
-      .in("role", ["admin", "project_manager"]);
+      .eq("email", "adwait@thelostproject.in")
+      .single();
 
-    const adminIds = (admins || []).map((a: any) => a.id);
-    await notifyUsers(adminIds, {
-      type: "comment_created",
-      message: `New comment on a project: ${text.slice(0, 80)}`,
-      metadata: { project_id: projectId, comment_id: data.id },
-    });
+    if (adwaitUser) {
+      await notifyUsers([adwaitUser.id], {
+        type: "comment_created",
+        message: `New comment on a project: ${text.slice(0, 80)}`,
+        metadata: { project_id: projectId, comment_id: data.id },
+      });
+    }
     return { success: true, comment: data };
   } catch (err: any) {
     return {

@@ -130,10 +130,10 @@ export default function CommentsAdminPage() {
                         assigned_user_id,
                         status,
                         created_at,
-                        author:user_id(full_name, email),
-                        assignee:assigned_user_id(full_name, email),
+                        author:users!user_id(full_name, email),
+                        assignee:users!assigned_user_id(full_name, email),
                         projects(name, clients(company_name)),
-                        comment_replies(id, reply_text, created_at, author:user_id(full_name, email))
+                        comment_replies(id, reply_text, created_at, author:users!user_id(full_name, email))
                     `,
           );
 
@@ -213,10 +213,10 @@ export default function CommentsAdminPage() {
                   assigned_user_id,
                   status,
                   created_at,
-                  author:user_id(full_name, email),
-                  assignee:assigned_user_id(full_name, email),
+                  author:users!user_id(full_name, email),
+                  assignee:users!assigned_user_id(full_name, email),
                   projects(name, clients(company_name)),
-                  comment_replies(id, reply_text, created_at, author:user_id(full_name, email))
+                  comment_replies(id, reply_text, created_at, author:users!user_id(full_name, email))
                 `,
                   )
                   .eq("id", payload.new.id)
@@ -259,7 +259,7 @@ export default function CommentsAdminPage() {
                   reply_text,
                   created_at,
                   comment_id,
-                  author:user_id(full_name, email)
+                  author:users!user_id(full_name, email)
                 `,
                 )
                 .eq("id", payload.new.id)
@@ -341,7 +341,7 @@ export default function CommentsAdminPage() {
           id,
           reply_text,
           created_at,
-          author:user_id(full_name, email)
+          author:users!user_id(full_name, email)
         `,
         )
         .single();
