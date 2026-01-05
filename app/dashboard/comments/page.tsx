@@ -130,10 +130,9 @@ export default function CommentsAdminPage() {
                         assigned_user_id,
                         status,
                         created_at,
-                        author:users!user_id(full_name, email),
-                        assignee:users!assigned_user_id(full_name, email),
+                        author:users!project_comments_user_id_fkey(full_name, email),
                         projects(name, clients(company_name)),
-                        comment_replies(id, reply_text, created_at, author:users!user_id(full_name, email))
+                        comment_replies(id, reply_text, created_at, author:users!comment_replies_user_id_fkey(full_name, email))
                     `,
           );
 
@@ -150,16 +149,39 @@ export default function CommentsAdminPage() {
           console.log("✅ Got comments count:", commentsData?.length);
         }
 
+        // Fetch assignee data for comments that have assigned_user_id
+        const assigneeIds = commentsData
+          ?.filter((c) => c.assigned_user_id)
+          .map((c) => c.assigned_user_id) || [];
+        
+        let assigneeMap: Record<string, any> = {};
+        if (assigneeIds.length > 0) {
+          const { data: assigneeData } = await supabase
+            .from("users")
+            .select("id, full_name, email")
+            .in("id", assigneeIds);
+          
+          assigneeData?.forEach((user) => {
+            assigneeMap[user.id] = user;
+          });
+        }
+
+        // Attach assignee data to comments
+        const commentsWithAssignees = commentsData?.map((comment) => ({
+          ...comment,
+          assignee: comment.assigned_user_id ? assigneeMap[comment.assigned_user_id] : null,
+        }));
+
         // Organize replies by comment ID
         const repliesByComment: Record<string, any[]> = {};
-        commentsData?.forEach((comment) => {
+        commentsWithAssignees?.forEach((comment) => {
           repliesByComment[comment.id] = comment.comment_replies || [];
         });
         setRepliesData(repliesByComment);
 
         let teamQuery = supabase
           .from("project_team")
-          .select("project_id, user_id, users(full_name, email)");
+          .select("project_id, user_id, users!project_team_user_id_fkey(full_name, email)");
 
         if (projectIds.length > 0) {
           teamQuery = teamQuery.in("project_id", projectIds);
@@ -177,7 +199,7 @@ export default function CommentsAdminPage() {
         );
 
         setProjects(projectsData || []);
-        setComments(commentsData || []);
+        setComments(commentsWithAssignees || []);
         setTeamByProject(groupedTeam);
 
         console.log("✅ Comments Loaded:", {
@@ -213,10 +235,9 @@ export default function CommentsAdminPage() {
                   assigned_user_id,
                   status,
                   created_at,
-                  author:users!user_id(full_name, email),
-                  assignee:users!assigned_user_id(full_name, email),
+                  author:users!project_comments_user_id_fkey(full_name, email),
                   projects(name, clients(company_name)),
-                  comment_replies(id, reply_text, created_at, author:users!user_id(full_name, email))
+                  comment_replies(id, reply_text, created_at, author:users!comment_replies_user_id_fkey(full_name, email))
                 `,
                   )
                   .eq("id", payload.new.id)
@@ -259,7 +280,7 @@ export default function CommentsAdminPage() {
                   reply_text,
                   created_at,
                   comment_id,
-                  author:users!user_id(full_name, email)
+                  author:users!comment_replies_user_id_fkey(full_name, email)
                 `,
                 )
                 .eq("id", payload.new.id)
@@ -341,7 +362,7 @@ export default function CommentsAdminPage() {
           id,
           reply_text,
           created_at,
-          author:users!user_id(full_name, email)
+          author:users!comment_replies_user_id_fkey(full_name, email)
         `,
         )
         .single();
