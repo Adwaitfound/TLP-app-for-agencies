@@ -167,7 +167,7 @@ export function EmployeeDashboardTabs() {
         }
 
         // Calculate active projects
-        const activeCount = combined.filter(
+        const activeCount = allProjects.filter(
           (p) => p.status === "in_progress" || p.status === "in_review",
         ).length;
 
