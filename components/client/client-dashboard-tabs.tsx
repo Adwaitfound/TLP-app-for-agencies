@@ -318,7 +318,7 @@ export default function ClientDashboardTabs() {
           supabase
             .from("invoices")
             .select(
-              "id,project_id,client_id,status,total,invoice_number,created_at,due_date,issue_date,invoice_file_url,shared_with_client",
+              "id,project_id,client_id,status,total,invoice_number,created_at,due_date,issue_date,shared_with_client",
             )
             .eq("client_id", clientId)
             .eq("shared_with_client", true)
@@ -362,7 +362,7 @@ export default function ClientDashboardTabs() {
               supabase
                 .from("invoices")
                 .select(
-                  "id,project_id,client_id,status,total,invoice_number,created_at,due_date,issue_date,invoice_file_url,shared_with_client",
+                  "id,project_id,client_id,status,total,invoice_number,created_at,due_date,issue_date,shared_with_client",
                 )
                 .in("project_id", projectIds)
                 .eq("shared_with_client", true)
@@ -1193,18 +1193,6 @@ export default function ClientDashboardTabs() {
                         </p>
                       </div>
                       <div className="flex gap-2">
-                        {invoice.invoice_file_url && (
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() =>
-                              window.open(invoice.invoice_file_url, "_blank")
-                            }
-                          >
-                            <Download className="h-4 w-4 mr-1" />
-                            PDF
-                          </Button>
-                        )}
                         {invoice.status !== "paid" && (
                           <Button size="sm">Pay Now</Button>
                         )}
