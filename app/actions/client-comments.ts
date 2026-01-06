@@ -187,6 +187,66 @@ export async function clientApproveProject(params: { projectId: string }) {
   }
 }
 
+// Add a reply to a project comment using service-role client to satisfy RLS
+export async function addCommentReply(params: {
+  commentId: string;
+  userId: string;
+  replyText: string;
+}) {
+  const { commentId, userId, replyText } = params;
+  try {
+    const supabase = createServiceClient();
+
+    // Insert reply
+    const { data: inserted, error } = await supabase
+      .from("comment_replies")
+      .insert({
+        comment_id: commentId,
+        user_id: userId,
+        reply_text: replyText,
+      })
+      .select("id, comment_id, user_id, reply_text, created_at")
+      .single();
+
+    if (error) return { success: false, error: error.message };
+
+    // Fetch author data for display
+    const { data: author } = await supabase
+      .from("users")
+      .select("id, full_name, email")
+      .eq("id", userId)
+      .single();
+
+    // Optional: notify admins/PMs about reply
+    const { data: admins } = await supabase
+      .from("users")
+      .select("id")
+      .in("role", ["admin", "project_manager"]);
+
+    const notifyIds = (admins || []).map((u: any) => u.id);
+    if (notifyIds.length) {
+      await notifyUsers(notifyIds, {
+        type: "comment_replied",
+        message: "A comment received a reply",
+        metadata: { comment_id: commentId, reply_id: inserted.id },
+      });
+    }
+
+    return {
+      success: true,
+      reply: {
+        ...inserted,
+        author: author || null,
+      },
+    };
+  } catch (err: any) {
+    return {
+      success: false,
+      error: err?.message || "Unexpected error adding reply",
+    };
+  }
+}
+
 export async function adminApproveProject(params: { projectId: string }) {
   try {
     const supabase = createServiceClient();

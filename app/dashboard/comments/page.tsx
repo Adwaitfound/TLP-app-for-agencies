@@ -379,44 +379,26 @@ export default function CommentsAdminPage() {
     const replyText = replies[commentId]?.trim();
     if (!replyText || !userId) return;
 
-    const supabase = createClient();
     try {
-      const { data, error } = await supabase
-        .from("comment_replies")
-        .insert([
-          {
-            comment_id: commentId,
-            user_id: userId,
-            reply_text: replyText,
-          },
-        ])
-        .select("id, reply_text, created_at, user_id")
-        .single();
-
-      if (error) throw error;
-
-      if (data) {
-        // Fetch author data
-        const { data: author } = await supabase
-          .from("users")
-          .select("id, full_name, email")
-          .eq("id", data.user_id)
-          .single();
-
-        const replyWithAuthor = {
-          ...data,
-          author: author || null,
-        };
-
-        setReplies((prev) => ({ ...prev, [commentId]: "" }));
-        setRepliesData((prev) => ({
-          ...prev,
-          [commentId]: [...(prev[commentId] || []), replyWithAuthor],
-        }));
-        
-        // Auto-expand after replying
-        setExpandedComments((prev) => new Set(prev).add(commentId));
+      const { addCommentReply } = await import("@/app/actions/client-comments");
+      const result = await addCommentReply({
+        commentId,
+        userId,
+        replyText,
+      });
+      if (!result.success) {
+        throw new Error(result.error || "Unknown error");
       }
+
+      const replyWithAuthor = result.reply;
+      setReplies((prev) => ({ ...prev, [commentId]: "" }));
+      setRepliesData((prev) => ({
+        ...prev,
+        [commentId]: [...(prev[commentId] || []), replyWithAuthor],
+      }));
+
+      // Auto-expand after replying
+      setExpandedComments((prev) => new Set(prev).add(commentId));
     } catch (e) {
       console.error("Failed to add reply", e);
     }

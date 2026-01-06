@@ -115,7 +115,7 @@ export function EmployeeDashboardTabs() {
       const today = new Date().toISOString().split("T")[0];
 
       try {
-        // Load projects - first get project IDs from project_team
+        // Load project IDs for this employee (small, indexed query)
         const { data: teamData, error: teamError } = await supabase
           .from("project_team")
           .select("project_id")
@@ -126,63 +126,67 @@ export function EmployeeDashboardTabs() {
           console.error("Error fetching project team:", teamError);
         }
 
-        const projectIds = (teamData || []).map((item: any) => item.project_id).filter(Boolean);
-        
-        let allProjects: ProjectSummary[] = [];
+        const projectIds = (teamData || [])
+          .map((item: any) => item.project_id)
+          .filter(Boolean);
 
-        // Load all projects if employee is assigned to any
-        if (projectIds.length > 0) {
-          const { data: projectsData, error: projectsError } = await supabase
-            .from("projects")
-            .select(
-              "id,name,status,deadline,progress_percentage,start_date,description,clients(company_name)",
-            )
-            .in("id", projectIds)
-            .limit(50);
+        // Prepare parallel queries to reduce total load time
+        const projectsPromise = projectIds.length
+          ? supabase
+              .from("projects")
+              .select(
+                "id,name,status,deadline,progress_percentage,start_date,description,clients(company_name)",
+              )
+              .in("id", projectIds)
+              .limit(50)
+          : Promise.resolve({ data: [] as any[], error: null } as any);
 
-          if (!projectsError && projectsData) {
-            allProjects = projectsData.map((p: any) => ({
-              ...p,
-              clients: Array.isArray(p.clients) ? p.clients[0] : p.clients,
-            }));
-          }
-        }
+        const milestonesPromise = projectIds.length
+          ? supabase
+              .from("milestones")
+              .select("id,title,due_date,status,project_id,projects(name)")
+              .in("project_id", projectIds)
+              .gte("due_date", today)
+              .order("due_date", { ascending: true })
+              .limit(8)
+          : Promise.resolve({ data: [] as any[], error: null } as any);
 
-        setProjects(allProjects);
-
-        // Load milestones
-        const { data: milestonesData } = await supabase
-          .from("milestones")
-          .select("id,title,due_date,status,project_id,projects(name)")
-          .gte("due_date", today)
-          .order("due_date", { ascending: true })
-          .limit(10);
-
-        if (milestonesData) {
-          setMilestones(milestonesData as MilestoneSummary[]);
-          setOverview((prev) => ({
-            ...prev,
-            upcomingMilestones: milestonesData.length,
-          }));
-        }
-
-        // Calculate active projects
-        const activeCount = allProjects.filter(
-          (p) => p.status === "in_progress" || p.status === "in_review",
-        ).length;
-
-        // Completed tasks this week for the current user
         const sevenDaysAgo = new Date();
         sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
-        const { count: completedThisWeek } = await supabase
+        const completedCountPromise = supabase
           .from("employee_tasks")
           .select("id", { count: "exact", head: true })
           .eq("user_id", userId)
           .eq("status", "completed")
           .gte("completed_at", sevenDaysAgo.toISOString());
 
+        const [projectsRes, milestonesRes, completedRes] = await Promise.all([
+          projectsPromise,
+          milestonesPromise,
+          completedCountPromise,
+        ]);
+
+        const projectsData = (projectsRes as any)?.data || [];
+        const milestonesData = (milestonesRes as any)?.data || [];
+        const completedThisWeek = (completedRes as any)?.count || 0;
+
+        const allProjects: ProjectSummary[] = projectsData.map((p: any) => ({
+          ...p,
+          clients: Array.isArray(p.clients) ? p.clients[0] : p.clients,
+        }));
+
+        setProjects(allProjects);
+
+        setMilestones(milestonesData as MilestoneSummary[]);
+        
+        // Calculate overview metrics with minimal work
+        const activeCount = allProjects.filter(
+          (p) => p.status === "in_progress" || p.status === "in_review",
+        ).length;
+
         setOverview((prev) => ({
           ...prev,
+          upcomingMilestones: milestonesData.length,
           activeProjects: activeCount,
           completedThisWeek: completedThisWeek || 0,
         }));
