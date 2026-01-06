@@ -1,6 +1,6 @@
 "use server";
 
-import { createClient } from "@/lib/supabase/server";
+import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { revalidatePath } from "next/cache";
 import { logAuditEvent } from "./audit-log";
 
@@ -523,6 +523,9 @@ export async function reviewProjectProposal(args: {
   }
   console.log("[reviewProjectProposal] ✅ Role check passed:", roleData.role);
 
+  // Use service role client for cross-user updates and project creation
+  const adminSupabase = createServiceClient();
+
   const updateData: any = {
     proposed_project_status: args.decision,
     proposed_project_reviewed_by: user.id,
@@ -537,7 +540,7 @@ export async function reviewProjectProposal(args: {
     );
 
     // First, fetch the task to get the proposal details AND employee info
-    const { data: task, error: taskError } = await supabase
+    const { data: task, error: taskError } = await adminSupabase
       .from("employee_tasks")
       .select("proposed_project_name, proposed_project_vertical, user_id")
       .eq("id", args.taskId)
@@ -571,7 +574,7 @@ export async function reviewProjectProposal(args: {
       },
     );
 
-    const { data: newProject, error: projectError } = await supabase
+    const { data: newProject, error: projectError } = await adminSupabase
       .from("projects")
       .insert({
         name: task.proposed_project_name,
@@ -631,7 +634,7 @@ export async function reviewProjectProposal(args: {
           { project_id: newProject.id, user_id: task.user_id }, // Employee who requested
         ];
 
-        const { error: teamError, data: teamData } = await supabase
+        const { error: teamError, data: teamData } = await adminSupabase
           .from("project_team")
           .insert(teamMembers)
           .select();
@@ -667,7 +670,7 @@ export async function reviewProjectProposal(args: {
     updateData.project_id = args.projectId;
   }
 
-  const { data, error } = await supabase
+  const { data, error } = await adminSupabase
     .from("employee_tasks")
     .update(updateData)
     .eq("id", args.taskId)
