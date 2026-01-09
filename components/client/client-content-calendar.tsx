@@ -37,6 +37,7 @@ export function ClientContentCalendar({ clientId, projectIds }: ClientContentCal
   const [selectedEvent, setSelectedEvent] = useState<CalendarEvent | null>(null);
   
   const supabase = createClient();
+  const toISODate = (date: Date) => date.toISOString().slice(0, 10);
 
   useEffect(() => {
     if (projectIds.length === 0) return;
@@ -46,19 +47,19 @@ export function ClientContentCalendar({ clientId, projectIds }: ClientContentCal
   async function fetchEvents() {
     setLoading(true);
     try {
-      const startOfMonth = new Date(currentMonth.getFullYear(), currentMonth.getMonth(), 1)
-        .toISOString()
-        .slice(0, 10);
-      const endOfMonth = new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 0)
-        .toISOString()
-        .slice(0, 10);
+      const year = currentMonth.getUTCFullYear();
+      const month = currentMonth.getUTCMonth();
+      const startOfMonth = new Date(Date.UTC(year, month, 1));
+      const endOfMonth = new Date(Date.UTC(year, month + 1, 0));
+      const startDateStr = toISODate(startOfMonth);
+      const endDateStr = toISODate(endOfMonth);
 
       const { data, error } = await supabase
         .from("calendar_events")
         .select("*, projects(name)")
         .in("project_id", projectIds)
-        .gte("event_date", startOfMonth)
-        .lte("event_date", endOfMonth)
+        .gte("event_date", startDateStr)
+        .lte("event_date", endDateStr)
         .order("event_date", { ascending: true });
 
       if (error) throw error;
@@ -72,10 +73,12 @@ export function ClientContentCalendar({ clientId, projectIds }: ClientContentCal
 
   // Generate calendar grid
   const generateCalendar = () => {
-    const startOfMonth = new Date(currentMonth.getFullYear(), currentMonth.getMonth(), 1);
-    const endOfMonth = new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 0);
-    const startDay = startOfMonth.getDay(); // 0-6
-    const daysInMonth = endOfMonth.getDate();
+    const year = currentMonth.getUTCFullYear();
+    const month = currentMonth.getUTCMonth();
+    const startOfMonth = new Date(Date.UTC(year, month, 1));
+    const endOfMonth = new Date(Date.UTC(year, month + 1, 0));
+    const startDay = startOfMonth.getUTCDay(); // 0-6
+    const daysInMonth = endOfMonth.getUTCDate();
 
     const weeks: (Date | null)[][] = [];
     let currentWeek: (Date | null)[] = [];
@@ -87,7 +90,7 @@ export function ClientContentCalendar({ clientId, projectIds }: ClientContentCal
 
     // Add days of the month
     for (let day = 1; day <= daysInMonth; day++) {
-      const date = new Date(currentMonth.getFullYear(), currentMonth.getMonth(), day);
+      const date = new Date(Date.UTC(year, month, day));
       currentWeek.push(date);
 
       if (currentWeek.length === 7) {
@@ -109,7 +112,7 @@ export function ClientContentCalendar({ clientId, projectIds }: ClientContentCal
 
   const getEventsForDate = (date: Date | null) => {
     if (!date) return [];
-    const dateStr = date.toISOString().slice(0, 10);
+    const dateStr = toISODate(date);
     return events.filter((e) => {
       const eventDate = e.event_date?.slice(0, 10);
       const matchesDate = eventDate === dateStr;
@@ -157,6 +160,8 @@ export function ClientContentCalendar({ clientId, projectIds }: ClientContentCal
 
   const weeks = generateCalendar();
   const monthName = currentMonth.toLocaleDateString("en-US", { month: "long", year: "numeric" });
+  const today = new Date();
+  const todayStr = toISODate(new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate())));
 
   if (projectIds.length === 0) {
     return (
@@ -238,7 +243,7 @@ export function ClientContentCalendar({ clientId, projectIds }: ClientContentCal
                 {weeks.map((week, weekIdx) => (
                   week.map((date, dayIdx) => {
                     const dayEvents = getEventsForDate(date);
-                    const isToday = date && date.toDateString() === new Date().toDateString();
+                    const isToday = date ? toISODate(date) === todayStr : false;
                     
                     return (
                       <div
