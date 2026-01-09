@@ -62,11 +62,11 @@ export function ProjectBudgetTracker({
       );
       const totalPaid = projectPayments
         .filter((p) => p.status === "completed")
-        .reduce((sum, p) => sum + p.amount, 0);
+        .reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
 
       const pendingPayments = projectPayments
         .filter((p) => p.status === "pending" || p.status === "scheduled")
-        .reduce((sum, p) => sum + p.amount, 0);
+        .reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
 
       const vendorCount = new Set(
         assignments
@@ -78,7 +78,7 @@ export function ProjectBudgetTracker({
         id: project.id,
         name: project.name,
         service_type: project.service_type,
-        budget: project.budget || 0,
+        budget: Number(project.budget) || 0,
         totalPaid,
         pendingPayments,
         vendorCount,

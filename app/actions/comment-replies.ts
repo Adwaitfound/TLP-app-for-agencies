@@ -133,7 +133,8 @@ export async function updateCommentReply(params: {
       .eq("id", userId)
       .single();
 
-    if (reply.user_id !== userId && userData?.role !== "admin") {
+    const isAdmin = userData?.role === "admin" || userData?.role === "super_admin";
+    if (reply.user_id !== userId && !isAdmin) {
       return { success: false, error: "Unauthorized: Can only edit own replies" };
     }
 
@@ -202,7 +203,8 @@ export async function deleteCommentReply(params: {
       .eq("id", userId)
       .single();
 
-    if (reply.user_id !== userId && userData?.role !== "admin") {
+    const isAdmin = userData?.role === "admin" || userData?.role === "super_admin";
+    if (reply.user_id !== userId && !isAdmin) {
       return { success: false, error: "Unauthorized: Can only delete own replies" };
     }
 

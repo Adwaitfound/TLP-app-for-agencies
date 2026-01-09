@@ -294,12 +294,13 @@ export async function getTodayTasks() {
 
   const { data: activeTasks, error: activeError } = await activeQuery;
 
-  // Also get any tasks with proposals (pending, approved, or rejected) so employees can track them
+  // Also get any tasks with approved proposals (not rejected) so employees can track them
   let proposalQuery = supabase
     .from("employee_tasks")
     .select("id,title,description,user_id,project_id,priority,status,due_date,estimated_hours,actual_hours,completed_at,created_at,updated_at,proposed_project_name,proposed_project_status,proposed_project_notes,proposed_project_reviewed_by,proposed_project_reviewed_at,proposed_project_vertical,projects(name)")
     .not("proposed_project_status", "is", null)
-    .eq("user_id", user.id); // Get any task with a proposal status for this user
+    .neq("proposed_project_status", "rejected")
+    .eq("user_id", user.id); // Get any task with a pending/approved proposal status for this user
 
   const { data: proposalTasks, error: proposalError } = await proposalQuery;
 
@@ -402,8 +403,15 @@ export async function assignTaskToEmployee(data: {
     return { error: "Failed to verify permissions" };
   }
 
-  if (userData.role !== "admin" && userData.role !== "project_manager") {
-    return { error: "Only admins and project managers can assign tasks" };
+  const isAdmin =
+    userData.role === "admin" ||
+    userData.role === "super_admin" ||
+    userData.role === "project_manager";
+
+  if (!isAdmin) {
+    return {
+      error: "Only admins, super admins, and project managers can assign tasks",
+    };
   }
 
   const payload: any = {
@@ -453,12 +461,15 @@ export async function getPendingProjectProposals() {
     .eq("id", user.id)
     .single();
 
-  if (
-    roleError ||
-    !roleData ||
-    (roleData.role !== "admin" && roleData.role !== "project_manager")
-  ) {
-    return { error: "Only admins and project managers can view proposals" };
+  const canViewProposals =
+    roleData?.role === "admin" ||
+    roleData?.role === "super_admin" ||
+    roleData?.role === "project_manager";
+
+  if (roleError || !roleData || !canViewProposals) {
+    return {
+      error: "Only admins, super admins, and project managers can view proposals",
+    };
   }
 
   const { data, error } = await supabase
@@ -513,13 +524,13 @@ export async function reviewProjectProposal(args: {
   if (
     roleError ||
     !roleData ||
-    (roleData.role !== "admin" && roleData.role !== "project_manager")
+    (roleData.role !== "admin" && roleData.role !== "project_manager" && roleData.role !== "super_admin")
   ) {
     console.log(
       "[reviewProjectProposal] ❌ ROLE CHECK FAILED:",
       roleData?.role,
     );
-    return { error: "Only admins and project managers can review proposals" };
+    return { error: "Only admins, super admins, and project managers can review proposals" };
   }
   console.log("[reviewProjectProposal] ✅ Role check passed:", roleData.role);
 
@@ -533,141 +544,149 @@ export async function reviewProjectProposal(args: {
     proposed_project_notes: args.notes,
   };
 
-  // If approving and no project_id provided, create a new project
-  if (args.decision === "approved" && !args.projectId) {
-    console.log(
-      "[reviewProjectProposal] 🔷 CREATING NEW PROJECT FROM PROPOSAL",
-    );
-
-    // First, fetch the task to get the proposal details AND employee info
-    const { data: task, error: taskError } = await adminSupabase
-      .from("employee_tasks")
-      .select("proposed_project_name, proposed_project_vertical, user_id")
-      .eq("id", args.taskId)
-      .single();
-
-    console.log("[reviewProjectProposal] Task fetch:", {
-      error: taskError,
-      task: task,
-    });
-    if (taskError || !task) {
-      console.log("[reviewProjectProposal] ❌ TASK FETCH FAILED");
-      return { error: "Failed to fetch task details" };
-    }
-    console.log(
-      "[reviewProjectProposal] ✅ Task fetched - Name:",
-      task.proposed_project_name,
-      "Vertical:",
-      task.proposed_project_vertical,
-      "Employee:",
-      task.user_id,
-    );
-
-    // Create a new project from the proposal
-    console.log(
-      "[reviewProjectProposal] 🔶 Attempting to create project with:",
-      {
-        name: task.proposed_project_name,
-        service_type: task.proposed_project_vertical || "video_production",
-        status: "planning",
-        created_by: user.id,
-      },
-    );
-
-    const { data: newProject, error: projectError } = await adminSupabase
-      .from("projects")
-      .insert({
-        name: task.proposed_project_name,
-        service_type: task.proposed_project_vertical || "video_production",
-        status: "planning",
-        progress_percentage: 0,
-        created_by: user.id,
-        // client_id can be null initially - project created from proposal doesn't need a client yet
-      })
-      .select()
-      .single();
-
-    console.log("[reviewProjectProposal] Project insert result:", {
-      error: projectError,
-      newProject: newProject,
-    });
-
-    if (projectError) {
-      console.error(
-        "[reviewProjectProposal] ❌ Project creation failed:",
-        projectError,
-      );
-      // Continue with approval even if project creation fails
-      // return { error: projectError.message }
-    } else if (newProject) {
+  // Only handle project creation/linking for approvals
+  if (args.decision === "approved") {
+    // If approving and no project_id provided, create a new project
+    if (!args.projectId) {
       console.log(
-        "[reviewProjectProposal] ✅ Project created successfully! ID:",
-        newProject.id,
-      );
-      updateData.project_id = newProject.id;
-      console.log(
-        "[reviewProjectProposal] Updated updateData.project_id =",
-        newProject.id,
+        "[reviewProjectProposal] 🔷 CREATING NEW PROJECT FROM PROPOSAL",
       );
 
-      // Add both the admin and the employee to the project team
+      // First, fetch the task to get the proposal details AND employee info
+      const { data: task, error: taskError } = await adminSupabase
+        .from("employee_tasks")
+        .select("proposed_project_name, proposed_project_vertical, user_id")
+        .eq("id", args.taskId)
+        .single();
+
+      console.log("[reviewProjectProposal] Task fetch:", {
+        error: taskError,
+        task: task,
+      });
+      if (taskError || !task) {
+        console.log("[reviewProjectProposal] ❌ TASK FETCH FAILED");
+        return { error: "Failed to fetch task details" };
+      }
       console.log(
-        "[reviewProjectProposal] 🔷 Adding team members to project:",
-        newProject.id,
+        "[reviewProjectProposal] ✅ Task fetched - Name:",
+        task.proposed_project_name,
+        "Vertical:",
+        task.proposed_project_vertical,
+        "Employee:",
+        task.user_id,
       );
-      console.log("[reviewProjectProposal] Team members to add:", [
+
+      // Create a new project from the proposal
+      console.log(
+        "[reviewProjectProposal] 🔶 Attempting to create project with:",
         {
-          project_id: newProject.id,
-          user_id: user.id,
-          role: "Admin who approved",
+          name: task.proposed_project_name,
+          service_type: task.proposed_project_vertical || "video_production",
+          status: "planning",
+          created_by: user.id,
         },
-        {
-          project_id: newProject.id,
-          user_id: task.user_id,
-          role: "Employee who requested",
-        },
-      ]);
+      );
 
-      try {
-        const teamMembers = [
-          { project_id: newProject.id, user_id: user.id }, // Admin who approved
-          { project_id: newProject.id, user_id: task.user_id }, // Employee who requested
-        ];
+      const { data: newProject, error: projectError } = await adminSupabase
+        .from("projects")
+        .insert({
+          name: task.proposed_project_name,
+          service_type: task.proposed_project_vertical || "video_production",
+          status: "planning",
+          progress_percentage: 0,
+          created_by: user.id,
+          // client_id can be null initially - project created from proposal doesn't need a client yet
+        })
+        .select()
+        .single();
 
-        const { error: teamError, data: teamData } = await adminSupabase
-          .from("project_team")
-          .insert(teamMembers)
-          .select();
+      console.log("[reviewProjectProposal] Project insert result:", {
+        error: projectError,
+        newProject: newProject,
+      });
 
-        console.log("[reviewProjectProposal] Team insert result:", {
-          error: teamError,
-          data: teamData,
-        });
+      if (projectError) {
+        console.error(
+          "[reviewProjectProposal] ❌ Project creation failed:",
+          projectError,
+        );
+        // Continue with approval even if project creation fails
+        // return { error: projectError.message }
+      } else if (newProject) {
+        console.log(
+          "[reviewProjectProposal] ✅ Project created successfully! ID:",
+          newProject.id,
+        );
+        updateData.project_id = newProject.id;
+        console.log(
+          "[reviewProjectProposal] Updated updateData.project_id =",
+          newProject.id,
+        );
 
-        if (teamError) {
+        // Add both the admin and the employee to the project team
+        console.log(
+          "[reviewProjectProposal] 🔷 Adding team members to project:",
+          newProject.id,
+        );
+        console.log("[reviewProjectProposal] Team members to add:", [
+          {
+            project_id: newProject.id,
+            user_id: user.id,
+            role: "Admin who approved",
+          },
+          {
+            project_id: newProject.id,
+            user_id: task.user_id,
+            role: "Employee who requested",
+          },
+        ]);
+
+        try {
+          const teamMembers = [
+            { project_id: newProject.id, user_id: user.id }, // Admin who approved
+            { project_id: newProject.id, user_id: task.user_id }, // Employee who requested
+          ];
+
+          const { error: teamError, data: teamData } = await adminSupabase
+            .from("project_team")
+            .insert(teamMembers)
+            .select();
+
+          console.log("[reviewProjectProposal] Team insert result:", {
+            error: teamError,
+            data: teamData,
+          });
+
+          if (teamError) {
+            console.error(
+              "[reviewProjectProposal] ❌ Failed to add team members:",
+              teamError,
+            );
+          } else {
+            console.log(
+              "[reviewProjectProposal] ✅ Team members added successfully! Rows:",
+              teamData?.length,
+            );
+          }
+        } catch (err) {
           console.error(
-            "[reviewProjectProposal] ❌ Failed to add team members:",
-            teamError,
-          );
-        } else {
-          console.log(
-            "[reviewProjectProposal] ✅ Team members added successfully! Rows:",
-            teamData?.length,
+            "[reviewProjectProposal] ❌ Error adding team members:",
+            err,
           );
         }
-      } catch (err) {
-        console.error(
-          "[reviewProjectProposal] ❌ Error adding team members:",
-          err,
-        );
       }
+    } else {
+      // Linking existing project to approval
+      console.log(
+        "[reviewProjectProposal] 🔷 Linking existing project:",
+        args.projectId,
+      );
+      updateData.project_id = args.projectId;
     }
-  } else if (args.projectId && args.decision === "approved") {
-    console.log(
-      "[reviewProjectProposal] 🔷 Linking existing project:",
-      args.projectId,
-    );
-    updateData.project_id = args.projectId;
+  } else if (args.decision === "rejected") {
+    // Rejection: clear any project association, just mark as rejected
+    console.log("[reviewProjectProposal] ❌ REJECTING proposal");
+    updateData.project_id = null;
   }
 
   const { data, error } = await adminSupabase

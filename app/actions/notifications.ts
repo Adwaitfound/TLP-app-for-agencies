@@ -51,95 +51,7 @@ async function insertTest(userId: string, supabase: ReturnType<typeof createServ
   return { success: true };
 }
 
-export async function notifyChatMessage(
-  senderId: string,
-  senderName: string,
-  message: string,
-  messageId: string
-) {
-  const supabase = createServiceClient();
-
-  // Get all team members except the sender and clients
-  const { data: users } = await supabase
-    .from("users")
-    .select("id, full_name")
-    .in("role", ["admin", "project_manager", "employee"])
-    .neq("id", senderId);
-
-  if (!users || users.length === 0) return { success: true };
-
-  // Extract mentions from message (@username)
-  const mentionMatches = message.match(/@(\w+)/g) || [];
-  const mentionedNames = mentionMatches.map(m => m.substring(1).toLowerCase());
-  
-  // Create preview once for all uses
-  const preview = message.length > 50 ? message.substring(0, 50) + '...' : message;
-
-  // Create notifications for all users
-  const notifications = users.map(user => {
-    const isMentioned = mentionedNames.some(name => 
-      user.full_name.toLowerCase().replace(/\s+/g, '').includes(name)
-    );
-
-    return {
-      user_id: user.id,
-      type: isMentioned ? 'chat_mention' : 'chat_message',
-      message: isMentioned 
-        ? `${senderName} mentioned you: ${preview}`
-        : `${senderName}: ${preview}`,
-      metadata: {
-        sender_id: senderId,
-        sender_name: senderName,
-        message_id: messageId,
-        is_mention: isMentioned,
-        full_message: message,
-      },
-    };
-  });
-
-  const { error } = await supabase
-    .from("notifications")
-    .insert(notifications);
-
-  if (error) return { success: false, error: error.message };
-
-  // Send web push notifications for mentioned users
-  const mentionedUserIds = users
-    .filter(user => mentionedNames.some(name => 
-      user.full_name.toLowerCase().replace(/\s+/g, '').includes(name)
-    ))
-    .map(u => u.id);
-
-  if (mentionedUserIds.length > 0) {
-    try {
-      await sendWebPushNotification(
-        mentionedUserIds,
-        `${senderName} mentioned you in chat`,
-        `${preview}`,
-        'chat_mention'
-      );
-    } catch (err) {
-      console.error("Failed to send web push for mentions:", err);
-      // Don't fail the whole operation if web push fails
-    }
-  }
-
-  // Send web push for all users (optional, or just for mentions)
-  const allUserIds = users.map(u => u.id);
-  try {
-    await sendWebPushNotification(
-      allUserIds,
-      `New message from ${senderName}`,
-      preview,
-      'chat_message'
-    );
-  } catch (err) {
-    console.error("Failed to send web push notifications:", err);
-    // Don't fail the whole operation if web push fails
-  }
-
-  return { success: true };
-}
+// Chat functionality removed - no longer needed
 
 async function sendWebPushNotification(
   userIds: string[],
@@ -163,9 +75,9 @@ async function sendWebPushNotification(
             badge: '/icons/icon-192x192.png',
             image: '/icons/icon-512x512.png',
             vibrate: [200, 100, 200],
-            requireInteraction: tag === 'chat_mention',
+            requireInteraction: tag === 'mention',
             data: {
-              url: '/dashboard/chat',
+              url: '/dashboard/notifications',
               timestamp: Date.now(),
             },
           },

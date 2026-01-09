@@ -94,10 +94,11 @@ export default function InvoicesPage() {
   const [selectedProjectId, setSelectedProjectId] = useState("");
   const [invoiceNumber, setInvoiceNumber] = useState("");
   const [invoiceTotal, setInvoiceTotal] = useState("");
+  const [invoiceTax, setInvoiceTax] = useState("");
   const [invoiceDueDate, setInvoiceDueDate] = useState("");
   const [invoiceIssueDate, setInvoiceIssueDate] = useState("");
 
-  const isAdmin = user?.role === "admin";
+  const isAdmin = user?.role === "admin" || user?.role === "super_admin";
 
   const showToast = useCallback(
     (message: string, type: "success" | "error" = "success") => {
@@ -139,6 +140,15 @@ export default function InvoicesPage() {
   const filteredProjects = projects.filter(
     (project) => !selectedClientId || project.client_id === selectedClientId,
   );
+
+  // Get selected project details for amount comparison
+  const selectedProject = selectedProjectId
+    ? projects.find((p) => p.id === selectedProjectId)
+    : null;
+  const projectBudget = selectedProject?.budget ? Number(selectedProject.budget) : 0;
+  const invoiceAmount = invoiceTotal ? Number(invoiceTotal) : 0;
+  const amountMatch = projectBudget > 0 && invoiceAmount > 0 && Math.abs(projectBudget - invoiceAmount) < 0.01;
+  const amountDifference = Math.abs(projectBudget - invoiceAmount);
 
   async function openSignedUrl(fileUrl: string, download?: boolean) {
     const result = await getSignedInvoiceUrl(fileUrl);
@@ -215,7 +225,8 @@ export default function InvoicesPage() {
           invoice_file_url: publicUrl,
           issue_date: invoiceIssueDate || today,
           due_date: invoiceDueDate || today,
-          total: invoiceTotal ? parseFloat(invoiceTotal) : null,
+          amount: invoiceTotal ? parseFloat(invoiceTotal) : null,
+          tax_type: invoiceTax || null,
           status: "draft",
         })
         .select("*, clients(company_name), projects(name)")
@@ -235,6 +246,7 @@ export default function InvoicesPage() {
       setSelectedProjectId("");
       setInvoiceNumber("");
       setInvoiceTotal("");
+      setInvoiceTax("");
       setInvoiceDueDate("");
       setInvoiceIssueDate("");
     } catch (error: any) {
@@ -514,7 +526,8 @@ export default function InvoicesPage() {
                 />
               </div>
 
-              <div>                <Label>Total Amount (₹) *</Label>
+              <div>
+                <Label>Amount (₹) *</Label>
                 <Input
                   type="number"
                   value={invoiceTotal}
@@ -524,6 +537,19 @@ export default function InvoicesPage() {
                   min="0"
                   step="0.01"
                   required
+                />
+              </div>
+
+              <div>
+                <Label>Tax (%)</Label>
+                <Input
+                  type="number"
+                  value={invoiceTax}
+                  onChange={(e) => setInvoiceTax(e.target.value)}
+                  className="mt-1"
+                  placeholder="18"
+                  min="0"
+                  step="0.01"
                 />
               </div>
 
@@ -595,6 +621,29 @@ export default function InvoicesPage() {
                   </SelectContent>
                 </Select>
               </div>
+
+              {selectedProject && projectBudget > 0 && invoiceAmount > 0 && (
+                <div className={`rounded-lg p-3 text-sm ${
+                  amountMatch
+                    ? "bg-green-50 border border-green-200 text-green-800"
+                    : "bg-orange-50 border border-orange-200 text-orange-800"
+                }`}>
+                  <div className="font-semibold">
+                    {amountMatch ? "✓ Amount Matches" : "⚠ Amount Mismatch"}
+                  </div>
+                  <div className="text-xs mt-1">
+                    Project Budget: ₹{projectBudget.toLocaleString('en-IN', { maximumFractionDigits: 2 })}
+                    <br />
+                    Invoice Amount: ₹{invoiceAmount.toLocaleString('en-IN', { maximumFractionDigits: 2 })}
+                    {!amountMatch && (
+                      <>
+                        <br />
+                        Difference: ₹{amountDifference.toLocaleString('en-IN', { maximumFractionDigits: 2 })}
+                      </>
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
 
             <DialogFooter>

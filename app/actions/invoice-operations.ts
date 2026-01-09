@@ -9,7 +9,8 @@ async function ensureAdmin(supabase: Awaited<ReturnType<typeof createClient>>, u
     .eq("id", userId)
     .single();
   if (error) return { error: "Failed to verify role" } as const;
-  if (!data || data.role !== "admin") return { error: "Access restricted to admins" } as const;
+  const isAdmin = data?.role === "admin" || data?.role === "super_admin";
+  if (!data || !isAdmin) return { error: "Access restricted to admins" } as const;
   return { ok: true } as const;
 }
 
@@ -206,5 +207,49 @@ export async function getSignedInvoiceUrl(fileUrl: string) {
   } catch (error: any) {
     console.error("Signed URL error:", error);
     return { error: error.message || "Failed to generate signed URL" };
+  }
+}
+
+export async function fetchClientSharedInvoices() {
+  const supabase = await createClient();
+
+  // Get current user
+  const {
+    data: { user },
+    error: authError,
+  } = await supabase.auth.getUser();
+  if (authError || !user) {
+    return { error: "Unauthorized" };
+  }
+
+  try {
+    // Fetch invoices shared with this client
+    const { data: invoicesData, error: invoicesError } = await supabase
+      .from("invoices")
+      .select("*, clients(company_name), projects(name)")
+      .eq("shared_with_client", true)
+      .order("created_at", { ascending: false });
+
+    if (invoicesError) throw invoicesError;
+
+    // Transform data
+    const invoices = (invoicesData || []).map((invoice: any) => ({
+      id: invoice.id,
+      invoice_number: invoice.invoice_number,
+      amount: invoice.amount ? Number(invoice.amount) : 0,
+      status: invoice.status,
+      client_name: invoice.clients?.company_name || "N/A",
+      project_name: invoice.projects?.name || "N/A",
+      issue_date: invoice.issue_date,
+      due_date: invoice.due_date,
+      created_at: invoice.created_at,
+      invoice_file_url: invoice.invoice_file_url,
+      shared_with_client: invoice.shared_with_client,
+    }));
+
+    return { success: true, data: invoices };
+  } catch (error: any) {
+    console.error("Fetch client invoices error:", error);
+    return { error: error.message || "Failed to fetch invoices" };
   }
 }

@@ -2,6 +2,7 @@
 
 import { createServiceClient } from "@/lib/supabase/server";
 import { logAuditEvent } from "@/lib/audit";
+import { sendCommentNotification } from "@/lib/provisioning/email-service";
 
 async function notifyUsers(
   userIds: string[],
@@ -210,14 +211,14 @@ export async function addCommentReply(params: {
 
     if (error) return { success: false, error: error.message };
 
-    // Fetch author data for display
+    // Fetch author data (role needed to decide if client replied)
     const { data: author } = await supabase
       .from("users")
-      .select("id, full_name, email")
+      .select("id, full_name, email, role")
       .eq("id", userId)
       .single();
 
-    // Optional: notify admins/PMs about reply
+    // Optional: notify admins/PMs about reply (in-app notification)
     const { data: admins } = await supabase
       .from("users")
       .select("id")
@@ -230,6 +231,67 @@ export async function addCommentReply(params: {
         message: "A comment received a reply",
         metadata: { comment_id: commentId, reply_id: inserted.id },
       });
+    }
+
+    // If the replier is a client, send an email to superadmin
+    if (author?.role === "client") {
+      try {
+        // Find base comment to get project id
+        const { data: baseComment } = await supabase
+          .from("project_comments")
+          .select("id, project_id")
+          .eq("id", commentId)
+          .single();
+
+        if (baseComment?.project_id) {
+          // Fetch project + client info
+          const { data: projectData } = await supabase
+            .from("projects")
+            .select("name, clients(company_name, users(full_name, email))")
+            .eq("id", baseComment.project_id)
+            .single();
+
+          const clientsRel: any = Array.isArray(projectData?.clients)
+            ? projectData?.clients?.[0]
+            : (projectData as any)?.clients;
+          const clientUserRel: any = Array.isArray(clientsRel?.users)
+            ? clientsRel?.users?.[0]
+            : clientsRel?.users;
+
+          const clientName =
+            author?.full_name ||
+            clientUserRel?.full_name ||
+            clientsRel?.company_name ||
+            "Client";
+          const projectName = projectData?.name || "a project";
+
+          // Superadmin recipients
+          const { data: supers } = await supabase
+            .from("users")
+            .select("email, full_name")
+            .eq("role", "super_admin");
+
+          const appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+          const commentUrl = `${appUrl}/dashboard/comments`;
+
+          for (const sa of supers || []) {
+            if (sa?.email) {
+              await sendCommentNotification({
+                recipientEmail: sa.email,
+                recipientName: sa.full_name || "Super Admin",
+                clientName,
+                projectName,
+                commentText: replyText,
+                commentUrl,
+              }).catch((err) => {
+                console.error(`Failed to email superadmin ${sa.email}:`, err);
+              });
+            }
+          }
+        }
+      } catch (emailErr) {
+        console.error("Failed to send superadmin email for client reply:", emailErr);
+      }
     }
 
     return {

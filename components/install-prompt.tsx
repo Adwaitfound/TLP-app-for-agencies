@@ -11,6 +11,7 @@ interface BeforeInstallPromptEvent extends Event {
 export function InstallPrompt() {
   const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(null);
   const [showPrompt, setShowPrompt] = useState(false);
+  const [hasOpenDialogs, setHasOpenDialogs] = useState(false);
 
   useEffect(() => {
     const handler = (e: Event) => {
@@ -25,6 +26,26 @@ export function InstallPrompt() {
     return () => {
       window.removeEventListener('beforeinstallprompt', handler);
     };
+  }, []);
+
+  // Check for open dialogs
+  useEffect(() => {
+    const checkDialogs = () => {
+      const openDialogs = document.querySelectorAll('[role="dialog"][data-state="open"]');
+      setHasOpenDialogs(openDialogs.length > 0);
+    };
+
+    // Check initially and on any DOM changes
+    checkDialogs();
+    const observer = new MutationObserver(checkDialogs);
+    observer.observe(document.body, { 
+      childList: true, 
+      subtree: true, 
+      attributes: true,
+      attributeFilter: ['data-state']
+    });
+
+    return () => observer.disconnect();
   }, []);
 
   const handleInstall = async () => {
@@ -43,7 +64,8 @@ export function InstallPrompt() {
     setShowPrompt(false);
   };
 
-  if (!showPrompt || !deferredPrompt) {
+  // Don't show if there are open dialogs or if already dismissed
+  if (!showPrompt || !deferredPrompt || hasOpenDialogs) {
     return null;
   }
 

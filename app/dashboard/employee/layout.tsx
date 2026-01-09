@@ -1,5 +1,4 @@
 import { EmployeeHeader } from "@/components/dashboard/employee-header";
-import { ChatWidget } from "@/components/dashboard/chat-widget";
 
 export default function EmployeeLayout({
   children,
@@ -14,7 +13,6 @@ export default function EmployeeLayout({
           {children}
         </main>
       </div>
-      <ChatWidget />
     </>
   );
 }

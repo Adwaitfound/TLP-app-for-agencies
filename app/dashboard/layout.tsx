@@ -3,7 +3,6 @@
 import { usePathname } from "next/navigation";
 import { Sidebar } from "@/components/dashboard/sidebar";
 import { Header } from "@/components/dashboard/header";
-import { ChatWidget } from "@/components/dashboard/chat-widget";
 
 export default function DashboardLayout({
   children,
@@ -43,7 +42,6 @@ export default function DashboardLayout({
           </main>
         </div>
       </div>
-      <ChatWidget />
     </>
   );
 }

@@ -200,6 +200,15 @@ export interface SubProject {
   description?: string
   status: ProjectStatus
   assigned_to?: string
+  assigned_user?:
+    | User
+    | {
+        id?: string
+        full_name?: string
+        email?: string
+        avatar_url?: string
+        role?: string
+      }
   progress_percentage: number
   due_date?: string
   video_url?: string
@@ -208,8 +217,6 @@ export interface SubProject {
   created_by?: string
   created_at: string
   updated_at: string
-  // Joined data
-  assigned_user?: User
 }
 
 export interface SubProjectComment {

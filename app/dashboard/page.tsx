@@ -36,7 +36,7 @@ export default function DashboardPage() {
   }
 
   // Show admin dashboard for admin and project_manager roles
-  if (user?.role === "admin" || user?.role === "project_manager") {
+  if (user?.role === "admin" || user?.role === "project_manager" || user?.role === "super_admin") {
     return <AdminDashboard />;
   }
 

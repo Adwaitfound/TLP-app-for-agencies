@@ -229,30 +229,40 @@ export function AdDisplay({ position = 'top' }: { position?: 'top' | 'bottom' | 
 
       // Get client ID if user is a client
       if (user) {
-        const { data: clientData } = await supabase
+        const { data: clientData, error: clientError } = await supabase
           .from('clients')
           .select('id')
           .eq('user_id', user.id)
           .single();
 
+        if (clientError) {
+          console.warn('Could not fetch client ID:', clientError);
+        }
+
         clientId = clientData?.id;
       }
 
-      await supabase
-        .from('ad_analytics')
-        .insert([
-          {
-            ad_id: adId,
-            client_id: clientId,
-            event_type: eventType,
-            event_data: {
-              timestamp: new Date().toISOString(),
-              userAgent: typeof navigator !== 'undefined' ? navigator.userAgent : null,
-            },
-          },
-        ]);
+      const analyticsData = {
+        ad_id: adId,
+        client_id: clientId,
+        event_type: eventType,
+        event_data: {
+          timestamp: new Date().toISOString(),
+          userAgent: typeof navigator !== 'undefined' ? navigator.userAgent : null,
+        },
+      };
 
-      console.log(`📊 Ad ${eventType} tracked:`, adId);
+      console.log(`📊 Tracking ad ${eventType}:`, analyticsData);
+
+      const { data, error } = await supabase
+        .from('ad_analytics')
+        .insert([analyticsData]);
+
+      if (error) {
+        console.error('Error inserting ad analytics:', error);
+      } else {
+        console.log(`✅ Ad ${eventType} tracked successfully:`, adId);
+      }
     } catch (err) {
       console.error('Error tracking ad event:', err);
     }

@@ -8,13 +8,13 @@ import { ErrorBoundary } from "@/components/error-boundary";
 import { GlobalErrorListener } from "@/components/global-error-listener";
 import { SwUpdateBanner } from "@/components/sw-update-banner";
 import { NotificationPortal } from "@/components/notification-portal";
-import { ChatNotifier } from "@/components/chat-notifier";
 import { PushSubscriptionManager } from "@/components/push-subscription";
 import { NotificationDiagnostics } from "@/components/notification-diagnostics";
 import { InstallPrompt } from "@/components/install-prompt";
 import { BadgeManager } from "@/components/badge-manager";
 import { PullToRefresh } from "@/components/pull-to-refresh";
 import { MacOSUpdateWidget } from "@/components/macos-update-widget";
+import { ServiceWorkerRegister } from "@/components/service-worker-register";
 const geistSans = Geist({
   variable: "--font-geist-sans",
   subsets: ["latin"],
@@ -95,7 +95,7 @@ export default function RootLayout({
           <AuthProvider>
             <ErrorBoundary>
               {children}
-              <ChatNotifier />
+              <ServiceWorkerRegister />
               <PushSubscriptionManager />
               <NotificationPortal />
               <BadgeManager />
@@ -108,7 +108,6 @@ export default function RootLayout({
             </ErrorBoundary>
           </AuthProvider>
         </ThemeProvider>
-        {/* Temporarily disable service worker registration to avoid sw.js parse errors in production. */}
       </body>
     </html>
   );

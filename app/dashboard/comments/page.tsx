@@ -18,7 +18,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { assignCommentToEmployee } from "@/app/actions/client-comments";
+import { assignCommentToEmployee, addCommentReply } from "@/app/actions/client-comments";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
@@ -34,12 +34,14 @@ export default function CommentsAdminPage() {
   const [projectFilter, setProjectFilter] = useState<string>("all");
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [expandedComments, setExpandedComments] = useState<Set<string>>(new Set());
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [replies, setReplies] = useState<Record<string, string>>({});
   const [repliesData, setRepliesData] = useState<Record<string, any[]>>({});
 
-  const isAdmin = user?.role === "admin" || user?.role === "project_manager";
+  const isAdmin = user?.role === "admin" || user?.role === "project_manager" || user?.role === "super_admin";
+
 
   useEffect(() => {
     async function fetchData() {
@@ -65,7 +67,7 @@ export default function CommentsAdminPage() {
         // If admin/PM, get all projects; if agency_admin get only their agency's projects; otherwise get their assigned projects
         let projectsData: any[] = [];
         
-        if (userRole === "admin") {
+        if (userRole === "admin" || userRole === "super_admin") {
           // System admin can see all projects
           const { data } = await supabase
             .from("projects")
@@ -112,7 +114,7 @@ export default function CommentsAdminPage() {
           userRole,
           projectCount: projectsData?.length,
           projectIds,
-          isAdmin: userRole === "admin" || userRole === "project_manager",
+          isAdmin: userRole === "admin" || userRole === "project_manager" || userRole === "super_admin",
         });
 
         // Fetch all comments for visible projects
@@ -131,7 +133,7 @@ export default function CommentsAdminPage() {
           );
 
         // Only apply project filter for non-admin users
-        if ((userRole !== "admin" && userRole !== "project_manager") && projectIds.length > 0) {
+        if ((userRole !== "admin" && userRole !== "project_manager" && userRole !== "super_admin") && projectIds.length > 0) {
           commentsQuery = commentsQuery.in("project_id", projectIds);
         }
 
@@ -337,6 +339,7 @@ export default function CommentsAdminPage() {
         };
       } catch (e) {
         console.error("❌ Failed to fetch comments admin view", e);
+        setError(`Failed to load comments: ${e instanceof Error ? e.message : 'Unknown error'}`);
       } finally {
         setLoading(false);
       }
@@ -380,7 +383,6 @@ export default function CommentsAdminPage() {
     if (!replyText || !userId) return;
 
     try {
-      const { addCommentReply } = await import("@/app/actions/client-comments");
       const result = await addCommentReply({
         commentId,
         userId,
@@ -450,6 +452,13 @@ export default function CommentsAdminPage() {
 
   return (
     <div className="space-y-6">
+      {error && (
+        <Card className="border-red-200 bg-red-50">
+          <CardContent className="pt-6">
+            <p className="text-red-800">{error}</p>
+          </CardContent>
+        </Card>
+      )}
       <Card>
         <CardHeader>
           <div className="flex flex-col gap-4">

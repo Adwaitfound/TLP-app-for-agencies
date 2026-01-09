@@ -56,7 +56,8 @@ export async function createVendor(vendor: Partial<Vendor>) {
   if (userFetchError) {
     return { error: userFetchError.message };
   }
-  if (!userRow || userRow.role !== "admin") {
+  const isAdmin = userRow?.role === "admin" || userRow?.role === "super_admin";
+  if (!userRow || !isAdmin) {
     return { error: "Admins only" };
   }
 
@@ -124,7 +125,7 @@ export async function fetchPayments(filters?: {
       .eq("id", user.id)
       .single();
 
-    const isAdmin = userRow?.role === "admin";
+    const isAdmin = userRow?.role === "admin" || userRow?.role === "super_admin";
     const client = isAdmin ? service : supabase;
 
     // First try to fetch all payments with relationships
@@ -203,6 +204,7 @@ export async function fetchPayments(filters?: {
     // Attach vendor and project info to payments
     const enrichedData = data.map((payment: any) => ({
       ...payment,
+      amount: Number(payment.amount),
       vendors: vendors[payment.vendor_id] || null,
       projects: projects[payment.project_id] || null,
     }));
@@ -210,7 +212,7 @@ export async function fetchPayments(filters?: {
     return { payments: enrichedData as VendorPayment[] };
   }
   
-  return { payments: (data || []) as VendorPayment[] };
+  return { payments: (data || []).map((p: any) => ({ ...p, amount: Number(p.amount) })) as VendorPayment[] };
 }
 
 export async function createPayment(payment: Partial<VendorPayment>) {
@@ -236,7 +238,8 @@ export async function createPayment(payment: Partial<VendorPayment>) {
   if (userFetchError) {
     return { error: userFetchError.message };
   }
-  if (!userRow || userRow.role !== "admin") {
+  const isAdminRole = userRow?.role === "admin" || userRow?.role === "super_admin";
+  if (!userRow || !isAdminRole) {
     return { error: "Admins only" };
   }
 
@@ -277,7 +280,7 @@ export async function updatePayment(
     .eq("id", user.id)
     .single();
 
-  const isAdmin = userRow?.role === "admin";
+  const isAdmin = userRow?.role === "admin" || userRow?.role === "super_admin";
   
   if (!isAdmin) {
     return { error: "Admins only" };
@@ -400,7 +403,8 @@ export async function createAssignment(
   if (userFetchError) {
     return { error: userFetchError.message };
   }
-  if (!userRow || userRow.role !== "admin") {
+  const isAdminAccess = userRow?.role === "admin" || userRow?.role === "super_admin";
+  if (!userRow || !isAdminAccess) {
     return { error: "Admins only" };
   }
 
@@ -470,12 +474,12 @@ export async function fetchVendorAnalytics() {
   const totalPaid =
     paymentsData
       ?.filter((p) => p.status === "completed")
-      .reduce((sum, p) => sum + (p.amount || 0), 0) || 0;
+      .reduce((sum, p) => sum + (Number(p.amount) || 0), 0) || 0;
 
   const pendingPayments =
     paymentsData
       ?.filter((p) => p.status === "pending" || p.status === "scheduled")
-      .reduce((sum, p) => sum + (p.amount || 0), 0) || 0;
+      .reduce((sum, p) => sum + (Number(p.amount) || 0), 0) || 0;
 
   // Get vendors by type
   const { data: vendorsByType } = await supabase
@@ -515,12 +519,12 @@ export async function fetchProjectBudgetSummary(projectId: string) {
   const totalPaid =
     payments
       ?.filter((p) => p.status === "completed")
-      .reduce((sum, p) => sum + (p.amount || 0), 0) || 0;
+      .reduce((sum, p) => sum + (Number(p.amount) || 0), 0) || 0;
 
   const pendingPayments =
     payments
       ?.filter((p) => p.status === "pending" || p.status === "scheduled")
-      .reduce((sum, p) => sum + (p.amount || 0), 0) || 0;
+      .reduce((sum, p) => sum + (Number(p.amount) || 0), 0) || 0;
 
   // Get vendor count for this project
   const { count: vendorCount } = await supabase

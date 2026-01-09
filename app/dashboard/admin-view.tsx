@@ -52,6 +52,7 @@ import { SERVICE_TYPES, type ServiceType } from "@/types";
 import { reviewProjectProposal } from "@/app/actions/employee-tasks";
 import { approveUserAccount } from "@/app/actions/approve-user";
 import { grantAdminByEmail } from "@/app/actions/grant-admin";
+import { removeUser } from "@/app/actions/remove-user";
 import { forceConfirmEmail } from "@/app/actions/force-confirm-email";
 import { createMilestone } from "@/app/actions/milestones";
 import { Label } from "@/components/ui/label";
@@ -88,6 +89,9 @@ export default function AdminDashboard() {
   const [pendingActionUserId, setPendingActionUserId] = useState<string | null>(
     null,
   );
+  const [allUsers, setAllUsers] = useState<PendingUser[]>([]);
+  const [allUsersLoading, setAllUsersLoading] = useState(false);
+  const [removingUserId, setRemovingUserId] = useState<string | null>(null);
   const [devToolsOpen, setDevToolsOpen] = useState(false);
   const [grantAdminEmail, setGrantAdminEmail] = useState("");
   const [grantingAdmin, setGrantingAdmin] = useState(false);
@@ -134,22 +138,26 @@ export default function AdminDashboard() {
         ] = await Promise.all([
           supabase
             .from("projects")
-            .select("*, clients(company_name,contact_person,email)")
+            .select("id, name, status, budget, created_at, updated_at, client_id, progress_percentage, service_type")
             .order("created_at", { ascending: false })
-            .limit(100),
+            .limit(20), // Reduced from 100 to 20
           supabase
             .from("invoices")
-            .select("*, clients(company_name,contact_person,email)")
+            .select("id, status, total, due_date, created_at, invoice_number, client_id, issue_date")
             .order("created_at", { ascending: false })
-            .limit(100),
+            .limit(20), // Reduced from 100 to 20
           supabase
             .from("clients")
-            .select("*")
+            .select(
+              "id, user_id, company_name, contact_person, email, phone, address, total_projects, total_revenue, status, created_at",
+            )
             .order("created_at", { ascending: false })
-            .limit(100),
+            .limit(50), // Reduced from 100 to 50
           supabase
             .from("milestones")
-            .select("*, projects(name)")
+            .select(
+              "id, title, status, due_date, project_id, position, description, completed_at, created_at, updated_at",
+            )
             .in("status", ["pending", "in_progress"])
             .order("due_date", { ascending: true })
             .limit(5),
@@ -208,41 +216,6 @@ export default function AdminDashboard() {
           completedProjects,
           avgProjectValue,
         });
-
-        // Fetch proposals and pending users in parallel
-        setProposalLoading(true);
-        setPendingUsersLoading(true);
-        
-        const [
-          { data: proposalData, error: proposalError },
-          { data: pendingUsersData, error: pendingUsersError },
-        ] = await Promise.all([
-          supabase
-            .from("employee_tasks")
-            .select(
-              "id, title, proposed_project_name, proposed_project_status, proposed_project_notes, user_id, created_at, projects(name), users:users!employee_tasks_user_id_fkey(full_name, email)",
-            )
-            .not("proposed_project_name", "is", null)
-            .eq("proposed_project_status", "pending")
-            .order("created_at", { ascending: false }),
-          supabase
-            .from("users")
-            .select(
-              "id, email, full_name, role, company_name, created_at, status",
-            )
-            .eq("status", "pending")
-            .order("created_at", { ascending: true }),
-        ]);
-
-        if (!proposalError) {
-          setProposals(proposalData || []);
-        }
-        setProposalLoading(false);
-
-        if (!pendingUsersError) {
-          setPendingUsers(pendingUsersData || []);
-        }
-        setPendingUsersLoading(false);
       } catch (error) {
         console.error("Error fetching dashboard data:", error);
         setError(
@@ -255,6 +228,75 @@ export default function AdminDashboard() {
 
     fetchDashboardData();
   }, [userId]);
+
+  // Lazy load proposals when tab is clicked
+  const fetchProposals = async () => {
+    if (proposals.length > 0) return; // Already loaded
+    setProposalLoading(true);
+    try {
+      const supabase = createClient();
+      const { data, error } = await supabase
+        .from("employee_tasks")
+        .select(
+          "id, title, proposed_project_name, proposed_project_status, proposed_project_notes, user_id, created_at, projects(name), users:users!employee_tasks_user_id_fkey(full_name, email)",
+        )
+        .not("proposed_project_name", "is", null)
+        .eq("proposed_project_status", "pending")
+        .order("created_at", { ascending: false })
+        .limit(50);
+      if (!error) {
+        setProposals(data || []);
+      }
+    } catch (error) {
+      console.error("Error fetching proposals:", error);
+    } finally {
+      setProposalLoading(false);
+    }
+  };
+
+  // Lazy load pending users when tab is clicked
+  const fetchPendingUsers = async () => {
+    if (pendingUsers.length > 0) return; // Already loaded
+    setPendingUsersLoading(true);
+    try {
+      const supabase = createClient();
+      const { data, error } = await supabase
+        .from("users")
+        .select("id, email, full_name, role, company_name, created_at, status")
+        .eq("status", "pending")
+        .order("created_at", { ascending: true })
+        .limit(100);
+      if (!error) {
+        setPendingUsers(data || []);
+      }
+    } catch (error) {
+      console.error("Error fetching pending users:", error);
+    } finally {
+      setPendingUsersLoading(false);
+    }
+  };
+
+  // Lazy load all users when tab is clicked
+  const fetchAllUsers = async () => {
+    if (allUsers.length > 0) return; // Already loaded
+    setAllUsersLoading(true);
+    try {
+      const supabase = createClient();
+      const { data, error } = await supabase
+        .from("users")
+        .select("id, email, full_name, role, company_name, created_at, status")
+        .neq("role", "client")
+        .order("created_at", { ascending: false })
+        .limit(200);
+      if (!error) {
+        setAllUsers(data || []);
+      }
+    } catch (error) {
+      console.error("Error fetching all users:", error);
+    } finally {
+      setAllUsersLoading(false);
+    }
+  };
 
   // Calculate total project amount based on time period
   const filterByTimePeriod = (
@@ -387,16 +429,35 @@ export default function AdminDashboard() {
     decision: "approved" | "rejected",
   ) => {
     setProposalSubmitting(true);
-    const selectedProject = proposalSelections[taskId];
-    const projectId =
-      selectedProject && selectedProject !== "none"
-        ? selectedProject
-        : undefined;
+    
+    // Remove from UI immediately for instant feedback
+    setProposals((prev) => prev.filter((p) => p.id !== taskId));
+    
+    // Only use projectId if approving; reject means no project linking
+    let projectId: string | undefined = undefined;
+    if (decision === "approved") {
+      const selectedProject = proposalSelections[taskId];
+      projectId =
+        selectedProject && selectedProject !== "none"
+          ? selectedProject
+          : undefined;
+    }
     const result = await reviewProjectProposal({ taskId, decision, projectId });
     if (result.error) {
       alert(result.error);
+      // Refresh proposals list on error to restore the item
+      const supabase = createClient();
+      const { data: proposalData } = await supabase
+        .from("employee_tasks")
+        .select(
+          "id, title, proposed_project_name, proposed_project_status, proposed_project_notes, user_id, created_at, projects(name), users:users!employee_tasks_user_id_fkey(full_name, email)",
+        )
+        .not("proposed_project_name", "is", null)
+        .eq("proposed_project_status", "pending")
+        .order("created_at", { ascending: false });
+      setProposals(proposalData || []);
     } else {
-      // refresh proposals list
+      // Success - optionally refresh to sync state
       const supabase = createClient();
       const { data: proposalData } = await supabase
         .from("employee_tasks")
@@ -409,6 +470,37 @@ export default function AdminDashboard() {
       setProposals(proposalData || []);
     }
     setProposalSubmitting(false);
+  };
+
+  const handleRemoveUser = async (userId: string) => {
+    try {
+      console.log('[Admin] Remove user click:', userId);
+      if (!confirm("Are you sure you want to remove this user? This action cannot be undone.")) {
+        return;
+      }
+
+      setRemovingUserId(userId);
+      const result = await removeUser(userId);
+
+      if ((result as any)?.success) {
+        alert((result as any).message || 'User removed');
+        // Refetch users to ensure UI is in sync
+        const supabase = createClient();
+        const { data: allUsersData } = await supabase
+          .from('users')
+          .select('id, email, full_name, role, company_name, created_at, status')
+          .neq('role', 'client')
+          .order('created_at', { ascending: false });
+        setAllUsers(allUsersData || []);
+      } else {
+        const err = (result as any)?.error || 'Failed to remove user';
+        alert('Error: ' + err);
+      }
+    } catch (e: any) {
+      alert('Unexpected error: ' + (e?.message || String(e)));
+    } finally {
+      setRemovingUserId(null);
+    }
   };
 
   const handleConfirmAndApproveByEmail = async () => {
@@ -820,7 +912,7 @@ export default function AdminDashboard() {
         
         <StatCard
           title="Pending Approvals"
-          value={pendingUsers.length.toString()}
+          value={pendingUsersLoading ? "..." : pendingUsers.length.toString()}
           change="Awaiting admin review"
           trend="neutral"
           icon={Bell}
@@ -846,16 +938,22 @@ export default function AdminDashboard() {
             {pendingUsersLoading && (
               <Badge variant="secondary">Loading...</Badge>
             )}
+            {!pendingUsersLoading && pendingUsers.length === 0 && (
+              <Button onClick={fetchPendingUsers} variant="outline" size="sm">
+                Load Approvals
+              </Button>
+            )}
           </div>
         </CardHeader>
         <CardContent className="space-y-3">
+          {!pendingUsersLoading && pendingUsers.length === 0 && (
+            <p className="text-sm text-muted-foreground text-center py-4">
+              Click "Load Approvals" to view pending users
+            </p>
+          )}
           {pendingUsersLoading ? (
             <p className="text-sm text-muted-foreground">
               Loading pending users...
-            </p>
-          ) : pendingUsers.length === 0 ? (
-            <p className="text-sm text-muted-foreground">
-              No pending accounts right now.
             </p>
           ) : (
             pendingUsers.map((pendingUser) => (
@@ -930,6 +1028,53 @@ export default function AdminDashboard() {
         </CardContent>
       </Card>
 
+      {/* All Team Members - Remove Users (visible to super_admin only) */}
+      {user?.role === 'super_admin' && (
+      <Card>
+        <CardHeader className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+          <div>
+            <CardTitle className="text-lg md:text-xl">Team Members & Admins</CardTitle>
+            <CardDescription className="text-xs md:text-sm">
+              Super admin only: remove admins, project managers, and team members
+            </CardDescription>
+          </div>
+          <div className="flex items-center gap-2">
+            {allUsersLoading && <Badge variant="outline">Loading...</Badge>}
+            {!allUsersLoading && allUsers.length === 0 && (
+              <Button onClick={fetchAllUsers} variant="outline" size="sm">
+                Load Team Members
+              </Button>
+            )}
+          </div>
+        </CardHeader>
+        <CardContent>
+          {!allUsersLoading && allUsers.length === 0 ? (
+            <p className="text-sm text-muted-foreground text-center py-4">Click "Load Team Members" to view users</p>
+          ) : allUsersLoading ? (
+            <p className="text-sm text-muted-foreground">Loading users...</p>
+          ) : (
+            <div className="space-y-3">
+              {allUsers.map((user) => (
+                <div key={user.id} className="p-3 border rounded-lg flex items-center justify-between">
+                  <div className="flex-1">
+                    <p className="font-semibold">{user.full_name || user.email}</p>
+                    <p className="text-sm text-muted-foreground">{user.email}</p>
+                    <div className="flex gap-2 mt-2">
+                      <Badge variant="secondary">{user.role}</Badge>
+                      {user.status && <Badge variant="outline">{user.status}</Badge>}
+                    </div>
+                  </div>
+                  <Button size="sm" variant="destructive" disabled={removingUserId === user.id} onClick={() => handleRemoveUser(user.id)}>
+                    {removingUserId === user.id ? 'Removing…' : 'Remove'}
+                  </Button>
+                </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+      )}
+
       {/* Pending Project Proposals */}
       <Card>
         <CardHeader className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
@@ -941,14 +1086,24 @@ export default function AdminDashboard() {
               Approve or reject tasks that propose new projects
             </CardDescription>
           </div>
-          {proposalLoading && <Badge variant="outline">Loading...</Badge>}
+          <div className="flex items-center gap-2">
+            {proposalLoading && <Badge variant="outline">Loading...</Badge>}
+            {!proposalLoading && proposals.length === 0 && (
+              <Button onClick={fetchProposals} variant="outline" size="sm">
+                Load Proposals
+              </Button>
+            )}
+          </div>
         </CardHeader>
         <CardContent>
-          {proposals.length === 0 ? (
-            <p className="text-sm text-muted-foreground">
-              No pending proposals right now.
+          {!proposalLoading && proposals.length === 0 && (
+            <p className="text-sm text-muted-foreground text-center py-4">
+              Click "Load Proposals" to view pending requests
             </p>
-          ) : (
+          )}
+          {proposalLoading ? (
+            <p className="text-sm text-muted-foreground">Loading proposals...</p>
+          ) : proposals.length === 0 ? null : (
             <div className="space-y-3">
               {proposals.map((proposal) => (
                 <div
@@ -1244,6 +1399,7 @@ export default function AdminDashboard() {
                           {clientServices.map((service) => {
                             const config =
                               SERVICE_TYPES[service as ServiceType];
+                                                        if (!config) return null;
                             return (
                               <Badge
                                 key={service}
@@ -1484,11 +1640,13 @@ export default function AdminDashboard() {
                         selectedProject.service_type,
                       )}
                     >
-                      <span className="mr-1">
-                        {SERVICE_TYPES[selectedProject.service_type]?.icon}
-                      </span>
+                      {selectedProject.service_type && SERVICE_TYPES[selectedProject.service_type] && (
+                        <span className="mr-1">
+                          {SERVICE_TYPES[selectedProject.service_type].icon}
+                        </span>
+                      )}
                       {SERVICE_TYPES[selectedProject.service_type]?.label ||
-                        selectedProject.service_type}
+                        selectedProject.service_type || 'Unknown'}
                     </Badge>
                     <StatusBadge status={selectedProject.status} />
                   </div>

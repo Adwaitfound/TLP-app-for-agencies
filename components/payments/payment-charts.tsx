@@ -43,11 +43,11 @@ export function PaymentCharts({ payments, vendors }: PaymentChartsProps) {
   
   const totalPaid = payments
     .filter((p) => p.status === "completed")
-    .reduce((sum, p) => sum + (p.amount || 0), 0);
+    .reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
   
   const pendingPayments = payments
     .filter((p) => p.status === "pending" || p.status === "scheduled")
-    .reduce((sum, p) => sum + (p.amount || 0), 0);
+    .reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
   
   const thisMonth = payments
     .filter((p) => {
@@ -74,7 +74,7 @@ export function PaymentCharts({ payments, vendors }: PaymentChartsProps) {
     .map((vendor) => {
       const totalPaid = payments
         .filter((p) => p.vendor_id === vendor.id && p.status === "completed")
-        .reduce((sum, p) => sum + (p.amount || 0), 0);
+        .reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
       return {
         name: vendor.name,
         amount: totalPaid,
@@ -88,16 +88,16 @@ export function PaymentCharts({ payments, vendors }: PaymentChartsProps) {
   const statusBreakdown = {
     completed: payments
       .filter((p) => p.status === "completed")
-      .reduce((sum, p) => sum + (p.amount || 0), 0),
+      .reduce((sum, p) => sum + (Number(p.amount) || 0), 0),
     pending: payments
       .filter((p) => p.status === "pending")
-      .reduce((sum, p) => sum + (p.amount || 0), 0),
+      .reduce((sum, p) => sum + (Number(p.amount) || 0), 0),
     scheduled: payments
       .filter((p) => p.status === "scheduled")
-      .reduce((sum, p) => sum + (p.amount || 0), 0),
+      .reduce((sum, p) => sum + (Number(p.amount) || 0), 0),
     cancelled: payments
       .filter((p) => p.status === "cancelled")
-      .reduce((sum, p) => sum + (p.amount || 0), 0),
+      .reduce((sum, p) => sum + (Number(p.amount) || 0), 0),
   };
 
   const statusData = [
@@ -115,7 +115,7 @@ export function PaymentCharts({ payments, vendors }: PaymentChartsProps) {
       if (!p.payment_date) return;
       const date = new Date(p.payment_date);
       const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
-      monthlyData[monthKey] = (monthlyData[monthKey] || 0) + (p.amount || 0);
+      monthlyData[monthKey] = (monthlyData[monthKey] || 0) + (Number(p.amount) || 0);
     });
 
   const monthlyChartData = Object.entries(monthlyData)

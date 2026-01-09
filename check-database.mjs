@@ -1,20 +1,12 @@
 #!/usr/bin/env node
 
 import { createClient } from '@supabase/supabase-js';
-import { readFileSync } from 'fs';
+import { config } from 'dotenv';
 
-// Read .env.local file
-const envFile = readFileSync('.env.local', 'utf-8');
-const envVars = {};
-envFile.split('\n').forEach(line => {
-  const match = line.match(/^([^=]+)=(.*)$/);
-  if (match) {
-    envVars[match[1].trim()] = match[2].trim();
-  }
-});
-heck the 
-const supabaseUrl = envVars.NEXT_PUBLIC_SUPABASE_URL;
-const supabaseKey = envVars.SUPABASE_SERVICE_ROLE_KEY;
+config({ path: '.env.local' });
+
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
 if (!supabaseUrl || !supabaseKey) {
   console.error('❌ Missing Supabase credentials in .env.local');

@@ -6,7 +6,7 @@ import { createClient } from "@/lib/supabase/client"
 import type { User as SupabaseUser } from "@supabase/supabase-js"
 import { debug } from "@/lib/debug"
 
-type UserRole = "admin" | "employee" | "client" | "project_manager"
+type UserRole = "admin" | "employee" | "client" | "project_manager" | "super_admin"
 
 interface User {
     id: string

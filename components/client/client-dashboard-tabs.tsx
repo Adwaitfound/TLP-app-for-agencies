@@ -54,6 +54,8 @@ import { Progress } from "@/components/ui/progress";
 import { debug } from "@/lib/debug";
 import { getFileType, getGoogleDriveThumbnailUrl, FILE_CATEGORIES } from "@/lib/file-upload";
 import { getSignedProjectFileUrl } from "@/app/actions/project-file-operations";
+import { addCommentReply } from "@/app/actions/client-comments";
+import { ClientContentCalendar } from "./client-content-calendar";
 
 export default function ClientDashboardTabs() {
   const { user, loading: authLoading } = useAuth();
@@ -64,6 +66,9 @@ export default function ClientDashboardTabs() {
   const [invoices, setInvoices] = useState<any[]>([]);
   const [files, setFiles] = useState<any[]>([]);
   const [comments, setComments] = useState<any[]>([]);
+  const [commentReplies, setCommentReplies] = useState<Record<string, any[]>>({});
+  const [focusCommentId, setFocusCommentId] = useState<string | null>(null);
+  const [expandedCommentIds, setExpandedCommentIds] = useState<Set<string>>(new Set());
   const [subProjects, setSubProjects] = useState<any[]>([]);
   const [clientData, setClientData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
@@ -81,9 +86,14 @@ export default function ClientDashboardTabs() {
   const [previewFile, setPreviewFile] = useState<any | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
+  const [clientReplyInputs, setClientReplyInputs] = useState<Record<string, string>>({});
+  const [clientReplySubmitting, setClientReplySubmitting] = useState<Record<string, boolean>>({});
   // Pagination states
   const [filesPaginationPage, setFilesPaginationPage] = useState(1);
   const [commentsPaginationPage, setCommentsPaginationPage] = useState(1);
+  // New comments badge state
+  const [newCommentsCount, setNewCommentsCount] = useState(0);
+  const lastSeenKey = useMemo(() => (user?.id ? `client_comments_last_seen_${user.id}` : null), [user?.id]);
   const ITEMS_PER_PAGE = 20;
   function getDrivePreviewUrl(url: string): string | null {
     try {
@@ -231,6 +241,14 @@ export default function ClientDashboardTabs() {
         : "dashboard";
 
     setActiveTab(nextTab);
+
+    // Reset comments badge when opening comments tab
+    if (nextTab === "comments" && lastSeenKey) {
+      try {
+        localStorage.setItem(lastSeenKey, Date.now().toString());
+      } catch {}
+      setNewCommentsCount(0);
+    }
 
     const params = new URLSearchParams(searchParams.toString());
     params.set("tab", nextTab);
@@ -494,6 +512,20 @@ export default function ClientDashboardTabs() {
     }
   }, [userId, authLoading, fetchClientData]);
 
+  // Compute initial unread count when comments or lastSeen changes
+  useEffect(() => {
+    if (!lastSeenKey) return;
+    try {
+      const lastSeen = Number.parseInt(localStorage.getItem(lastSeenKey) || "0", 10);
+      if (!Number.isFinite(lastSeen)) return;
+      const cnt = comments.filter((c) => {
+        const t = new Date(c.created_at).getTime();
+        return Number.isFinite(t) && t > lastSeen;
+      }).length;
+      setNewCommentsCount(cnt);
+    } catch {}
+  }, [comments, lastSeenKey]);
+
   // Subscribe to real-time updates for all client data
   useEffect(() => {
     if (!clientData?.id || !projects.length) return;
@@ -571,6 +603,41 @@ export default function ClientDashboardTabs() {
         (payload: any) => {
           if (projectIds.includes(payload.new?.project_id || payload.old?.project_id)) {
             console.log("📡 Comment change:", payload.eventType);
+            try {
+              if (payload.eventType === 'INSERT' && activeTab !== 'comments' && lastSeenKey) {
+                const created = new Date(payload.new?.created_at || Date.now()).getTime();
+                const lastSeen = Number.parseInt(localStorage.getItem(lastSeenKey) || '0', 10);
+                if (Number.isFinite(created) && created > lastSeen) {
+                  setNewCommentsCount((c) => c + 1);
+                }
+              }
+            } catch {}
+            scheduleRefresh();
+          }
+        }
+      )
+      // Comment replies also count as comment activity
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "comment_replies",
+        },
+        (payload: any) => {
+          const commentProjectId = payload.new?.project_id || payload.old?.project_id || payload.new?.comment_id?.project_id;
+          // If schema for reply doesn't include project_id, we fallback to refresh only
+          if (!commentProjectId || projectIds.includes(commentProjectId)) {
+            console.log("📡 Comment reply change:", payload.eventType);
+            try {
+              if (payload.eventType === 'INSERT' && activeTab !== 'comments' && lastSeenKey) {
+                const created = new Date(payload.new?.created_at || Date.now()).getTime();
+                const lastSeen = Number.parseInt(localStorage.getItem(lastSeenKey) || '0', 10);
+                if (Number.isFinite(created) && created > lastSeen) {
+                  setNewCommentsCount((c) => c + 1);
+                }
+              }
+            } catch {}
             scheduleRefresh();
           }
         }
@@ -685,6 +752,69 @@ export default function ClientDashboardTabs() {
     const end = start + ITEMS_PER_PAGE;
     return filteredComments.slice(start, end);
   }, [filteredComments, commentsPaginationPage]);
+
+  const filesById = useMemo(() => {
+    const map = new Map<string, any>();
+    for (const f of files) map.set(f.id, f);
+    return map;
+  }, [files]);
+
+  const handleClientAddReply = useCallback(async (commentId: string) => {
+    if (!user?.id) return;
+    const replyText = (clientReplyInputs[commentId] || "").trim();
+    if (!replyText) return;
+    try {
+      setClientReplySubmitting((prev) => ({ ...prev, [commentId]: true }));
+      const res = await addCommentReply({ commentId, userId: user.id, replyText });
+      if (!res.success) throw new Error(res.error || "Failed to add reply");
+      const raw = res.reply as any;
+      const normalized = {
+        id: raw.id,
+        comment_id: raw.comment_id,
+        user_id: raw.user_id,
+        reply_text: raw.reply_text,
+        created_at: raw.created_at,
+        user: raw.author || raw.user || null,
+      };
+      setCommentReplies((prev) => ({
+        ...prev,
+        [commentId]: [ ...(prev[commentId] || []), normalized ],
+      }));
+      setClientReplyInputs((prev) => ({ ...prev, [commentId]: "" }));
+      setExpandedCommentIds((prev) => new Set(prev).add(commentId));
+    } catch (e) {
+      console.error("add reply failed", e);
+      alert((e as any)?.message || "Could not post reply");
+    } finally {
+      setClientReplySubmitting((prev) => ({ ...prev, [commentId]: false }));
+    }
+  }, [user?.id, clientReplyInputs]);
+
+  // Fetch replies for the currently loaded comments (thread view support)
+  useEffect(() => {
+    if (!comments.length) return;
+    const supabase = createClient();
+    const ids = comments.map((c) => c.id).filter(Boolean);
+    if (!ids.length) return;
+    (async () => {
+      const { data, error } = await supabase
+        .from("comment_replies")
+        .select("id, comment_id, user:users!user_id(full_name,email), reply_text, created_at")
+        .in("comment_id", ids)
+        .order("created_at", { ascending: true });
+      if (error) {
+        console.warn("Replies fetch skipped:", error.message);
+        return;
+      }
+      const byComment: Record<string, any[]> = {};
+      for (const r of data || []) {
+        const k = r.comment_id;
+        if (!byComment[k]) byComment[k] = [];
+        byComment[k].push(r);
+      }
+      setCommentReplies(byComment);
+    })();
+  }, [comments]);
 
   const filesTotalPages = useMemo(() => Math.ceil(files.length / ITEMS_PER_PAGE), [files]);
   const commentsTotalPages = useMemo(() => Math.ceil(filteredComments.length / ITEMS_PER_PAGE), [filteredComments]);
@@ -907,11 +1037,21 @@ export default function ClientDashboardTabs() {
 
       {/* Tabs */}
       <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
-        <TabsList className="grid w-full grid-cols-4">
+        <TabsList className="grid w-full grid-cols-5">
           <TabsTrigger value="dashboard">Dashboard</TabsTrigger>
           <TabsTrigger value="projects">Projects</TabsTrigger>
+          <TabsTrigger value="calendar">📅 Calendar</TabsTrigger>
           <TabsTrigger value="invoices">Invoices</TabsTrigger>
-          <TabsTrigger value="comments">Comments</TabsTrigger>
+          <TabsTrigger value="comments">
+            <span className="inline-flex items-center gap-2">
+              <span>Comments</span>
+              {newCommentsCount > 0 && (
+                <span className="ml-1 inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-primary px-1 text-xs font-semibold text-primary-foreground">
+                  {newCommentsCount}
+                </span>
+              )}
+            </span>
+          </TabsTrigger>
         </TabsList>
 
         {/* Dashboard Tab */}
@@ -1130,6 +1270,14 @@ export default function ClientDashboardTabs() {
           )}
         </TabsContent>
 
+        {/* Content Calendar Tab */}
+        <TabsContent value="calendar" className="space-y-4">
+          <ClientContentCalendar 
+            clientId={clientData?.id || ""} 
+            projectIds={projects.map(p => p.id)} 
+          />
+        </TabsContent>
+
         {/* Invoices Tab */}
         <TabsContent value="invoices" className="space-y-4">
           {/* Search and Filters */}
@@ -1253,17 +1401,91 @@ export default function ClientDashboardTabs() {
                         • {new Date(comment.created_at).toLocaleString()}
                       </p>
                     </div>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() =>
-                        comment.project_id ? setSelectedProjectId(comment.project_id) : null
-                      }
-                    >
-                      View Details
-                    </Button>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => {
+                          setExpandedCommentIds((prev) => {
+                            const next = new Set(prev);
+                            if (next.has(comment.id)) next.delete(comment.id);
+                            else next.add(comment.id);
+                            return next;
+                          });
+                        }}
+                      >
+                        {expandedCommentIds.has(comment.id) ? "Hide Thread" : "View Thread"}
+                        {typeof commentReplies[comment.id]?.length === "number" && (
+                          <span className="ml-2 text-xs opacity-70">({commentReplies[comment.id]?.length || 0})</span>
+                        )}
+                      </Button>
+                    </div>
                   </div>
-                  <p className="text-sm">{comment.comment_text}</p>
+                  <div className="space-y-1">
+                    <p className="text-sm">{comment.comment_text}</p>
+                    {comment.file_id ? (
+                      <p className="text-xs text-muted-foreground">
+                        File: {filesById.get(comment.file_id)?.file_name || "—"}
+                        {comment.timestamp_seconds != null ? ` • at ${comment.timestamp_seconds}s` : ""}
+                      </p>
+                    ) : null}
+                  </div>
+
+                  {/* Inline thread */}
+                  {expandedCommentIds.has(comment.id) && (
+                    <div className="mt-3 pt-3 border-t space-y-2">
+                      {comment.file_id && filesById.get(comment.file_id)?.file_url ? (
+                        <div className="flex items-center gap-2">
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="ghost"
+                            className="h-7 px-2"
+                            onClick={() => openFile(filesById.get(comment.file_id))}
+                          >
+                            <ExternalLink className="h-4 w-4 mr-1" /> Open file
+                          </Button>
+                        </div>
+                      ) : null}
+
+                      {(commentReplies[comment.id] || []).length > 0 ? (
+                        <div className="space-y-2">
+                          {(commentReplies[comment.id] || []).map((r: any) => (
+                            <div key={r.id} className="rounded bg-muted/30 p-2">
+                              <div className="text-[11px] text-muted-foreground mb-1">
+                                {r.user?.full_name || r.user?.email || "Team"}
+                                {r.created_at ? ` · ${new Date(r.created_at).toLocaleString()}` : ""}
+                              </div>
+                              <div className="text-sm whitespace-pre-wrap">{r.reply_text}</div>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="text-xs text-muted-foreground italic">No replies yet</div>
+                      )}
+
+                      {/* Client quick reply */}
+                      <div className="mt-2 flex items-start gap-2">
+                        <Textarea
+                          placeholder="Write a reply..."
+                          rows={2}
+                          value={clientReplyInputs[comment.id] || ""}
+                          onChange={(e) =>
+                            setClientReplyInputs((prev) => ({ ...prev, [comment.id]: e.target.value }))
+                          }
+                          className="min-h-[60px]"
+                        />
+                        <Button
+                          size="sm"
+                          className="mt-0"
+                          disabled={clientReplySubmitting[comment.id] || !(clientReplyInputs[comment.id] || "").trim()}
+                          onClick={() => handleClientAddReply(comment.id)}
+                        >
+                          {clientReplySubmitting[comment.id] ? "Sending..." : "Send"}
+                        </Button>
+                      </div>
+                    </div>
+                  )}
                 </CardContent>
               </Card>
             ))}
@@ -1384,7 +1606,10 @@ export default function ClientDashboardTabs() {
       <Dialog
         open={!!selectedProjectId}
         onOpenChange={(open) => {
-          if (!open) setSelectedProjectId(null);
+          if (!open) {
+            setSelectedProjectId(null);
+            setFocusCommentId(null);
+          }
         }}
       >
         <DialogContent className="w-[95vw] max-w-4xl sm:w-[80vw] p-0">
@@ -1408,7 +1633,18 @@ export default function ClientDashboardTabs() {
                 </DialogDescription>
               </DialogHeader>
 
-              <div className="max-h-[85vh] overflow-y-auto p-4">
+              <div
+                className="max-h-[85vh] overflow-y-auto p-4"
+                onLoadCapture={() => {
+                  // Scroll into view the focused comment after mount
+                  if (focusCommentId) {
+                    const el = document.getElementById(`comment-${focusCommentId}`);
+                    if (el) {
+                      el.scrollIntoView({ behavior: "smooth", block: "start" });
+                    }
+                  }
+                }}
+              >
               <div className="grid gap-4 md:grid-cols-4">
                 <Card>
                   <CardHeader className="pb-2">
@@ -1669,18 +1905,39 @@ export default function ClientDashboardTabs() {
                     {selectedComments.length ? (
                       <ul className="space-y-3 text-sm">
                         {selectedComments.map((c: any) => (
-                          <li key={c.id} className="rounded-md border p-3 space-y-1">
+                          <li id={`comment-${c.id}`} key={c.id} className="rounded-md border p-3 space-y-2">
                             <div className="text-xs text-muted-foreground">
                               {c.user?.full_name || c.user?.email || "Unknown"}
                               {c.created_at ? ` · ${new Date(c.created_at).toLocaleString()}` : ""}
                             </div>
                             <div className="whitespace-pre-wrap leading-relaxed">{c.comment_text ?? c.comment ?? ""}</div>
                             {c.file_id ? (
-                              <div className="text-xs text-muted-foreground mt-1">
+                              <div className="text-xs text-muted-foreground">
                                 Linked file: {selectedFiles.find((f) => f.id === c.file_id)?.file_name ?? "Unknown"}
                                 {c.timestamp_seconds != null ? ` • at ${c.timestamp_seconds}s` : ""}
                               </div>
                             ) : null}
+
+                            {/* Threaded replies */}
+                            <div className="pt-2 mt-1 border-t">
+                              {(commentReplies[c.id] || []).length > 0 ? (
+                                <div className="space-y-2">
+                                  {(commentReplies[c.id] || []).map((r) => (
+                                    <div key={r.id} className="rounded bg-muted/30 p-2">
+                                      <div className="flex items-center justify-between mb-1">
+                                        <div className="text-[11px] text-muted-foreground">
+                                          {r.user?.full_name || r.user?.email || "Team"}
+                                          {r.created_at ? ` · ${new Date(r.created_at).toLocaleString()}` : ""}
+                                        </div>
+                                      </div>
+                                      <div className="text-sm whitespace-pre-wrap">{r.reply_text}</div>
+                                    </div>
+                                  ))}
+                                </div>
+                              ) : (
+                                <div className="text-xs text-muted-foreground italic">No replies yet</div>
+                              )}
+                            </div>
                           </li>
                         ))}
                       </ul>

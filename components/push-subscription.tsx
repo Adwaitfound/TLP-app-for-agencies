@@ -21,6 +21,11 @@ export function PushSubscriptionManager() {
   }, []);
 
   useEffect(() => {
+    // Temporarily disabled - push service error blocking dashboard
+    // Will re-enable after debugging redirect issue
+    console.log('🔕 Push: Subscription disabled temporarily');
+    return;
+    
     async function subscribe() {
       try {
         if (!user) {
@@ -77,30 +82,69 @@ export function PushSubscriptionManager() {
         }
 
         console.log('🔔 Push: Creating new push subscription...');
-        // Subscribe with VAPID
-        const sub = await reg.pushManager.subscribe({
+        // Prepare VAPID key
+        const keyString = vapidPublicKey.trim();
+        const appServerKey = urlBase64ToUint8Array(keyString);
+        console.log('🔔 Push: VAPID key length(bytes):', appServerKey?.length);
+
+        if (!appServerKey || !(appServerKey instanceof Uint8Array)) {
+          console.error('❌ Push: VAPID applicationServerKey conversion failed');
+          return;
+        }
+        if (appServerKey.length !== 65) {
+          console.error('❌ Push: VAPID key length invalid, expected 65, got', appServerKey.length);
+          return;
+        }
+
+        // Subscribe with VAPID - use a timeout to prevent hanging
+        const subscriptionPromise = reg.pushManager.subscribe({
           userVisibleOnly: true,
-          applicationServerKey: urlBase64ToUint8Array(vapidPublicKey),
+          applicationServerKey: appServerKey,
         });
+
+        // If subscription takes more than 5 seconds, log and continue
+        const timeoutPromise = new Promise<PushSubscription>((_, reject) =>
+          setTimeout(() => reject(new Error('Push subscription timeout after 5s')), 5000)
+        );
+
+        let sub: PushSubscription;
+        try {
+          sub = await Promise.race([subscriptionPromise, timeoutPromise]);
+        } catch (timeoutErr) {
+          console.warn('⏱️ Push: Subscription timed out or service error:', timeoutErr);
+          console.warn('⏱️ Push: Dashboard will continue loading without push notifications');
+          return;
+        }
 
         console.log('✅ Push: Subscription created, sending to server...');
         console.log('🔔 Push: Endpoint:', sub.endpoint.substring(0, 50) + '...');
 
-        // Send subscription to server
-        const response = await fetch("/api/push/subscribe", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ userId: user.id, subscription: sub }),
-        });
+        // Send subscription to server with timeout
+        try {
+          const response = await Promise.race([
+            fetch("/api/push/subscribe", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ userId: user.id, subscription: sub }),
+            }),
+            new Promise((_, reject) =>
+              setTimeout(() => reject(new Error('Server response timeout')), 3000)
+            ) as Promise<Response>,
+          ]);
 
-        if (response.ok) {
-          console.log('✅ Push: Subscription registered successfully');
-        } else {
-          const text = await response.text();
-          console.error('❌ Push: Failed to register subscription:', text);
+          if (response.ok) {
+            console.log('✅ Push: Subscription registered successfully');
+          } else {
+            const text = await response.text();
+            console.error('❌ Push: Failed to register subscription:', text);
+          }
+        } catch (serverErr) {
+          console.error('❌ Push: Server registration error:', serverErr);
         }
       } catch (err) {
+        // Log error but don't block dashboard
         console.error("❌ Push: Subscription failed", err);
+        console.warn("⚠️ Push: Continuing without push notifications");
       }
     }
 
@@ -111,12 +155,19 @@ export function PushSubscriptionManager() {
 }
 
 function urlBase64ToUint8Array(base64String: string) {
-  const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
-  const base64 = (base64String + padding).replace(/-/g, "+").replace(/_/g, "/");
-  const rawData = atob(base64);
-  const outputArray = new Uint8Array(rawData.length);
-  for (let i = 0; i < rawData.length; ++i) {
-    outputArray[i] = rawData.charCodeAt(i);
+  try {
+    // Normalize and trim common formatting issues
+    const cleaned = base64String.replace(/\s+/g, "").replace(/"/g, "");
+    const padding = "=".repeat((4 - (cleaned.length % 4)) % 4);
+    const base64 = (cleaned + padding).replace(/-/g, "+").replace(/_/g, "/");
+    const rawData = atob(base64);
+    const outputArray = new Uint8Array(rawData.length);
+    for (let i = 0; i < rawData.length; ++i) {
+      outputArray[i] = rawData.charCodeAt(i);
+    }
+    return outputArray;
+  } catch (e) {
+    console.error('❌ Push: Failed to convert VAPID key to Uint8Array', e);
+    return new Uint8Array();
   }
-  return outputArray;
 }

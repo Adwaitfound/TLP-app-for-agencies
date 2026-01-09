@@ -37,11 +37,6 @@ const adminRoutes = [
     href: "/dashboard/comments",
   },
   {
-    label: "Team Chat",
-    icon: MessagesSquare,
-    href: "/dashboard/chat",
-  },
-  {
     label: "Notifications",
     icon: Bell,
     href: "/dashboard/notifications",
@@ -118,11 +113,6 @@ const employeeRoutes = [
     label: "Comments",
     icon: MessageSquare,
     href: "/dashboard/comments",
-  },
-  {
-    label: "Team Chat",
-    icon: MessagesSquare,
-    href: "/dashboard/chat",
   },
   {
     label: "Notifications",

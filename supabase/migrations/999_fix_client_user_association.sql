@@ -7,10 +7,10 @@ SELECT
   au.id,
   au.email,
   COALESCE(au.raw_user_meta_data->>'full_name', SPLIT_PART(au.email, '@', 1)) as full_name,
-  CASE 
+  (CASE 
     WHEN au.email LIKE '%@thelostproject.in' AND au.email NOT LIKE 'admin%' THEN 'client'
     ELSE COALESCE(au.raw_user_meta_data->>'role', 'client')
-  END as role,
+  END)::user_role as role,
   'approved' as status,
   au.created_at,
   NOW() as updated_at
@@ -20,14 +20,14 @@ WHERE pu.id IS NULL
 ON CONFLICT (id) DO UPDATE
 SET 
   email = EXCLUDED.email,
-  role = CASE 
+  role = (CASE 
     WHEN EXCLUDED.email LIKE '%@thelostproject.in' AND EXCLUDED.email NOT LIKE 'admin%' THEN 'client'
-    ELSE EXCLUDED.role
-  END,
+    ELSE EXCLUDED.role::text
+  END)::user_role,
   updated_at = NOW();
 
 -- Step 2: Ensure all client role users have clients records
-INSERT INTO clients (user_id, email, company_name, contact_person, status, total_projects, total_revenue, created_at, updated_at)
+INSERT INTO clients (user_id, email, company_name, contact_person, status, total_projects, total_revenue, created_at)
 SELECT 
   pu.id as user_id,
   pu.email,
@@ -36,13 +36,11 @@ SELECT
   'active' as status,
   0 as total_projects,
   0 as total_revenue,
-  pu.created_at,
-  NOW() as updated_at
+  pu.created_at
 FROM public.users pu
 LEFT JOIN clients c ON pu.id = c.user_id
 WHERE c.id IS NULL
   AND pu.role = 'client'
 ON CONFLICT (user_id) DO UPDATE
 SET 
-  email = EXCLUDED.email,
-  updated_at = NOW();
+  email = EXCLUDED.email;

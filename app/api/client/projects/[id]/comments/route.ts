@@ -173,11 +173,11 @@ export async function POST(
         .eq("id", projectId)
         .single();
 
-      // Get all admins
+      // Get all admins (including super_admin)
       const { data: admins } = await admin
         .from("users")
         .select("email, full_name")
-        .in("role", ["admin", "agency_admin", "project_manager"]);
+        .in("role", ["super_admin", "admin", "agency_admin", "project_manager"]);
 
       // Get project team members
       const { data: teamMembers } = await admin
@@ -188,9 +188,17 @@ export async function POST(
       const appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
       const commentUrl = `${appUrl}/dashboard/comments`;
 
-      const clientName = projectData?.clients?.users?.full_name || 
-                        projectData?.clients?.company_name || 
-                        "A client";
+      const clientsRel: any = Array.isArray(projectData?.clients)
+        ? (projectData as any)?.clients?.[0]
+        : (projectData as any)?.clients;
+      const clientUserRel: any = Array.isArray(clientsRel?.users)
+        ? clientsRel?.users?.[0]
+        : clientsRel?.users;
+
+      const clientName =
+        clientUserRel?.full_name ||
+        clientsRel?.company_name ||
+        "A client";
       const projectName = projectData?.name || "a project";
 
       // Send to admins

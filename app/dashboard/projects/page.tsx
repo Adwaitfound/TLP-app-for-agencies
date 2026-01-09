@@ -93,6 +93,7 @@ import {
   assignTeamMember,
   removeTeamMember,
   getProjectTeamMembers,
+  getTeamsForProjects,
 } from "@/app/actions/team-management";
 import {
   createCommentReply,
@@ -467,36 +468,29 @@ function ProjectsPageContent() {
           projectIds: projectsData.map((p) => p.id),
         });
         
-        // Fetch team members for all projects
-        const teamPromises = projectsData.map((project) => 
-          getProjectTeamMembers(project.id)
-        );
-        
-        const teamResults = await Promise.all(teamPromises);
-        
+        // Batch fetch team members for all projects in a single server action
+        const batchResult = await getTeamsForProjects(projectsData.map((p) => p.id));
+
         const teamMap: Record<string, User[]> = {};
         const rolesMap: Record<string, Record<string, string>> = {};
-        
-        projectsData.forEach((project, index) => {
-          const result = teamResults[index];
-          if (result.success && result.data) {
-            const members = result.data
-              .map((assignment: any) => assignment.user as User)
-              .filter(Boolean);
-            
-            teamMap[project.id] = members;
-            
-            const projectRoles: Record<string, string> = {};
-            result.data.forEach((assignment: any) => {
-              if (assignment.user_id) {
-                projectRoles[assignment.user_id] = assignment.role || "";
-              }
-            });
-            rolesMap[project.id] = projectRoles;
-          }
-        });
 
-        debug.success("FETCH_DATA", "Team members mapped", {
+        if (batchResult.success && batchResult.data) {
+          // Group by project_id
+          batchResult.data.forEach((assignment: any) => {
+            const pid = assignment.project_id;
+            if (!teamMap[pid]) teamMap[pid] = [];
+            if (!rolesMap[pid]) rolesMap[pid] = {};
+
+            if (assignment.user) {
+              teamMap[pid].push(assignment.user as User);
+            }
+            if (assignment.user_id) {
+              rolesMap[pid][assignment.user_id] = assignment.role || "";
+            }
+          });
+        }
+
+        debug.success("FETCH_DATA", "Team members mapped (batched)", {
           projectsWithTeam: Object.keys(teamMap).length,
           teamMap,
         });
@@ -504,8 +498,8 @@ function ProjectsPageContent() {
         setProjectTeamRoles(rolesMap);
       }
 
-      // Fetch all users for team assignment (only admins/PMs)
-      if (user?.role === "admin" || user?.role === "project_manager") {
+      // Fetch all users for team assignment (admins/PMs/super admins)
+      if (user?.role === "admin" || user?.role === "project_manager" || user?.role === "super_admin") {
         const { data: allUsers, error: usersError } = await supabase
           .from("users")
           .select("*")
@@ -836,12 +830,12 @@ function ProjectsPageContent() {
       const { data, error } = await supabase
         .from("project_comments")
         .select(
-          `*,
-           user:users!user_id(id, full_name, email, role),
-           file:project_files!file_id(id, file_name, file_type, file_url)`
+          `id, project_id, user_id, comment_text, timestamp_seconds, status, created_at,
+           user:users!user_id(id, full_name, role)`
         )
         .eq("project_id", projectId)
-        .order("created_at", { ascending: false });
+        .order("created_at", { ascending: false })
+        .limit(100); // Limit initial load
       if (error) throw error;
       setProjectComments((prev) => ({ ...prev, [projectId]: data || [] }));
     } catch (error) {
@@ -1016,22 +1010,52 @@ function ProjectsPageContent() {
 
   async function fetchSubProjects(projectId: string) {
     try {
-      const { data: subProjectsData, error } = await supabase
+      // First try with explicit relationship, fallback to simple select
+      let subProjectsData = null;
+      let error = null;
+
+      const { data, error: err1 } = await supabase
         .from("sub_projects")
         .select(
-          "*, assigned_user:users!assigned_to(id, email, full_name, avatar_url, role)",
+          "id, parent_project_id, name, description, status, assigned_to, progress_percentage, due_date, video_url, completed_at, created_by, created_at, updated_at, assigned_user:assigned_to(id, full_name, avatar_url, role)",
         )
         .eq("parent_project_id", projectId)
-        .order("created_at", { ascending: false });
+        .order("created_at", { ascending: false })
+        .limit(50);
+
+      if (err1) {
+        // Fallback: fetch without user relationship
+        const { data: fallbackData, error: err2 } = await supabase
+          .from("sub_projects")
+          .select(
+            "id, parent_project_id, name, description, status, assigned_to, progress_percentage, due_date, video_url, completed_at, created_by, created_at, updated_at",
+          )
+          .eq("parent_project_id", projectId)
+          .order("created_at", { ascending: false })
+          .limit(50);
+
+        subProjectsData = fallbackData;
+        error = err2;
+      } else {
+        subProjectsData = data;
+        error = err1;
+      }
 
       if (error) {
         console.warn("Sub-projects table not available:", error.message);
         return;
       }
 
+      const normalized = (subProjectsData || []).map((sp: any) => ({
+        ...sp,
+        assigned_user: Array.isArray(sp.assigned_user)
+          ? sp.assigned_user[0] || undefined
+          : sp.assigned_user,
+      }));
+
       setSubProjects((prev) => ({
         ...prev,
-        [projectId]: subProjectsData || [],
+        [projectId]: normalized as any,
       }));
     } catch (error: any) {
       console.error("Error fetching sub-projects:", error);
@@ -1292,8 +1316,11 @@ function ProjectsPageContent() {
   function openProjectDetails(project: Project) {
     setSelectedProject(project);
     setIsDetailModalOpen(true);
-    fetchSubProjects(project.id);
-    fetchProjectComments(project.id);
+    // Fetch in parallel for faster loading
+    Promise.all([
+      fetchSubProjects(project.id),
+      fetchProjectComments(project.id)
+    ]);
   }
 
   function openEditDialog(project: Project) {
@@ -1377,6 +1404,8 @@ function ProjectsPageContent() {
   // Calendar state & helpers
   const [isCalendarDialogOpen, setIsCalendarDialogOpen] = useState(false);
   const [isDateDetailsOpen, setIsDateDetailsOpen] = useState(false);
+  const [showEditForm, setShowEditForm] = useState(false);
+  const [editingEvent, setEditingEvent] = useState<CalendarEvent | null>(null);
   const [dateDetails, setDateDetails] = useState<{
     date: Date;
     events: CalendarEvent[];
@@ -1386,9 +1415,13 @@ function ProjectsPageContent() {
     date: string; // ISO date
     title: string;
     copy?: string;
+    caption?: string; // Full caption for social media post
     status?: "idea" | "editing" | "scheduled" | "published" | "review";
-    platform?: "instagram" | "facebook" | "youtube" | "linkedin";
+    platform?: "instagram" | "facebook" | "youtube" | "linkedin" | "twitter" | "tiktok";
     type?: "reel" | "carousel" | "story" | "static" | "video";
+    media_type?: "static" | "video" | "carousel" | "reel" | "story";
+    format_type?: "reel" | "story" | "post" | "carousel" | "static" | "video";
+    drive_link?: string; // Google Drive or external media link
     attachments?: {
       id: string;
       url: string;
@@ -1396,37 +1429,66 @@ function ProjectsPageContent() {
     }[];
   };
   const [calendarEvents, setCalendarEvents] = useState<CalendarEvent[]>([]);
-  // TODO: Load from Supabase for selected project when opening dialog
+
+  // Load events for a given month
+  const fetchMonthEvents = useCallback(
+    async (monthDate: Date) => {
+      if (!selectedProject) return;
+      
+      // Use UTC functions to avoid timezone issues
+      const year = monthDate.getUTCFullYear();
+      const month = monthDate.getUTCMonth() + 1; // getUTCMonth() returns 0-11
+      const monthISO = `${year}-${String(month).padStart(2, '0')}`;
+      
+      console.log('[DEBUG] Fetching events for month:', monthISO, 'from date:', monthDate.toISOString());
+      
+      const { listCalendarEvents } = await import(
+        "@/app/actions/calendar-events"
+      );
+      const events = await listCalendarEvents(selectedProject.id, monthISO);
+      console.log('[DEBUG] Fetched calendar events:', events.length, 'events for month', monthISO);
+      const mapped = events.map((e: any) => ({
+        id: e.id,
+        date: e.event_date,
+        title: e.title,
+        copy: e.copy,
+        caption: e.caption,
+        platform: e.platform,
+        type: e.content_type,
+        media_type: e.media_type,
+        format_type: e.format_type,
+        drive_link: e.drive_link,
+        status: e.status,
+        attachments: e.attachments,
+      }));
+      console.log('[DEBUG] Setting calendar events state:', mapped.length);
+      setCalendarEvents(mapped);
+      return mapped;
+    },
+    [selectedProject],
+  );
+
+  // Load calendar events when dialog opens
+  useEffect(() => {
+    if (isCalendarDialogOpen && selectedProject?.service_type === "social_media") {
+      console.log('[DEBUG] Calendar dialog opened, loading current month events');
+      const now = new Date();
+      fetchMonthEvents(now);
+    }
+  }, [isCalendarDialogOpen, selectedProject?.id, fetchMonthEvents]);
 
   async function handleCreateCalendarEvent(date: Date) {
-    const title = prompt("Title for content?") || "New Content";
-    const event_date = date.toISOString().slice(0, 10);
-    if (!selectedProject) return;
-    try {
-      // Persist
-      const created = await (
-        await import("@/app/actions/calendar-events")
-      ).createCalendarEvent({
-        project_id: selectedProject.id,
-        event_date,
-        title,
-        status: "idea",
-      });
-      // Mirror locally
-      setCalendarEvents((prev) => [
-        ...prev,
-        {
-          id: created.id,
-          date: created.event_date,
-          title: created.title,
-          copy: created.copy,
-          status: created.status,
-        },
-      ]);
-    } catch (e) {
-      console.error(e);
-      alert("Failed to create calendar event");
-    }
+    console.log('[DEBUG] handleCreateCalendarEvent called with date:', date.toISOString(), 'formatted:', date.toLocaleDateString());
+    // Open the day detail modal so user can add with full form
+    const iso = date.toISOString().slice(0, 10);
+    const dayEvents = calendarEvents.filter(
+      (e) => (e.date || "").slice(0, 10) === iso,
+    );
+    console.log('[DEBUG] Opening date details for:', iso, 'with', dayEvents.length, 'events');
+    setDateDetails({ date, events: dayEvents });
+    setShowEditForm(false);
+    setEditingEvent(null);
+    setIsDateDetailsOpen(true);
   }
 
   async function handleUpdateCalendarEvent(event: CalendarEvent) {
@@ -1436,15 +1498,16 @@ function ProjectsPageContent() {
       ).updateCalendarEvent(event.id, {
         title: event.title,
         copy: event.copy,
+        caption: event.caption,
+        platform: event.platform,
+        media_type: event.media_type,
+        format_type: event.format_type,
+        drive_link: event.drive_link,
         status: event.status,
-        attachments: event.attachments?.map((a) => ({
-          url: a.url,
-          kind: a.kind,
-        })),
+        attachments: event.attachments,
       });
-      setCalendarEvents((prev) =>
-        prev.map((e) => (e.id === event.id ? event : e)),
-      );
+
+      await fetchMonthEvents(event.date ? new Date(event.date) : new Date());
     } catch (e) {
       console.error(e);
       alert("Failed to update event");
@@ -1453,17 +1516,74 @@ function ProjectsPageContent() {
 
   async function handleDeleteCalendarEvent(eventId: string) {
     try {
+      const toDelete = calendarEvents.find((e) => e.id === eventId);
+      console.log('[DEBUG] Deleting event:', eventId, toDelete?.title);
+      
       await (
         await import("@/app/actions/calendar-events")
       ).deleteCalendarEvent(eventId);
-      setCalendarEvents((prev) => prev.filter((e) => e.id !== eventId));
+      
+      console.log('[DEBUG] Event deleted, refreshing month events...');
+      const refreshed = await fetchMonthEvents(
+        toDelete?.date ? new Date(toDelete.date) : new Date(),
+      );
+      
+      // Update dateDetails to remove the deleted event
+      if (dateDetails) {
+        const updatedEvents = (refreshed || []).filter(
+          (e) => (e.date || "").slice(0, 10) === (dateDetails.date.toISOString().slice(0, 10))
+        );
+        console.log('[DEBUG] Updated dateDetails with', updatedEvents.length, 'remaining events');
+        setDateDetails({ date: dateDetails.date, events: updatedEvents });
+      }
     } catch (e) {
       console.error(e);
       alert("Failed to delete event");
     }
   }
 
-  // Simple Notion-like monthly calendar view
+  // Helper to convert Google Drive links to direct viewable URLs
+  const getDirectImageUrl = (url: string): string => {
+    if (!url) return url;
+    
+    // If it's a Google Drive link, convert to direct view URL
+    if (url.includes('drive.google.com')) {
+      // Extract file ID from various Google Drive URL formats
+      let fileId = '';
+      
+      // Format: https://drive.google.com/file/d/FILE_ID/view
+      const match1 = url.match(/\/file\/d\/([^\/\?]+)/);
+      if (match1) fileId = match1[1];
+      
+      // Format: https://drive.google.com/open?id=FILE_ID
+      const match2 = url.match(/[?&]id=([^&]+)/);
+      if (match2) fileId = match2[1];
+      
+      // If we found a file ID, return direct view URL
+      if (fileId) {
+        // Use the thumbnail API for better compatibility
+        return `https://drive.google.com/thumbnail?id=${fileId}&sz=w1000`;
+      }
+    }
+    
+    // Return original URL if not a Google Drive link or couldn't extract ID
+    return url;
+  };
+
+  // Helper to detect media type from drive link
+  const getMediaType = (url: string): 'image' | 'video' | 'unknown' => {
+    if (!url) return 'unknown';
+    const lower = url.toLowerCase();
+    if (lower.match(/\.(jpg|jpeg|png|gif|webp|bmp)$/)) return 'image';
+    if (lower.match(/\.(mp4|mov|avi|webm|mkv)$/)) return 'video';
+    // Check for Google Drive image/video indicators
+    if (lower.includes('drive.google.com')) {
+      if (lower.includes('/file/d/') || lower.includes('export=view')) return 'image';
+    }
+    return 'unknown';
+  };
+
+  // Enhanced calendar view with board and calendar modes
   const CalendarView = React.memo(
     function CalendarView({
       events,
@@ -1479,6 +1599,17 @@ function ProjectsPageContent() {
       onOpenDate: (date: Date, events: CalendarEvent[]) => void;
     }) {
       const [current, setCurrent] = useState(new Date());
+      const [viewMode, setViewMode] = useState<"calendar" | "board">("calendar");
+      const [selectedDate, setSelectedDate] = useState(new Date());
+      const [isMobile, setIsMobile] = useState(false);
+
+      useEffect(() => {
+        const checkMobile = () => setIsMobile(window.innerWidth < 768);
+        checkMobile();
+        window.addEventListener('resize', checkMobile);
+        return () => window.removeEventListener('resize', checkMobile);
+      }, []);
+
       const startOfMonth = new Date(
         current.getFullYear(),
         current.getMonth(),
@@ -1492,18 +1623,19 @@ function ProjectsPageContent() {
       const startDay = startOfMonth.getDay(); // 0-6
       const daysInMonth = endOfMonth.getDate();
 
+      // Build weeks for 5-column grid (showing all dates)
       const weeks: Array<Array<Date | null>> = [];
-      let week: Array<Date | null> = new Array(startDay).fill(null);
+      let week: Array<Date | null> = new Array(startDay % 5).fill(null);
       for (let d = 1; d <= daysInMonth; d++) {
         const date = new Date(current.getFullYear(), current.getMonth(), d);
         week.push(date);
-        if (week.length === 7) {
+        if (week.length === 5) {
           weeks.push(week);
           week = [];
         }
       }
       if (week.length) {
-        while (week.length < 7) week.push(null);
+        while (week.length < 5) week.push(null);
         weeks.push(week);
       }
 
@@ -1517,244 +1649,462 @@ function ProjectsPageContent() {
         return events.filter((e) => (e.date || "").slice(0, 10) === iso);
       }
 
+      const getStatusColor = (status?: string) => {
+        switch (status) {
+          case "published": return "bg-green-500/20 text-green-700 border-green-500";
+          case "scheduled": return "bg-blue-500/20 text-blue-700 border-blue-500";
+          case "review": return "bg-yellow-500/20 text-yellow-700 border-yellow-500";
+          case "editing": return "bg-orange-500/20 text-orange-700 border-orange-500";
+          case "idea": return "bg-purple-500/20 text-purple-700 border-purple-500";
+          default: return "bg-gray-500/20 text-gray-700 border-gray-500";
+        }
+      };
+
+      const getPlatformIcon = (platform?: string) => {
+        switch (platform) {
+          case "instagram": return "📷";
+          case "facebook": return "📘";
+          case "youtube": return "▶️";
+          case "linkedin": return "💼";
+          case "twitter": return "🐦";
+          case "tiktok": return "🎵";
+          default: return "📱";
+        }
+      };
+
       return (
-        <div className="space-y-3">
-          <div className="flex items-center justify-between">
-            <div className="text-xl font-semibold">
+        <div className="space-y-4">
+          {/* Header with View Toggle */}
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+            <div className="text-xl sm:text-2xl font-bold flex items-center gap-2">
+              <Calendar className="h-5 w-5 sm:h-6 sm:w-6" />
               {formatter.format(current)}
             </div>
-            <div className="flex items-center gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() =>
-                  setCurrent(
-                    new Date(current.getFullYear(), current.getMonth() - 1, 1),
-                  )
-                }
-              >
-                Prev
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setCurrent(new Date())}
-              >
-                Today
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() =>
-                  setCurrent(
-                    new Date(current.getFullYear(), current.getMonth() + 1, 1),
-                  )
-                }
-              >
-                Next
-              </Button>
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full sm:w-auto">
+              <div className="flex items-center rounded-lg border p-1 bg-muted/50">
+                <Button
+                  variant={viewMode === "calendar" ? "default" : "ghost"}
+                  size="sm"
+                  className="h-8 flex-1 sm:flex-none text-xs sm:text-sm"
+                  onClick={() => setViewMode("calendar")}
+                >
+                  📅 Calendar
+                </Button>
+                <Button
+                  variant={viewMode === "board" ? "default" : "ghost"}
+                  size="sm"
+                  className="h-8 flex-1 sm:flex-none text-xs sm:text-sm"
+                  onClick={() => setViewMode("board")}
+                >
+                  📋 Board
+                </Button>
+              </div>
+              <div className="flex items-center gap-1">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="flex-1 sm:flex-none"
+                  onClick={() =>
+                    setCurrent(
+                      new Date(current.getFullYear(), current.getMonth() - 1, 1),
+                    )
+                  }
+                >
+                  ← Prev
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="flex-1 sm:flex-none"
+                  onClick={() => setCurrent(new Date())}
+                >
+                  Today
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="flex-1 sm:flex-none"
+                  onClick={() =>
+                    setCurrent(
+                      new Date(current.getFullYear(), current.getMonth() + 1, 1),
+                    )
+                  }
+                >
+                  Next →
+                </Button>
+              </div>
             </div>
           </div>
 
-          <div className="grid grid-cols-7 gap-2 text-xs text-muted-foreground">
-            {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((d) => (
-              <div key={d} className="px-2 py-1">
-                {d}
+          {isMobile && viewMode === "calendar" ? (
+            /* Mobile: Vertical Weekly List View */
+            <div className="space-y-3">
+              {/* Week Navigation */}
+              <div className="flex items-center justify-between p-3 rounded-lg border bg-muted/50">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    const newDate = new Date(selectedDate);
+                    newDate.setDate(selectedDate.getDate() - 7);
+                    setSelectedDate(newDate);
+                    setCurrent(new Date(newDate.getFullYear(), newDate.getMonth(), 1));
+                  }}
+                >
+                  ← Prev Week
+                </Button>
+                <span className="text-sm font-medium">
+                  {selectedDate.toLocaleDateString("en-US", { month: "short", year: "numeric" })}
+                </span>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    const newDate = new Date(selectedDate);
+                    newDate.setDate(selectedDate.getDate() + 7);
+                    setSelectedDate(newDate);
+                    setCurrent(new Date(newDate.getFullYear(), newDate.getMonth(), 1));
+                  }}
+                >
+                  Next Week →
+                </Button>
               </div>
-            ))}
-          </div>
 
-          <div className="grid grid-cols-7 gap-2">
-            {weeks.map((w, wi) => (
-              <div key={wi} className="contents">
-                {w.map((date, di) => (
-                  <div
-                    key={di}
-                    className="rounded-lg border p-2 min-h-[110px] bg-white/5 hover:bg-white/10 transition-colors"
-                  >
-                    {date ? (
-                      <div className="flex flex-col gap-2">
-                        <div className="flex items-center justify-between">
-                          <span className="text-xs font-medium">
+              {/* Vertical Day List */}
+              <div className="space-y-2">
+                {Array.from({ length: 7 }, (_, i) => {
+                  const startOfWeek = new Date(selectedDate);
+                  startOfWeek.setDate(selectedDate.getDate() - selectedDate.getDay());
+                  const date = new Date(startOfWeek);
+                  date.setDate(startOfWeek.getDate() + i);
+                  const dayEvents = eventsForDate(date);
+                  const isToday = date.toDateString() === new Date().toDateString();
+                  
+                  return (
+                    <Card
+                      key={i}
+                      className={`p-4 cursor-pointer transition-all ${
+                        isToday ? "border-primary border-2" : "hover:shadow-md"
+                      }`}
+                      onClick={() => onOpenDate(date, dayEvents)}
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="flex-shrink-0">
+                          <div className="text-xs text-muted-foreground font-medium">
+                            {date.toLocaleDateString("en-US", { weekday: "short" })}
+                          </div>
+                          <div className="text-3xl font-bold">
                             {date.getDate()}
-                          </span>
-                          <div className="flex items-center gap-1">
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="h-6 px-2"
-                              onClick={() => onCreate(date)}
-                            >
-                              + Add
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="h-6 px-2"
-                              onClick={() =>
-                                onOpenDate(date, eventsForDate(date))
-                              }
-                            >
-                              Open
-                            </Button>
                           </div>
                         </div>
-                        <div className="space-y-2">
-                          {eventsForDate(date).map((ev) => (
-                            <div
-                              key={ev.id}
-                              className="rounded-md border p-2 bg-white/10"
-                            >
-                              <div className="flex items-center justify-between gap-2">
-                                <span className="text-xs font-medium truncate">
-                                  {ev.title}
-                                </span>
-                                <div className="flex items-center gap-1">
-                                  <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    className="h-6 px-2"
-                                    onClick={() => onDelete(ev.id)}
-                                  >
-                                    Del
-                                  </Button>
-                                  <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    className="h-6 px-2"
-                                    onClick={() =>
-                                      onUpdate({
-                                        ...ev,
-                                        status:
-                                          ev.status === "published"
-                                            ? "scheduled"
-                                            : "published",
-                                      })
-                                    }
-                                  >
-                                    {ev.status === "published"
-                                      ? "Unpublish"
-                                      : "Publish"}
-                                  </Button>
-                                  <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    className="h-6 px-2"
-                                    onClick={() => {
-                                      const url = prompt(
-                                        "Paste image/video URL",
-                                      );
-                                      if (!url) return;
-                                      const kind:
-                                        | "image"
-                                        | "video"
-                                        | "pdf"
-                                        | "document" = url.match(
-                                        /\.(png|jpg|jpeg|gif|webp)$/i,
-                                      )
-                                        ? "image"
-                                        : url.match(/\.(mp4|webm|mov)$/i)
-                                          ? "video"
-                                          : url.match(/\.(pdf)$/i)
-                                            ? "pdf"
-                                            : "document";
-                                      const att = {
-                                        id: Math.random().toString(36).slice(2),
-                                        url,
-                                        kind,
-                                      };
-                                      const next: CalendarEvent = {
-                                        ...ev,
-                                        attachments: [
-                                          ...(ev.attachments || []),
-                                          att,
-                                        ],
-                                      };
-                                      onUpdate(next);
-                                    }}
-                                  >
-                                    Add Media
-                                  </Button>
+                        
+                        <div className="flex-1 min-w-0">
+                          {dayEvents.length === 0 ? (
+                            <div className="text-sm text-muted-foreground py-2">
+                              No content scheduled
+                            </div>
+                          ) : (
+                            <div className="space-y-2">
+                              {dayEvents.slice(0, 3).map((ev) => (
+                                <div key={ev.id} className="text-sm">
+                                  <div className="font-medium truncate">
+                                    {getPlatformIcon(ev.platform)} {ev.title}
+                                  </div>
+                                  <div className="flex gap-1 mt-1">
+                                    {ev.status && (
+                                      <Badge variant="outline" className="text-[10px]">
+                                        {ev.status}
+                                      </Badge>
+                                    )}
+                                  </div>
                                 </div>
-                              </div>
-                              {ev.copy && (
-                                <div className="mt-1 text-[11px] text-muted-foreground line-clamp-3 whitespace-pre-wrap">
-                                  {ev.copy}
-                                </div>
-                              )}
-                              <div className="flex flex-wrap gap-1 mt-1">
-                                {ev.platform && (
-                                  <Badge
-                                    variant="outline"
-                                    className="text-[10px]"
-                                  >
-                                    {ev.platform}
-                                  </Badge>
-                                )}
-                                {ev.type && (
-                                  <Badge
-                                    variant="outline"
-                                    className="text-[10px]"
-                                  >
-                                    {ev.type}
-                                  </Badge>
-                                )}
-                                {ev.status && (
-                                  <Badge
-                                    variant="outline"
-                                    className="text-[10px]"
-                                  >
-                                    {ev.status}
-                                  </Badge>
-                                )}
-                              </div>
-                              {ev.attachments && ev.attachments.length > 0 && (
-                                <div className="mt-2 grid grid-cols-3 gap-2">
-                                  {ev.attachments.map((att) => (
-                                    <div
-                                      key={att.id}
-                                      className="rounded-md overflow-hidden border bg-black/20"
-                                    >
-                                      {att.kind === "image" && (
-                                        <img
-                                          src={att.url}
-                                          alt="attachment"
-                                          className="w-full h-20 object-cover"
-                                        />
-                                      )}
-                                      {att.kind === "video" && (
-                                        <video
-                                          src={att.url}
-                                          className="w-full h-20 object-cover"
-                                          controls
-                                          preload="metadata"
-                                        />
-                                      )}
-                                      {att.kind !== "image" &&
-                                        att.kind !== "video" && (
-                                          <a
-                                            href={att.url}
-                                            target="_blank"
-                                            rel="noopener noreferrer"
-                                            className="text-xs p-2 inline-block w-full truncate"
-                                          >
-                                            {att.url}
-                                          </a>
-                                        )}
-                                    </div>
-                                  ))}
+                              ))}
+                              {dayEvents.length > 3 && (
+                                <div className="text-xs text-muted-foreground">
+                                  +{dayEvents.length - 3} more
                                 </div>
                               )}
                             </div>
-                          ))}
+                          )}
                         </div>
+
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="flex-shrink-0"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onCreate(date);
+                          }}
+                        >
+                          + Add
+                        </Button>
                       </div>
-                    ) : null}
+                    </Card>
+                  );
+                })}
+              </div>
+
+            </div>
+          ) : viewMode === "board" ? (
+            /* Kanban Board View */
+            <div className={`grid gap-4 ${isMobile ? "grid-cols-1" : "grid-cols-5"}`}>
+              {["idea", "editing", "review", "scheduled", "published"].map((status) => {
+                const statusEvents = events.filter((e) => e.status === status);
+                const statusLabels = {
+                  idea: "💡 Ideas",
+                  editing: "✏️ Editing",
+                  review: "👁️ Review",
+                  scheduled: "📅 Scheduled",
+                  published: "✅ Published"
+                };
+                
+                return (
+                  <div key={status} className="flex flex-col gap-2">
+                    <div className="flex items-center justify-between p-3 rounded-lg border bg-muted/50 sticky top-0 z-10">
+                      <h3 className="font-semibold text-sm">
+                        {statusLabels[status as keyof typeof statusLabels]}
+                      </h3>
+                      <Badge variant="outline" className="text-xs">
+                        {statusEvents.length}
+                      </Badge>
+                    </div>
+                    
+                    <div className={`space-y-2 ${isMobile ? "max-h-[300px]" : "min-h-[400px] max-h-[600px]"} overflow-y-auto pr-2`}>
+                      {statusEvents.length === 0 ? (
+                        <div className="text-center text-xs text-muted-foreground py-8">
+                          No items
+                        </div>
+                      ) : (
+                        statusEvents.map((ev) => (
+                          <Card
+                            key={ev.id}
+                            className={`p-3 cursor-pointer hover:shadow-md transition-all border-l-4 ${getStatusColor(ev.status)}`}
+                            onClick={() => {
+                              const date = new Date(ev.date);
+                              onOpenDate(date, [ev]);
+                            }}
+                          >
+                            <div className="space-y-2">
+                              <div className="flex items-start justify-between gap-2">
+                                <h4 className="font-medium text-sm flex-1 line-clamp-2">
+                                  {getPlatformIcon(ev.platform)} {ev.title}
+                                </h4>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="h-6 w-6 p-0"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    onDelete(ev.id);
+                                  }}
+                                >
+                                  ✕
+                                </Button>
+                              </div>
+                              
+                              {ev.caption && (
+                                <p className="text-xs text-muted-foreground line-clamp-2">
+                                  {ev.caption}
+                                </p>
+                              )}
+                              
+                              <div className="flex flex-wrap gap-1">
+                                {ev.platform && (
+                                  <Badge variant="secondary" className="text-[10px]">
+                                    {ev.platform}
+                                  </Badge>
+                                )}
+                                {ev.format_type && (
+                                  <Badge variant="outline" className="text-[10px]">
+                                    {ev.format_type}
+                                  </Badge>
+                                )}
+                              </div>
+                              
+                              {ev.drive_link && (
+                                <div className="mt-2 rounded overflow-hidden border border-border/50">
+                                  {getMediaType(ev.drive_link) === 'image' ? (
+                                    <img
+                                      src={getDirectImageUrl(ev.drive_link)}
+                                      alt={ev.title}
+                                      className="w-full h-24 object-cover"
+                                      loading="lazy"
+                                      onError={(e) => {
+                                        console.error('Image failed to load:', ev.drive_link);
+                                        e.currentTarget.style.display = 'none';
+                                      }}
+                                    />
+                                  ) : getMediaType(ev.drive_link) === 'video' ? (
+                                    <video
+                                      src={getDirectImageUrl(ev.drive_link)}
+                                      className="w-full h-24 object-cover"
+                                      muted
+                                      playsInline
+                                    />
+                                  ) : (
+                                    <div className="w-full h-20 bg-muted/30 flex items-center justify-center text-xs">
+                                      <FileIcon className="h-8 w-8 text-muted-foreground" />
+                                    </div>
+                                  )}
+                                </div>
+                              )}
+                              
+                              <div className="flex items-center justify-between text-xs text-muted-foreground pt-1 border-t">
+                                <span>📅 {new Date(ev.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span>
+                                {ev.drive_link && (
+                                  <a
+                                    href={ev.drive_link}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="text-primary hover:underline"
+                                    onClick={(e) => e.stopPropagation()}
+                                  >
+                                    {getMediaType(ev.drive_link) === 'image' ? '🖼️' : getMediaType(ev.drive_link) === 'video' ? '🎥' : '🔗'} View
+                                  </a>
+                                )}
+                              </div>
+                            </div>
+                          </Card>
+                        ))
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            /* Calendar View */
+            <>
+              <div className="grid grid-cols-5 gap-3 text-xs font-semibold text-muted-foreground px-2">
+                {["1", "2", "3", "4", "5"].map((d, i) => (
+                  <div key={i} className="py-2 text-center">
+                    Col {d}
                   </div>
                 ))}
               </div>
-            ))}
-          </div>
+
+              <div className="grid grid-cols-5 gap-3">
+                {weeks.map((w, wi) => (
+                  <React.Fragment key={wi}>
+                    {w.map((date, di) => {
+                      const dayEvents = date ? eventsForDate(date) : [];
+                      const isToday = date && date.toDateString() === new Date().toDateString();
+                      
+                      return (
+                        <div
+                          key={di}
+                          className={`
+                            rounded-xl border min-h-[180px] p-3 transition-all group
+                            ${date ? "bg-card hover:bg-accent/50 hover:shadow-md cursor-pointer" : "bg-muted/20"}
+                            ${isToday ? "ring-2 ring-primary shadow-lg" : ""}
+                          `}
+                        >
+                          {date ? (
+                            <div className="flex flex-col h-full gap-2">
+                              <div className="flex items-center justify-between">
+                                <span className={`text-sm font-bold ${isToday ? "text-primary text-base" : ""}`}>
+                                  {date.getDate()}
+                                </span>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  className="h-7 px-2 text-xs"
+                                  onClick={() => onCreate(date)}
+                                >
+                                  + Add
+                                </Button>
+                              </div>
+                              
+                              <div className="flex-1 space-y-2 overflow-hidden">
+                                {dayEvents.slice(0, 2).map((ev) => (
+                                  <div
+                                    key={ev.id}
+                                    className={`
+                                      rounded-lg border overflow-hidden cursor-pointer
+                                      transition-all hover:scale-[1.02] hover:shadow-md
+                                      ${getStatusColor(ev.status)}
+                                    `}
+                                    onClick={() => onOpenDate(date, dayEvents)}
+                                  >
+                                    {ev.drive_link && (
+                                      <div className="w-full h-20 bg-muted/20 overflow-hidden">
+                                        {getMediaType(ev.drive_link) === 'image' ? (
+                                          <img
+                                            src={getDirectImageUrl(ev.drive_link)}
+                                            alt={ev.title}
+                                            className="w-full h-full object-cover"
+                                            loading="lazy"
+                                            onError={(e) => {
+                                              e.currentTarget.style.display = 'none';
+                                            }}
+                                          />
+                                        ) : getMediaType(ev.drive_link) === 'video' ? (
+                                          <video
+                                            src={getDirectImageUrl(ev.drive_link)}
+                                            className="w-full h-full object-cover"
+                                            muted
+                                          />
+                                        ) : (
+                                          <div className="w-full h-full bg-muted/30 flex items-center justify-center">
+                                            <FileIcon className="h-6 w-6 text-muted-foreground" />
+                                          </div>
+                                        )}
+                                      </div>
+                                    )}
+                                    <div className="p-2 space-y-1">
+                                      <div className="flex items-start gap-1">
+                                        <span className="text-xs">{getPlatformIcon(ev.platform)}</span>
+                                        <span className="text-xs font-medium line-clamp-2 flex-1">{ev.title}</span>
+                                      </div>
+                                      <div className="flex flex-wrap gap-1">
+                                        {ev.platform && (
+                                          <Badge variant="secondary" className="text-[9px] h-4 px-1">
+                                            {ev.platform}
+                                          </Badge>
+                                        )}
+                                        {ev.format_type && (
+                                          <Badge variant="outline" className="text-[9px] h-4 px-1">
+                                            {ev.format_type}
+                                          </Badge>
+                                        )}
+                                        {ev.status && (
+                                          <Badge 
+                                            className={`text-[9px] h-4 px-1 ${
+                                              ev.status === 'published' ? 'bg-green-500 text-white hover:bg-green-600' :
+                                              ev.status === 'scheduled' ? 'bg-cyan-500 text-white hover:bg-cyan-600' :
+                                              ev.status === 'review' ? 'bg-yellow-500 text-black hover:bg-yellow-600' :
+                                              ev.status === 'editing' ? 'bg-orange-500 text-white hover:bg-orange-600' :
+                                              ev.status === 'idea' ? 'bg-purple-500 text-white hover:bg-purple-600' :
+                                              'bg-gray-500 text-white hover:bg-gray-600'
+                                            }`}
+                                          >
+                                            {ev.status}
+                                          </Badge>
+                                        )}
+                                      </div>
+                                    </div>
+                                  </div>
+                                ))}
+                                {dayEvents.length > 2 && (
+                                  <button
+                                    onClick={() => onOpenDate(date, dayEvents)}
+                                    className="text-xs text-muted-foreground hover:text-primary font-medium w-full text-center py-1 rounded hover:bg-accent/50"
+                                  >
+                                    +{dayEvents.length - 2} more
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+                          ) : null}
+                        </div>
+                      );
+                    })}
+                  </React.Fragment>
+                ))}
+              </div>
+            </>
+          )}
         </div>
       );
     },
@@ -1775,6 +2125,197 @@ function ProjectsPageContent() {
     }
   };
 
+  // Edit Event Form Component
+  const EditEventForm = React.memo(
+    function EditEventForm({
+      event,
+      onUpdate,
+      onCancel,
+    }: {
+      event: CalendarEvent;
+      onUpdate: (event: CalendarEvent) => void;
+      onCancel: () => void;
+    }) {
+      const [title, setTitle] = useState(event.title || "");
+      const [caption, setCaption] = useState(event.caption || "");
+      const [copy, setCopy] = useState(event.copy || "");
+      const [driveLink, setDriveLink] = useState(event.drive_link || "");
+      const [platform, setPlatform] = useState(event.platform || "instagram");
+      const [mediaType, setMediaType] = useState(event.media_type || "video");
+      const [formatType, setFormatType] = useState(event.format_type || "post");
+      const [status, setStatus] = useState(event.status || "idea");
+      const [saving, setSaving] = useState(false);
+
+      return (
+        <div className="space-y-3 border-t pt-4">
+          <h3 className="font-semibold text-sm">Edit Content</h3>
+          <div className="space-y-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <label className="text-xs text-muted-foreground">Title</label>
+                <Input
+                  value={title}
+                  onChange={(e) => setTitle(e.target.value)}
+                  placeholder="Content title"
+                  className="text-sm"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-xs text-muted-foreground">Platform</label>
+                <Select
+                  value={platform}
+                  onValueChange={(value) =>
+                    setPlatform(
+                      (value as CalendarEvent["platform"]) || "instagram",
+                    )
+                  }
+                >
+                  <SelectTrigger className="text-sm">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="instagram">📷 Instagram</SelectItem>
+                    <SelectItem value="facebook">📘 Facebook</SelectItem>
+                    <SelectItem value="youtube">▶️ YouTube</SelectItem>
+                    <SelectItem value="linkedin">💼 LinkedIn</SelectItem>
+                    <SelectItem value="twitter">🐦 Twitter</SelectItem>
+                    <SelectItem value="tiktok">🎵 TikTok</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-xs text-muted-foreground">Media Type</label>
+                <Select
+                  value={mediaType}
+                  onValueChange={(value) =>
+                    setMediaType(
+                      (value as CalendarEvent["media_type"]) || "video",
+                    )
+                  }
+                >
+                  <SelectTrigger className="text-sm">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="static">🖼️ Static</SelectItem>
+                    <SelectItem value="video">🎥 Video</SelectItem>
+                    <SelectItem value="carousel">🎠 Carousel</SelectItem>
+                    <SelectItem value="reel">📹 Reel</SelectItem>
+                    <SelectItem value="story">📖 Story</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-xs text-muted-foreground">Format</label>
+                <Select
+                  value={formatType}
+                  onValueChange={(value) =>
+                    setFormatType(
+                      (value as CalendarEvent["format_type"]) || "post",
+                    )
+                  }
+                >
+                  <SelectTrigger className="text-sm">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="post">📝 Post</SelectItem>
+                    <SelectItem value="reel">🎬 Reel</SelectItem>
+                    <SelectItem value="story">💬 Story</SelectItem>
+                    <SelectItem value="carousel">🎡 Carousel</SelectItem>
+                    <SelectItem value="static">🖼️ Static</SelectItem>
+                    <SelectItem value="video">🎞️ Video</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-xs text-muted-foreground">Status</label>
+                <Select
+                  value={status}
+                  onValueChange={(value) =>
+                    setStatus(
+                      (value as CalendarEvent["status"]) || "idea",
+                    )
+                  }
+                >
+                  <SelectTrigger className="text-sm">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="idea">💡 Idea</SelectItem>
+                    <SelectItem value="editing">✏️ Editing</SelectItem>
+                    <SelectItem value="review">👁️ Review</SelectItem>
+                    <SelectItem value="scheduled">📅 Scheduled</SelectItem>
+                    <SelectItem value="published">✅ Published</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-xs text-muted-foreground">Drive Link</label>
+                <Input
+                  value={driveLink}
+                  onChange={(e) => setDriveLink(e.target.value)}
+                  placeholder="https://drive.google.com/..."
+                  className="text-sm"
+                />
+              </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-xs text-muted-foreground">Caption</label>
+              <Textarea
+                value={caption}
+                onChange={(e) => setCaption(e.target.value)}
+                placeholder="Social media caption..."
+                rows={3}
+                className="text-sm"
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-xs text-muted-foreground">Internal Notes</label>
+              <Textarea
+                value={copy}
+                onChange={(e) => setCopy(e.target.value)}
+                placeholder="Internal notes or brief..."
+                rows={2}
+                className="text-sm"
+              />
+            </div>
+
+            <div className="flex gap-2">
+              <Button
+                onClick={() => {
+                  console.log('[DEBUG] Save edit clicked for:', event.id, event.title);
+                  setSaving(true);
+                  onUpdate({
+                    ...event,
+                    title,
+                    caption,
+                    copy,
+                    drive_link: driveLink,
+                    platform: platform as CalendarEvent["platform"],
+                    media_type: mediaType as CalendarEvent["media_type"],
+                    format_type: formatType as CalendarEvent["format_type"],
+                    status: status as CalendarEvent["status"],
+                  });
+                  setSaving(false);
+                }}
+                disabled={saving}
+                className="flex-1"
+              >
+                {saving ? "Saving..." : "Save Changes"}
+              </Button>
+              <Button variant="outline" onClick={onCancel} className="flex-1">
+                Cancel
+              </Button>
+            </div>
+          </div>
+        </div>
+      );
+    },
+  );
+
   // Quick Add Form component
   const DateQuickAddForm = React.memo(
     function DateQuickAddForm({
@@ -1783,20 +2324,29 @@ function ProjectsPageContent() {
       onAdd: (payload: {
         title: string;
         copy?: string;
+        caption?: string;
         platform?: CalendarEvent["platform"];
         type?: CalendarEvent["type"];
+        media_type?: CalendarEvent["media_type"];
+        format_type?: CalendarEvent["format_type"];
+        drive_link?: string;
         status?: CalendarEvent["status"];
         attachments?: CalendarEvent["attachments"];
-      }) => void;
+      }) => Promise<void>;
     }) {
       const [title, setTitle] = useState("");
       const [copy, setCopy] = useState("");
+      const [caption, setCaption] = useState("");
+      const [driveLink, setDriveLink] = useState("");
       const [platform, setPlatform] =
         useState<CalendarEvent["platform"]>("instagram");
       const [type, setType] = useState<CalendarEvent["type"]>("reel");
+      const [mediaType, setMediaType] = useState<CalendarEvent["media_type"]>("video");
+      const [formatType, setFormatType] = useState<CalendarEvent["format_type"]>("post");
       const [status, setStatus] = useState<CalendarEvent["status"]>("idea");
       const [attachmentUrl, setAttachmentUrl] = useState("");
       const [uploading, setUploading] = useState(false);
+      const [submitting, setSubmitting] = useState(false);
       const [uploadedAttachments, setUploadedAttachments] = useState<
         CalendarEvent["attachments"]
       >([]);
@@ -1871,27 +2421,16 @@ function ProjectsPageContent() {
           <CardContent className="p-4 space-y-3">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               <div className="space-y-2">
-                <label className="text-xs text-muted-foreground">Title</label>
+                <label className="text-xs text-muted-foreground">Title *</label>
                 <Input
                   value={title}
                   onChange={(e) => setTitle(e.target.value)}
                   placeholder="Content title"
                 />
               </div>
-              <div className="space-y-2 md:col-span-2">
-                <label className="text-xs text-muted-foreground">
-                  Copy / Caption
-                </label>
-                <Textarea
-                  value={copy}
-                  onChange={(e) => setCopy(e.target.value)}
-                  placeholder="Write caption, brief, or notes"
-                  rows={4}
-                />
-              </div>
               <div className="space-y-2">
                 <label className="text-xs text-muted-foreground">
-                  Platform
+                  Platform *
                 </label>
                 <Select
                   value={platform}
@@ -1903,31 +2442,55 @@ function ProjectsPageContent() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="instagram">Instagram</SelectItem>
-                    <SelectItem value="facebook">Facebook</SelectItem>
-                    <SelectItem value="youtube">YouTube</SelectItem>
-                    <SelectItem value="linkedin">LinkedIn</SelectItem>
+                    <SelectItem value="instagram">📷 Instagram</SelectItem>
+                    <SelectItem value="facebook">📘 Facebook</SelectItem>
+                    <SelectItem value="youtube">▶️ YouTube</SelectItem>
+                    <SelectItem value="linkedin">💼 LinkedIn</SelectItem>
+                    <SelectItem value="twitter">🐦 Twitter</SelectItem>
+                    <SelectItem value="tiktok">🎵 TikTok</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
+              
               <div className="space-y-2">
-                <label className="text-xs text-muted-foreground">Type</label>
+                <label className="text-xs text-muted-foreground">Media Type</label>
                 <Select
-                  value={type}
-                  onValueChange={(v) => setType(v as CalendarEvent["type"])}
+                  value={mediaType}
+                  onValueChange={(v) => setMediaType(v as CalendarEvent["media_type"])}
                 >
                   <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="reel">Reel</SelectItem>
-                    <SelectItem value="carousel">Carousel</SelectItem>
-                    <SelectItem value="story">Story</SelectItem>
-                    <SelectItem value="static">Static</SelectItem>
-                    <SelectItem value="video">Video</SelectItem>
+                    <SelectItem value="static">🖼️ Static Image</SelectItem>
+                    <SelectItem value="video">🎥 Video</SelectItem>
+                    <SelectItem value="carousel">🎠 Carousel</SelectItem>
+                    <SelectItem value="reel">📹 Reel/Short</SelectItem>
+                    <SelectItem value="story">📖 Story</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
+
+              <div className="space-y-2">
+                <label className="text-xs text-muted-foreground">Format</label>
+                <Select
+                  value={formatType}
+                  onValueChange={(v) => setFormatType(v as CalendarEvent["format_type"])}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="post">📝 Post</SelectItem>
+                    <SelectItem value="reel">🎬 Reel</SelectItem>
+                    <SelectItem value="story">💬 Story</SelectItem>
+                    <SelectItem value="carousel">🎡 Carousel</SelectItem>
+                    <SelectItem value="static">🖼️ Static</SelectItem>
+                    <SelectItem value="video">🎞️ Video</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
               <div className="space-y-2">
                 <label className="text-xs text-muted-foreground">Status</label>
                 <Select
@@ -1938,13 +2501,48 @@ function ProjectsPageContent() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="idea">Idea</SelectItem>
-                    <SelectItem value="editing">Editing</SelectItem>
-                    <SelectItem value="review">Ready for review</SelectItem>
-                    <SelectItem value="scheduled">Scheduled</SelectItem>
-                    <SelectItem value="published">Published</SelectItem>
+                    <SelectItem value="idea">💡 Idea</SelectItem>
+                    <SelectItem value="editing">✏️ Editing</SelectItem>
+                    <SelectItem value="review">👁️ Ready for Review</SelectItem>
+                    <SelectItem value="scheduled">📅 Scheduled</SelectItem>
+                    <SelectItem value="published">✅ Published</SelectItem>
                   </SelectContent>
                 </Select>
+              </div>
+
+              <div className="space-y-2 md:col-span-2">
+                <label className="text-xs text-muted-foreground">
+                  Caption (Full Social Media Caption)
+                </label>
+                <Textarea
+                  value={caption}
+                  onChange={(e) => setCaption(e.target.value)}
+                  placeholder="Write the full caption for this post..."
+                  rows={4}
+                />
+              </div>
+
+              <div className="space-y-2 md:col-span-2">
+                <label className="text-xs text-muted-foreground">
+                  Internal Notes / Brief
+                </label>
+                <Textarea
+                  value={copy}
+                  onChange={(e) => setCopy(e.target.value)}
+                  placeholder="Internal notes, brief, or instructions"
+                  rows={2}
+                />
+              </div>
+
+              <div className="space-y-2 md:col-span-2">
+                <label className="text-xs text-muted-foreground">
+                  Google Drive / Media Link
+                </label>
+                <Input
+                  value={driveLink}
+                  onChange={(e) => setDriveLink(e.target.value)}
+                  placeholder="https://drive.google.com/... or other media link"
+                />
               </div>
             </div>
 
@@ -2012,26 +2610,39 @@ function ProjectsPageContent() {
 
             <div className="flex justify-end">
               <Button
-                onClick={() => {
-                  if (!title.trim()) return;
-                  onAdd({
-                    title,
-                    copy,
-                    platform,
-                    type,
-                    status,
-                    attachments: [
-                      ...(uploadedAttachments || []),
-                      ...(addAttachmentFromUrl(attachmentUrl) || []),
-                    ],
-                  });
-                  setTitle("");
-                  setCopy("");
-                  setAttachmentUrl("");
-                  setUploadedAttachments([]);
+                onClick={async () => {
+                  if (!title.trim() || submitting) return;
+                  setSubmitting(true);
+                  try {
+                    await onAdd({
+                      title,
+                      copy,
+                      caption,
+                      platform,
+                      type,
+                      media_type: mediaType,
+                      format_type: formatType,
+                      drive_link: driveLink,
+                      status,
+                      attachments: [
+                        ...(uploadedAttachments || []),
+                        ...(addAttachmentFromUrl(attachmentUrl) || []),
+                      ],
+                    });
+                    setTitle("");
+                    setCopy("");
+                    setCaption("");
+                    setDriveLink("");
+                    setAttachmentUrl("");
+                    setUploadedAttachments([]);
+                  } finally {
+                    setSubmitting(false);
+                  }
                 }}
+                disabled={!title.trim() || submitting}
               >
-                Add to Calendar
+                {submitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                {submitting ? "Adding..." : "Add to Calendar"}
               </Button>
             </div>
           </CardContent>
@@ -2076,7 +2687,7 @@ function ProjectsPageContent() {
               : "Manage all your video production projects"}
           </p>
         </div>
-        {user?.role === "admin" && (
+        {(user?.role === "admin" || user?.role === "super_admin") && (
           <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
             <DialogTrigger asChild>
               <Button className="w-full md:w-auto">
@@ -3003,7 +3614,7 @@ function ProjectsPageContent() {
                 <div>
                   <div className="flex items-center justify-between mb-3">
                     <h3 className="font-semibold">Team Members</h3>
-                    {user?.role === "admin" && (
+                    {(user?.role === "admin" || user?.role === "super_admin") && (
                       <Button
                         size="sm"
                         variant="outline"
@@ -3037,7 +3648,7 @@ function ProjectsPageContent() {
                                   </p>
                                 </div>
                               </div>
-                              {user?.role === "admin" && (
+                              {(user?.role === "admin" || user?.role === "super_admin") && (
                                 <Button
                                   variant="ghost"
                                   size="sm"
@@ -3066,7 +3677,7 @@ function ProjectsPageContent() {
                 </div>
 
                 {/* Comment Access */}
-                {user?.role === "admin" && (
+                {(user?.role === "admin" || user?.role === "super_admin") && (
                   <div>
                     <div className="flex items-center justify-between mb-3">
                       <h3 className="font-semibold">Comment Access</h3>
@@ -3314,8 +3925,8 @@ function ProjectsPageContent() {
                                               </div>
                                               {user?.id === reply.user_id &&
                                                 (user?.role === "admin" ||
-                                                  user?.role ===
-                                                    "project_manager") && (
+                                                  user?.role === "project_manager" ||
+                                                  user?.role === "super_admin") && (
                                                   <Button
                                                     variant="ghost"
                                                     size="sm"
@@ -3345,7 +3956,8 @@ function ProjectsPageContent() {
 
                                     {/* Reply Input - Only for Admin/PM */}
                                     {(user?.role === "admin" ||
-                                      user?.role === "project_manager") && (
+                                      user?.role === "project_manager" ||
+                                      user?.role === "super_admin") && (
                                       <div className="mt-3 space-y-2">
                                         <Textarea
                                           value={
@@ -3396,7 +4008,8 @@ function ProjectsPageContent() {
                     {/* Add Comment Form - For Clients and Admins */}
                     {(user?.role === "client" ||
                       user?.role === "admin" ||
-                      user?.role === "employee") && (
+                      user?.role === "employee" ||
+                      user?.role === "super_admin") && (
                       <form
                         onSubmit={handleAddProjectComment}
                         className="space-y-2"
@@ -3490,11 +4103,10 @@ function ProjectsPageContent() {
         }
         onOpenChange={setIsCalendarDialogOpen}
       >
-        <DialogContent className="max-w-5xl max-h-[85vh] overflow-y-auto rounded-2xl bg-white/10 dark:bg-white/5 border-white/20 ring-1 ring-white/10 supports-[backdrop-filter]:backdrop-blur-xl">
-          <div
-            aria-hidden
-            className="pointer-events-none absolute inset-x-0 top-0 h-1/3 bg-gradient-to-b from-white/20 to-transparent dark:from-white/10 dark:to-transparent rounded-t-2xl"
-          />
+        <DialogContent
+          className="max-w-5xl max-h-[85vh] overflow-y-auto rounded-2xl bg-white/10 dark:bg-white/5 border-white/20 ring-1 ring-white/10 supports-[backdrop-filter]:backdrop-blur-xl"
+          onInteractOutside={(event) => event.preventDefault()}
+        >
           <div className="relative z-10 space-y-4">
             <DialogHeader>
               <DialogTitle className="text-2xl">Content Calendar</DialogTitle>
@@ -3509,6 +4121,7 @@ function ProjectsPageContent() {
               onDelete={(eventId) => handleDeleteCalendarEvent(eventId)}
               onOpenDate={(date, events) => {
                 setDateDetails({ date, events });
+                setIsCalendarDialogOpen(false); // Close calendar when opening date details
                 setIsDateDetailsOpen(true);
               }}
             />
@@ -3516,145 +4129,323 @@ function ProjectsPageContent() {
         </DialogContent>
       </Dialog>
 
-      {/* Date Details Dialog */}
+      {/* Date Details Dialog - Mobile Friendly */}
       <Dialog open={isDateDetailsOpen} onOpenChange={setIsDateDetailsOpen}>
-        <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto rounded-2xl bg-white/10 dark:bg-white/5 border-white/20 ring-1 ring-white/10 supports-[backdrop-filter]:backdrop-blur-xl">
-          <div
-            aria-hidden
-            className="pointer-events-none absolute inset-x-0 top-0 h-1/3 bg-gradient-to-b from-white/20 to-transparent dark:from-white/10 dark:to-transparent rounded-t-2xl"
-          />
-          <div className="relative z-10 space-y-4">
-            <DialogHeader>
-              <DialogTitle className="text-2xl">
-                {dateDetails
-                  ? new Date(dateDetails.date).toLocaleDateString()
-                  : "Date"}
-              </DialogTitle>
-              <DialogDescription>Detailed content planning</DialogDescription>
-            </DialogHeader>
-
-            {/* Quick add form */}
-            <DateQuickAddForm
-              onAdd={(payload) => {
-                const baseDate = dateDetails?.date || new Date();
-                const newEvent: CalendarEvent = {
-                  id: Math.random().toString(36).slice(2),
-                  date: new Date(
-                    baseDate.getFullYear(),
-                    baseDate.getMonth(),
-                    baseDate.getDate(),
-                  ).toISOString(),
-                  title: payload.title,
-                  platform: payload.platform,
-                  type: payload.type,
-                  status: payload.status,
-                  attachments: payload.attachments || [],
-                };
-                setCalendarEvents((prev) => [...prev, newEvent]);
-              }}
-            />
-
-            {/* Existing events list */}
-            <div className="space-y-3">
-              {(dateDetails?.events || []).length === 0 ? (
-                <p className="text-sm text-muted-foreground">
-                  No content entries for this day
-                </p>
-              ) : (
-                (dateDetails?.events || []).map((ev) => (
-                  <div
-                    key={ev.id}
-                    className="rounded-md border p-3 bg-white/10"
+        <DialogContent
+          className="w-full max-w-4xl max-h-[95vh] overflow-y-auto rounded-xl p-0 sm:p-0 sm:rounded-xl"
+          onInteractOutside={(event) => event.preventDefault()}
+        >
+          <div className="sticky top-0 z-20 border-b bg-background/80 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+            <DialogHeader className="px-4 sm:px-6 py-4">
+              <div className="flex items-start justify-between">
+                <div>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="mb-2 -ml-2"
+                    onClick={() => {
+                      setIsDateDetailsOpen(false);
+                      setShowEditForm(false);
+                      setEditingEvent(null);
+                      setIsCalendarDialogOpen(true); // Reopen calendar
+                    }}
                   >
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <span className="font-medium">{ev.title}</span>
-                        {ev.platform && (
-                          <Badge variant="outline" className="text-[10px]">
-                            {ev.platform}
-                          </Badge>
-                        )}
-                        {ev.type && (
-                          <Badge variant="outline" className="text-[10px]">
-                            {ev.type}
-                          </Badge>
-                        )}
-                        {ev.status && (
-                          <Badge variant="outline" className="text-[10px]">
-                            {ev.status}
-                          </Badge>
-                        )}
-                      </div>
-                      <div className="flex items-center gap-2">
+                    ← Back to Calendar
+                  </Button>
+                  <DialogTitle className="text-xl sm:text-2xl">
+                    {dateDetails
+                      ? new Date(dateDetails.date).toLocaleDateString('en-US', {
+                          weekday: 'long',
+                          month: 'long',
+                          day: 'numeric',
+                        })
+                      : "Date"}
+                  </DialogTitle>
+                  <DialogDescription>Plan and manage content</DialogDescription>
+                </div>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8"
+                  onClick={() => {
+                    setIsDateDetailsOpen(false);
+                    setShowEditForm(false);
+                    setEditingEvent(null);
+                  }}
+                >
+                  ✕
+                </Button>
+              </div>
+            </DialogHeader>
+          </div>
+
+          <div className="px-4 sm:px-6 py-4 space-y-4 pb-8">
+            {/* Existing events list - shown first on mobile */}
+            {(dateDetails?.events || []).length > 0 && (
+              <div className="space-y-3">
+                <h3 className="font-semibold text-sm">Today's Content</h3>
+                {(dateDetails?.events || []).map((ev) => (
+                  <Card key={ev.id} className="overflow-hidden">
+                    <CardContent className="p-3 sm:p-4 space-y-3">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="flex-1 min-w-0">
+                          <h4 className="font-semibold text-sm sm:text-base break-words">
+                            {ev.title}
+                          </h4>
+                          {(() => {
+                            const meta = [
+                              ev.platform,
+                              ev.media_type,
+                              ev.format_type,
+                              ev.status,
+                            ]
+                              .filter(Boolean)
+                              .join(" • ");
+                            return meta ? (
+                              <p className="mt-1 text-xs text-muted-foreground sm:hidden">
+                                {meta}
+                              </p>
+                            ) : null;
+                          })()}
+                          <div className="hidden sm:flex items-center flex-wrap gap-1 mt-1">
+                            {ev.platform && (
+                              <Badge variant="secondary" className="text-[10px]">
+                                {ev.platform}
+                              </Badge>
+                            )}
+                            {ev.media_type && (
+                              <Badge variant="outline" className="text-[10px]">
+                                {ev.media_type}
+                              </Badge>
+                            )}
+                            {ev.format_type && (
+                              <Badge variant="outline" className="text-[10px]">
+                                {ev.format_type}
+                              </Badge>
+                            )}
+                            {ev.status && (
+                              <Badge 
+                                variant={
+                                  ev.status === "published" ? "default" :
+                                  ev.status === "scheduled" ? "secondary" :
+                                  ev.status === "review" ? "outline" : "destructive"
+                                } 
+                                className="text-[10px]"
+                              >
+                                {ev.status}
+                              </Badge>
+                            )}
+                          </div>
+                        </div>
                         <Button
                           variant="ghost"
                           size="sm"
+                          className="h-8 w-8 p-0 flex-shrink-0"
                           onClick={() => handleDeleteCalendarEvent(ev.id)}
                         >
-                          Delete
+                          🗑️
+                        </Button>
+                      </div>
+
+                      {ev.caption && (
+                        <div className="text-xs sm:text-sm text-muted-foreground">
+                          <p className="font-medium mb-1">Caption:</p>
+                          <p className="line-clamp-3">{ev.caption}</p>
+                        </div>
+                      )}
+
+                      {ev.copy && (
+                        <div className="text-xs sm:text-sm text-muted-foreground">
+                          <p className="font-medium mb-1">Internal Notes:</p>
+                          <p className="line-clamp-2">{ev.copy}</p>
+                        </div>
+                      )}
+
+                      {ev.drive_link && (
+                        <div className="space-y-2">
+                          <div className="rounded-lg overflow-hidden border border-border">
+                            {getMediaType(ev.drive_link) === 'image' ? (
+                              <img
+                                src={getDirectImageUrl(ev.drive_link)}
+                                alt={ev.title}
+                                className="w-full max-h-64 object-contain bg-muted/10"
+                                loading="lazy"
+                                onError={(e) => {
+                                  console.error('Image failed to load:', ev.drive_link);
+                                  const parent = e.currentTarget.parentElement;
+                                  if (parent) {
+                                    parent.innerHTML = '<div class="w-full h-32 bg-yellow-500/10 border border-yellow-500/30 rounded flex flex-col items-center justify-center gap-2 p-4"><div class="text-sm font-medium text-yellow-600 dark:text-yellow-500">⚠️ Image Preview Unavailable</div><div class="text-xs text-center text-muted-foreground">Google Drive file must be shared as "Anyone with the link"</div><div class="text-xs text-muted-foreground">Click the link below to view</div></div>';
+                                  }
+                                }}
+                              />
+                            ) : getMediaType(ev.drive_link) === 'video' ? (
+                              <video
+                                src={getDirectImageUrl(ev.drive_link)}
+                                controls
+                                className="w-full max-h-64 object-contain bg-black"
+                                playsInline
+                              >
+                                Your browser does not support the video tag.
+                              </video>
+                            ) : (
+                              <div className="w-full h-32 bg-muted/30 flex flex-col items-center justify-center gap-2">
+                                <FileIcon className="h-12 w-12 text-muted-foreground" />
+                                <span className="text-xs text-muted-foreground">Media file</span>
+                              </div>
+                            )}
+                          </div>
+                          <a
+                            href={ev.drive_link}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1 text-xs sm:text-sm text-primary hover:underline break-all"
+                          >
+                            {getMediaType(ev.drive_link) === 'image' ? '🖼️ View Image' : getMediaType(ev.drive_link) === 'video' ? '🎥 Open Video' : '🔗 View Media'}
+                          </a>
+                        </div>
+                      )}
+
+                      <div className="flex gap-2 pt-2">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="flex-1 text-xs sm:text-sm"
+                          onClick={() => {
+                            console.log('[DEBUG] Edit button clicked for event:', ev.id, ev.title);
+                            console.log('[DEBUG] Before: showEditForm=', showEditForm, 'editingEvent=', editingEvent?.id);
+                            setEditingEvent(ev);
+                            setShowEditForm(true);
+                            console.log('[DEBUG] After: showEditForm should be true, editingEvent should be:', ev.id);
+                          }}
+                        >
+                          ✏️ Edit
                         </Button>
                         <Button
-                          variant="ghost"
                           size="sm"
-                          onClick={() =>
-                            handleUpdateCalendarEvent({
-                              ...ev,
-                              status:
-                                ev.status === "published"
-                                  ? "scheduled"
-                                  : "published",
-                            })
-                          }
+                          variant="outline"
+                          className="text-xs sm:text-sm"
+                          onClick={() => {
+                            const newStatus = ev.status === "published" ? "scheduled" : "published";
+                            handleUpdateCalendarEvent({ ...ev, status: newStatus as CalendarEvent["status"] });
+                          }}
                         >
                           {ev.status === "published" ? "Unpublish" : "Publish"}
                         </Button>
                       </div>
-                    </div>
-                    {ev.copy && (
-                      <div className="mt-2 text-sm text-muted-foreground whitespace-pre-wrap">
-                        {ev.copy}
-                      </div>
-                    )}
-                    {ev.attachments && ev.attachments.length > 0 && (
-                      <div className="mt-2 grid grid-cols-3 gap-2">
-                        {ev.attachments.map((att) => (
-                          <div
-                            key={att.id}
-                            className="rounded-md overflow-hidden border bg-black/20"
-                          >
-                            {att.kind === "image" && (
-                              <img
-                                src={att.url}
-                                alt="attachment"
-                                className="w-full h-24 object-cover"
-                              />
-                            )}
-                            {att.kind === "video" && (
-                              <video
-                                src={att.url}
-                                className="w-full h-24 object-cover"
-                                controls
-                                preload="metadata"
-                              />
-                            )}
-                            {att.kind !== "image" && att.kind !== "video" && (
-                              <a
-                                href={att.url}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="text-xs p-2 inline-block w-full truncate"
-                              >
-                                {att.url}
-                              </a>
-                            )}
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                ))
-              )}
-            </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            )}
+
+            {/* Quick add form */}
+            {!showEditForm && (
+              <div className="border-t pt-4">
+                <h3 className="font-semibold text-sm mb-3">Add New Content</h3>
+                <DateQuickAddForm
+                  onAdd={async (payload) => {
+                    console.log('[DEBUG] Add calendar event started', payload.title);
+                    if (!selectedProject) {
+                      alert("Please select a project first");
+                      return;
+                    }
+                    const baseDate = dateDetails?.date || new Date();
+                    console.log('[DEBUG] baseDate from dateDetails:', baseDate?.toISOString(), 'or current:', new Date().toISOString());
+                    const eventDate = new Date(
+                      baseDate.getFullYear(),
+                      baseDate.getMonth(),
+                      baseDate.getDate(),
+                    )
+                      .toISOString()
+                      .slice(0, 10);
+                    console.log('[DEBUG] Final eventDate to create:', eventDate);
+
+                    try {
+                      console.log('[DEBUG] Creating calendar event...');
+                      await (
+                        await import("@/app/actions/calendar-events")
+                      ).createCalendarEvent({
+                        project_id: selectedProject.id,
+                        event_date: eventDate,
+                        title: payload.title,
+                        copy: payload.copy,
+                        caption: payload.caption,
+                        platform: payload.platform,
+                        media_type: payload.media_type,
+                        format_type: payload.format_type,
+                        drive_link: payload.drive_link,
+                        status: payload.status,
+                        attachments: payload.attachments,
+                      });
+
+                      console.log('[DEBUG] Event created, fetching month events...');
+                      const refreshed = await fetchMonthEvents(baseDate);
+                      console.log('[DEBUG] Refreshed events:', refreshed?.length);
+
+                      // Refresh the day details list with the latest data for this date
+                      setDateDetails((prev) => {
+                        const date = prev?.date || baseDate;
+                        const iso = date.toISOString().slice(0, 10);
+                        const eventsForDay = (refreshed || calendarEvents).filter(
+                          (e) => (e.date || "").slice(0, 10) === iso,
+                        );
+                        console.log('[DEBUG] Events for day:', eventsForDay.length);
+                        return { date, events: eventsForDay };
+                      });
+
+                      console.log('[DEBUG] Add calendar event complete');
+                      // Close the dialog after successful add (optional - user can keep adding)
+                      // setIsDateDetailsOpen(false);
+                    } catch (e) {
+                      console.error('[DEBUG] Add calendar event error:', e);
+                      alert("Failed to add content. Please try again.");
+                    }
+                  }}
+                />
+              </div>
+            )}
+
+            {/* Edit Form */}
+            {showEditForm && editingEvent && (
+              <>
+                <EditEventForm
+                  event={editingEvent}
+                  onUpdate={async (updatedEvent) => {
+                    try {
+                      await (
+                        await import("@/app/actions/calendar-events")
+                      ).updateCalendarEvent(updatedEvent.id, updatedEvent);
+
+                      const refreshDate =
+                        dateDetails?.date ||
+                        (updatedEvent.date ? new Date(updatedEvent.date) : new Date());
+
+                      const refreshed = await fetchMonthEvents(refreshDate);
+
+                      // Refresh the day detail list to reflect latest edits
+                      setDateDetails((prev) => {
+                        const date = prev?.date || refreshDate;
+                        const iso = date.toISOString().slice(0, 10);
+                        const eventsForDay = (refreshed || calendarEvents).filter(
+                          (e) => (e.date || "").slice(0, 10) === iso,
+                        );
+                        return { date, events: eventsForDay };
+                      });
+
+                      setShowEditForm(false);
+                      setEditingEvent(null);
+                    } catch (e) {
+                      console.error(e);
+                      alert("Failed to update event. Please try again.");
+                    }
+                  }}
+                  onCancel={() => {
+                    setShowEditForm(false);
+                    setEditingEvent(null);
+                  }}
+                />
+              </>
+            )}
           </div>
         </DialogContent>
       </Dialog>

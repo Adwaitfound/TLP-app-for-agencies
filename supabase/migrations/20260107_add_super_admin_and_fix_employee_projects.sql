@@ -37,10 +37,9 @@ BEGIN
     END IF;
 END $$;
 
--- ===== STEP 3: Set adwait@thelostproject.in as super admin =====
-UPDATE users 
-SET role = 'super_admin'
-WHERE email = 'adwait@thelostproject.in';
+-- NOTE: Setting a user to 'super_admin' immediately after adding a new enum value
+-- in the same migration can trigger 'unsafe use of new value' errors.
+-- We'll perform this role update in a separate migration after enum changes are committed.
 
 -- If the user doesn't exist, create them (you'll need to create auth user separately)
 DO $$
@@ -62,9 +61,6 @@ DROP POLICY IF EXISTS "projects_fallback_read" ON projects;
 CREATE POLICY "Allow users to view projects" ON projects
     FOR SELECT
     USING (
-        -- Super admins can see everything
-        (SELECT role FROM users WHERE id = auth.uid()) = 'super_admin'
-        OR
         -- Admins can see everything
         (SELECT role FROM users WHERE id = auth.uid()) = 'admin'
         OR
@@ -91,7 +87,7 @@ DROP POLICY IF EXISTS "Authenticated users can insert projects" ON projects;
 CREATE POLICY "Allow authorized users to insert projects" ON projects
     FOR INSERT
     WITH CHECK (
-        (SELECT role FROM users WHERE id = auth.uid()) IN ('super_admin', 'admin', 'project_manager')
+        (SELECT role FROM users WHERE id = auth.uid()) IN ('admin', 'project_manager')
     );
 
 -- ===== STEP 6: Update UPDATE policies to include super_admin =====
@@ -99,10 +95,10 @@ DROP POLICY IF EXISTS "Admins and PMs can update projects" ON projects;
 CREATE POLICY "Allow authorized users to update projects" ON projects
     FOR UPDATE
     USING (
-        (SELECT role FROM users WHERE id = auth.uid()) IN ('super_admin', 'admin', 'project_manager')
+        (SELECT role FROM users WHERE id = auth.uid()) IN ('admin', 'project_manager')
     )
     WITH CHECK (
-        (SELECT role FROM users WHERE id = auth.uid()) IN ('super_admin', 'admin', 'project_manager')
+        (SELECT role FROM users WHERE id = auth.uid()) IN ('admin', 'project_manager')
     );
 
 -- ===== STEP 7: Update DELETE policies to include super_admin =====
@@ -110,7 +106,7 @@ DROP POLICY IF EXISTS "Allow admins to delete projects" ON projects;
 CREATE POLICY "Allow authorized users to delete projects" ON projects
     FOR DELETE
     USING (
-        (SELECT role FROM users WHERE id = auth.uid()) IN ('super_admin', 'admin', 'project_manager')
+        (SELECT role FROM users WHERE id = auth.uid()) IN ('admin', 'project_manager')
     );
 
 -- ===== STEP 8: Fix users table RLS policies =====
@@ -125,48 +121,30 @@ DROP POLICY IF EXISTS "Users can update own record" ON users;
 CREATE POLICY "Allow users to update own record" ON users
     FOR UPDATE
     USING (
-        -- Users can update their own record
         auth.uid() = id
-        OR
-        -- Super admin can update any user
-        (SELECT role FROM users WHERE id = auth.uid()) = 'super_admin'
-        OR
-        -- Admins can update non-admin users
-        (
+        OR (
             (SELECT role FROM users WHERE id = auth.uid()) = 'admin'
-            AND (SELECT role FROM users WHERE users.id = id) NOT IN ('admin', 'super_admin')
+            AND (SELECT role FROM users WHERE users.id = id) <> 'admin'
         )
     );
 
 -- Add DELETE policy for users (super admin only)
+-- Deferred delete policy for users to be added in a follow-up migration
 DROP POLICY IF EXISTS "Allow super admin to delete users" ON users;
-CREATE POLICY "Allow super admin to delete users" ON users
-    FOR DELETE
-    USING (
-        -- Only super admin can delete users
-        (SELECT role FROM users WHERE id = auth.uid()) = 'super_admin'
-    );
 
 -- ===== STEP 9: Update sub_projects policies for employees =====
 DROP POLICY IF EXISTS "Authenticated users can view sub_projects" ON sub_projects;
 CREATE POLICY "Allow users to view sub_projects" ON sub_projects
     FOR SELECT
     USING (
-        -- Super admin, admin, or PM can see all
-        (SELECT role FROM users WHERE id = auth.uid()) IN ('super_admin', 'admin', 'project_manager')
-        OR
-        -- Employees can see sub-projects of their assigned projects
-        EXISTS (
+        (SELECT role FROM users WHERE id = auth.uid()) IN ('admin', 'project_manager')
+        OR EXISTS (
             SELECT 1 FROM project_team 
             WHERE project_team.project_id = sub_projects.parent_project_id 
             AND project_team.user_id = auth.uid()
         )
-        OR
-        -- Users assigned to the sub-project
-        sub_projects.assigned_to = auth.uid()
-        OR
-        -- Clients can see sub-projects of their projects
-        EXISTS (
+        OR sub_projects.assigned_to = auth.uid()
+        OR EXISTS (
             SELECT 1 FROM projects p
             JOIN clients c ON p.client_id = c.id
             WHERE p.id = sub_projects.parent_project_id
@@ -179,18 +157,13 @@ DROP POLICY IF EXISTS "Authenticated users can view project team" ON project_tea
 CREATE POLICY "Allow users to view project team" ON project_team
     FOR SELECT
     USING (
-        -- Super admin, admin, or PM can see all
-        (SELECT role FROM users WHERE id = auth.uid()) IN ('super_admin', 'admin', 'project_manager')
-        OR
-        -- Employees can see team members of their assigned projects
-        EXISTS (
+        (SELECT role FROM users WHERE id = auth.uid()) IN ('admin', 'project_manager')
+        OR EXISTS (
             SELECT 1 FROM project_team pt 
             WHERE pt.project_id = project_team.project_id 
             AND pt.user_id = auth.uid()
         )
-        OR
-        -- Clients can see team of their projects
-        EXISTS (
+        OR EXISTS (
             SELECT 1 FROM projects p
             JOIN clients c ON p.client_id = c.id
             WHERE p.id = project_team.project_id
@@ -204,7 +177,7 @@ DROP POLICY IF EXISTS "Enable insert for admins" ON project_team;
 CREATE POLICY "Allow authorized users to manage project team" ON project_team
     FOR INSERT
     WITH CHECK (
-        (SELECT role FROM users WHERE id = auth.uid()) IN ('super_admin', 'admin', 'project_manager')
+        (SELECT role FROM users WHERE id = auth.uid()) IN ('admin', 'project_manager')
     );
 
 -- Update UPDATE policy for project_team
@@ -212,7 +185,7 @@ DROP POLICY IF EXISTS "Enable update for admins" ON project_team;
 CREATE POLICY "Allow authorized users to update project team" ON project_team
     FOR UPDATE
     USING (
-        (SELECT role FROM users WHERE id = auth.uid()) IN ('super_admin', 'admin', 'project_manager')
+        (SELECT role FROM users WHERE id = auth.uid()) IN ('admin', 'project_manager')
     );
 
 -- Update DELETE policy for project_team
@@ -220,7 +193,7 @@ DROP POLICY IF EXISTS "Enable delete for admins" ON project_team;
 CREATE POLICY "Allow authorized users to delete from project team" ON project_team
     FOR DELETE
     USING (
-        (SELECT role FROM users WHERE id = auth.uid()) IN ('super_admin', 'admin', 'project_manager')
+        (SELECT role FROM users WHERE id = auth.uid()) IN ('admin', 'project_manager')
     );
 
 -- ===== STEP 11: Update milestones policies for employees =====
@@ -228,18 +201,13 @@ DROP POLICY IF EXISTS "Authenticated users can view milestones" ON milestones;
 CREATE POLICY "Allow users to view milestones" ON milestones
     FOR SELECT
     USING (
-        -- Super admin, admin, or PM can see all
-        (SELECT role FROM users WHERE id = auth.uid()) IN ('super_admin', 'admin', 'project_manager')
-        OR
-        -- Employees can see milestones of their assigned projects
-        EXISTS (
+        (SELECT role FROM users WHERE id = auth.uid()) IN ('admin', 'project_manager')
+        OR EXISTS (
             SELECT 1 FROM project_team 
             WHERE project_team.project_id = milestones.project_id 
             AND project_team.user_id = auth.uid()
         )
-        OR
-        -- Clients can see milestones of their projects
-        EXISTS (
+        OR EXISTS (
             SELECT 1 FROM projects p
             JOIN clients c ON p.client_id = c.id
             WHERE p.id = milestones.project_id
@@ -252,18 +220,13 @@ DROP POLICY IF EXISTS "Admins and PMs can view project files" ON project_files;
 CREATE POLICY "Allow users to view project files" ON project_files
     FOR SELECT
     USING (
-        -- Super admin, admin, or PM can see all
-        (SELECT role FROM users WHERE id = auth.uid()) IN ('super_admin', 'admin', 'project_manager')
-        OR
-        -- Employees can see files of their assigned projects
-        EXISTS (
+        (SELECT role FROM users WHERE id = auth.uid()) IN ('admin', 'project_manager')
+        OR EXISTS (
             SELECT 1 FROM project_team 
             WHERE project_team.project_id = project_files.project_id 
             AND project_team.user_id = auth.uid()
         )
-        OR
-        -- Clients can see files of their projects
-        EXISTS (
+        OR EXISTS (
             SELECT 1 FROM projects p
             JOIN clients c ON p.client_id = c.id
             WHERE p.id = project_files.project_id
@@ -276,18 +239,13 @@ DROP POLICY IF EXISTS "Authenticated users can view comments" ON project_comment
 CREATE POLICY "Allow users to view comments" ON project_comments
     FOR SELECT
     USING (
-        -- Super admin, admin, or PM can see all
-        (SELECT role FROM users WHERE id = auth.uid()) IN ('super_admin', 'admin', 'project_manager')
-        OR
-        -- Employees can see comments on their assigned projects
-        EXISTS (
+        (SELECT role FROM users WHERE id = auth.uid()) IN ('admin', 'project_manager')
+        OR EXISTS (
             SELECT 1 FROM project_team 
             WHERE project_team.project_id = project_comments.project_id 
             AND project_team.user_id = auth.uid()
         )
-        OR
-        -- Clients can see comments on their projects
-        EXISTS (
+        OR EXISTS (
             SELECT 1 FROM projects p
             JOIN clients c ON p.client_id = c.id
             WHERE p.id = project_comments.project_id
@@ -300,18 +258,13 @@ DROP POLICY IF EXISTS "Authenticated users can insert comments" ON project_comme
 CREATE POLICY "Allow users to insert comments" ON project_comments
     FOR INSERT
     WITH CHECK (
-        -- Super admin, admin, or PM can comment on any project
-        (SELECT role FROM users WHERE id = auth.uid()) IN ('super_admin', 'admin', 'project_manager')
-        OR
-        -- Employees can comment on their assigned projects
-        EXISTS (
+        (SELECT role FROM users WHERE id = auth.uid()) IN ('admin', 'project_manager')
+        OR EXISTS (
             SELECT 1 FROM project_team 
             WHERE project_team.project_id = project_comments.project_id 
             AND project_team.user_id = auth.uid()
         )
-        OR
-        -- Clients can comment on their projects
-        EXISTS (
+        OR EXISTS (
             SELECT 1 FROM projects p
             JOIN clients c ON p.client_id = c.id
             WHERE p.id = project_comments.project_id
@@ -326,44 +279,32 @@ DROP POLICY IF EXISTS "employee_tasks_select" ON employee_tasks;
 CREATE POLICY "Allow employees to view their own tasks" ON employee_tasks
     FOR SELECT
     USING (
-        -- Employees can view their own tasks
         user_id = auth.uid()
-        OR
-        -- Super admin, admin, or PM can view all tasks
-        (SELECT role FROM users WHERE id = auth.uid()) IN ('super_admin', 'admin', 'project_manager')
+        OR (SELECT role FROM users WHERE id = auth.uid()) IN ('admin', 'project_manager', 'super_admin')
     );
 
 DROP POLICY IF EXISTS "employee_tasks_insert" ON employee_tasks;
 CREATE POLICY "Allow employees to create tasks" ON employee_tasks
     FOR INSERT
     WITH CHECK (
-        -- Employees can create their own tasks
         user_id = auth.uid()
-        OR
-        -- Super admin, admin, or PM can create tasks for anyone
-        (SELECT role FROM users WHERE id = auth.uid()) IN ('super_admin', 'admin', 'project_manager')
+        OR (SELECT role FROM users WHERE id = auth.uid()) IN ('admin', 'project_manager', 'super_admin')
     );
 
 DROP POLICY IF EXISTS "employee_tasks_update" ON employee_tasks;
 CREATE POLICY "Allow employees to update their own tasks" ON employee_tasks
     FOR UPDATE
     USING (
-        -- Employees can update their own tasks
         user_id = auth.uid()
-        OR
-        -- Super admin, admin, or PM can update any task
-        (SELECT role FROM users WHERE id = auth.uid()) IN ('super_admin', 'admin', 'project_manager')
+        OR (SELECT role FROM users WHERE id = auth.uid()) IN ('admin', 'project_manager', 'super_admin')
     );
 
 DROP POLICY IF EXISTS "employee_tasks_delete" ON employee_tasks;
 CREATE POLICY "Allow employees to delete their own tasks" ON employee_tasks
     FOR DELETE
     USING (
-        -- Employees can delete their own tasks
         user_id = auth.uid()
-        OR
-        -- Super admin, admin, or PM can delete any task
-        (SELECT role FROM users WHERE id = auth.uid()) IN ('super_admin', 'admin', 'project_manager')
+        OR (SELECT role FROM users WHERE id = auth.uid()) IN ('admin', 'project_manager', 'super_admin')
     );
 
 -- ===== SUMMARY =====

@@ -356,6 +356,10 @@ export async function sendCommentNotification(data: CommentNotificationData): Pr
     return;
   }
 
+  console.log(
+    `📧 sendCommentNotification -> to=${data.recipientEmail}, from=${RESEND_FROM_EMAIL}, appUrl=${process.env.NEXT_PUBLIC_APP_URL || "unset"}`,
+  );
+
   console.log(`📧 Sending comment notification to ${data.recipientEmail}`);
 
   const htmlContent = `

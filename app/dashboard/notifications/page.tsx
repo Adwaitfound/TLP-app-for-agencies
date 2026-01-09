@@ -79,36 +79,23 @@ export default function NotificationsPage() {
             <p className="text-sm text-muted-foreground">No notifications</p>
           ) : (
             items.map((n) => {
-              const isMention = n.type === 'chat_mention';
-              const isChatMessage = n.type === 'chat_message' || isMention;
-              
               const content = (
                 <div
                   className={`p-3 border rounded-lg ${
-                    isMention 
-                      ? n.read 
-                        ? "bg-red-50 border-red-200 dark:bg-red-950/20 dark:border-red-900" 
-                        : "bg-red-100 border-red-300 dark:bg-red-950/40 dark:border-red-800"
-                      : n.read 
-                        ? "bg-background" 
-                        : "bg-accent/20"
-                  } ${isChatMessage ? 'cursor-pointer hover:shadow-md transition-shadow' : ''}`}
+                    n.read 
+                      ? "bg-background" 
+                      : "bg-accent/20"
+                  }`}
                 >
                   <div className="flex items-center justify-between text-xs text-muted-foreground">
-                    <span className={isMention ? "text-red-600 dark:text-red-400 font-semibold" : ""}>
-                      {isMention ? "💬 Mention" : isChatMessage ? "💬 Chat" : n.type}
-                    </span>
+                    <span>{n.type}</span>
                     <span>{new Date(n.created_at).toLocaleString()}</span>
                   </div>
-                  <p className={`text-sm ${isMention ? "font-medium" : ""}`}>{n.message}</p>
+                  <p className="text-sm">{n.message}</p>
                 </div>
               );
 
-              return isChatMessage ? (
-                <Link key={n.id} href="/dashboard/chat">
-                  {content}
-                </Link>
-              ) : (
+              return (
                 <div key={n.id}>
                   {content}
                 </div>

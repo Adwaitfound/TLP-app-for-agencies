@@ -199,7 +199,7 @@ export default function PaymentsPage() {
                       p.status === "completed"
                     );
                   })
-                  .reduce((sum, p) => sum + p.amount, 0),
+                  .reduce((sum, p) => sum + (Number(p.amount) || 0), 0),
               )}
             </div>
             <p className="text-xs text-muted-foreground">Payments made</p>

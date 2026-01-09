@@ -240,7 +240,7 @@ export default function AllFilesPage() {
     );
   }
 
-  if (!user || (user.role !== "admin" && user.role !== "project_manager")) {
+  if (!user || (user.role !== "admin" && user.role !== "project_manager" && user.role !== "super_admin")) {
     return (
       <div className="flex items-center justify-center h-96">
         <p className="text-muted-foreground">Access denied</p>

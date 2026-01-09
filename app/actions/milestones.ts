@@ -3,7 +3,10 @@
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import type { MilestoneStatus } from "@/types";
 
-async function ensureAdminRole(supabase: Awaited<ReturnType<typeof createClient>>, userId?: string) {
+async function ensureAdminRole(
+  supabase: Awaited<ReturnType<typeof createClient>>, 
+  userId?: string,
+) {
   if (!userId) throw new Error("Unauthorized");
   const { data, error } = await (await supabase)
     .from("users")
@@ -11,7 +14,8 @@ async function ensureAdminRole(supabase: Awaited<ReturnType<typeof createClient>
     .eq("id", userId)
     .single();
   if (error) throw new Error("Failed to verify role");
-  if (!data || data.role !== "admin") throw new Error("Access restricted");
+  const allowed = ["admin", "project_manager", "super_admin", "agency_admin"];
+  if (!data || !allowed.includes(data.role)) throw new Error("Access restricted");
 }
 
 export async function createMilestone(payload: {
@@ -38,7 +42,6 @@ export async function createMilestone(payload: {
         description: payload.description || null,
         due_date: payload.due_date || null,
         status: payload.status || "pending",
-        created_by_email: user.email,
       })
       .select("*")
       .single();

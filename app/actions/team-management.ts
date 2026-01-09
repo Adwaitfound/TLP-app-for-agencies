@@ -204,3 +204,80 @@ export async function getProjectTeamMembers(projectId: string) {
     };
   }
 }
+
+export async function getTeamsForProjects(projectIds: string[]) {
+  try {
+    console.log("[SERVER] getTeamsForProjects called for:", projectIds);
+
+    const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+    if (!url || !key) {
+      throw new Error("Server configuration error");
+    }
+
+    const supabaseAdmin = createClient(url, key, {
+      auth: {
+        autoRefreshToken: false,
+        persistSession: false,
+      },
+    });
+
+    if (!projectIds || projectIds.length === 0) {
+      return { success: true, data: [] };
+    }
+
+    // Fetch all team assignments for provided projects in one query
+    const { data: teamRows, error: teamError } = await supabaseAdmin
+      .from("project_team")
+      .select("project_id, user_id, role")
+      .in("project_id", projectIds);
+
+    if (teamError) {
+      console.error("[SERVER] Error fetching team rows:", teamError);
+      throw teamError;
+    }
+
+    if (!teamRows || teamRows.length === 0) {
+      console.log("[SERVER] No team rows found for projects");
+      return { success: true, data: [] };
+    }
+
+    // Unique user IDs to fetch
+    const uniqueUserIds = Array.from(
+      new Set(teamRows.map((r: any) => r.user_id).filter(Boolean)),
+    );
+
+    const { data: usersData, error: usersError } = await supabaseAdmin
+      .from("users")
+      .select("id, email, full_name, avatar_url, role")
+      .in("id", uniqueUserIds);
+
+    if (usersError) {
+      console.error("[SERVER] Error fetching users:", usersError);
+      throw usersError;
+    }
+
+    const usersMap = (usersData || []).reduce((acc: any, user: any) => {
+      acc[user.id] = user;
+      return acc;
+    }, {});
+
+    const merged = (teamRows || []).map((row: any) => ({
+      project_id: row.project_id,
+      user_id: row.user_id,
+      role: row.role || null,
+      user: usersMap[row.user_id] || null,
+    }));
+
+    console.log("[SERVER] getTeamsForProjects merged count:", merged.length);
+    return { success: true, data: merged };
+  } catch (error: any) {
+    console.error("[SERVER] Unexpected error (getTeamsForProjects):", error);
+    return {
+      success: false,
+      error: error?.message || "An unexpected error occurred",
+      data: [],
+    };
+  }
+}
