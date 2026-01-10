@@ -222,6 +222,7 @@ export default function ClientDashboardTabs() {
     if (
       nextTab === "dashboard" ||
       nextTab === "projects" ||
+      nextTab === "calendar" ||
       nextTab === "invoices" ||
       nextTab === "comments"
     ) {
@@ -235,6 +236,7 @@ export default function ClientDashboardTabs() {
     const nextTab =
       nextValue === "dashboard" ||
       nextValue === "projects" ||
+      nextValue === "calendar" ||
       nextValue === "invoices" ||
       nextValue === "comments"
         ? nextValue
@@ -1272,10 +1274,20 @@ export default function ClientDashboardTabs() {
 
         {/* Content Calendar Tab */}
         <TabsContent value="calendar" className="space-y-4">
-          <ClientContentCalendar 
-            clientId={clientData?.id || ""} 
-            projectIds={projects.map(p => p.id)} 
-          />
+          {(() => {
+            const projectIdsList = projects.map(p => p.id);
+            console.log('[ClientDashboard] Rendering calendar with:', {
+              clientId: clientData?.id,
+              projectsCount: projects.length,
+              projectIds: projectIdsList
+            });
+            return (
+              <ClientContentCalendar 
+                clientId={clientData?.id || ""} 
+                projectIds={projectIdsList} 
+              />
+            );
+          })()}
         </TabsContent>
 
         {/* Invoices Tab */}

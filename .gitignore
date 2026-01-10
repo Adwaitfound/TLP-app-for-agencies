@@ -28,6 +28,22 @@
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+
+# Tauri/Desktop build artifacts (not needed for web deployment)
+src-tauri/target/
+src-tauri/dist/
+
+# Android build artifacts (not needed for web deployment)
+android/app/build/
+android.bak.*/
+
+# Playwright reports (not needed for web deployment)
+playwright-report/
+
+# macOS build artifacts
+*.dmg
+dist-tauri/
+AppKit/
 .pnpm-debug.log*
 
 # env files (can opt-in for committing if needed)

@@ -1,5 +1,4 @@
 import { NextResponse } from "next/server";
-import { getProvisioningStatus } from "@/lib/provisioning/orchestrator";
 
 const ALLOWED_EMAILS = ["adwait@thelostproject.in"];
 
@@ -21,7 +20,7 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: "requestId is required" }, { status: 400 });
     }
 
-    const status = await getProvisioningStatus(requestId);
+    const status = await (await import("@/lib/provisioning/orchestrator")).getProvisioningStatus(requestId);
 
     return NextResponse.json(status);
 

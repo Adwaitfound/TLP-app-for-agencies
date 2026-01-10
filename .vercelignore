@@ -1,48 +1,73 @@
-# Tauri (Desktop app)
+# Exclude large native and mobile build artifacts from Vercel functions
+
 src-tauri/
-src-tauri/**
+android/
+android.bak.\*/
+playwright-report/
+
+# Common bulky files not needed at runtime
+
+_.log
+_.zip
+_.tar.gz
+_.dmg
+_.apk
+_.aab
+.DS_Store
+
+# Tauri (Desktop app)
+
+src-tauri/
+src-tauri/\*\*
 
 # Android
+
 android/
-android.bak.*
-android/**
+android.bak.\*
+android/\*\*
 
 # Build artifacts
-*.apk
-*.dmg
-*.app
+
+_.apk
+_.dmg
+\*.app
 dist/
 build/
 out/
 target/
 
 # Development
-*.log
+
+\*.log
 .DS_Store
 node_modules/.cache
 
 # Documentation
-*.md
+
+\*.md
 !README.md
 
 # Scripts
-*.sh
-build-*.sh
-check-*.sh
-configure-*.sh
+
+_.sh
+build-_.sh
+check-_.sh
+configure-_.sh
 
 # SQL files
-*.sql
+
+\*.sql
 
 # Temporary scripts
-reconstruct-*.mjs
-test-*.mjs
-test-*.js
-check-*.mjs
-create-*.mjs
-run-*.mjs
-sync-*.mjs
-execute-*.js
-extract-*.mjs
-populate-*.mjs
-*.txt
+
+reconstruct-_.mjs
+test-_.mjs
+test-_.js
+check-_.mjs
+create-_.mjs
+run-_.mjs
+sync-_.mjs
+execute-_.js
+extract-_.mjs
+populate-_.mjs
+\*.txt

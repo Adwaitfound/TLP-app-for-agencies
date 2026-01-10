@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
-import { provisionAgency } from "@/lib/provisioning/orchestrator";
 
 const ALLOWED_EMAILS = ["adwait@thelostproject.in"];
 
@@ -65,11 +64,11 @@ export async function POST(request: Request) {
       tier,
     });
 
-    // Start provisioning in background
-    // We return immediately and let provisioning run async
+    // Start provisioning in background via dynamic import to avoid bundling heavy modules
     setImmediate(async () => {
       try {
-        await provisionAgency({
+        const orchestrator = await import("@/lib/provisioning/orchestrator");
+        await orchestrator.provisionAgency({
           requestId: reqRow.id,
           agencyName: reqRow.agency_name!,
           ownerEmail: reqRow.admin_email!,
