@@ -1,0 +1,719 @@
+"use client";
+
+import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Badge } from "@/components/ui/badge";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { Eye, FileText, Loader2, Plus, Trash2, Download } from "lucide-react";
+import { createClient } from "@/lib/supabase/client";
+import { useOrg } from "@/contexts/org-context";
+import { uploadInvoiceFile } from "@/app/actions/upload-invoice";
+import {
+  fetchInvoicesDataV2,
+  updateInvoiceStatusV2,
+  deleteInvoiceV2,
+  updateInvoiceSharedStatusV2,
+} from "@/app/actions/invoice-operations-v2";
+import { getSignedInvoiceUrl } from "@/app/actions/invoice-operations";
+
+interface Invoice {
+  id: string;
+  invoice_number: string;
+  client_id: string;
+  project_id?: string;
+  invoice_file_url: string;
+  created_at: string;
+  status: "draft" | "sent" | "paid" | "overdue" | "cancelled";
+  shared_with_client?: boolean;
+  saas_clients?: { company_name: string };
+  saas_projects?: { name: string };
+}
+
+interface Client {
+  id: string;
+  company_name: string;
+}
+
+interface Project {
+  id: string;
+  name: string;
+  client_id: string;
+  budget?: number;
+}
+
+type StatusKey = Invoice["status"];
+
+const statusConfig: Record<
+  StatusKey,
+  { label: string; variant: "secondary" | "default" | "destructive" }
+> = {
+  draft: { label: "Draft", variant: "secondary" },
+  sent: { label: "Sent", variant: "default" },
+  paid: { label: "Paid", variant: "default" },
+  overdue: { label: "Overdue", variant: "destructive" },
+  cancelled: { label: "Cancelled", variant: "secondary" },
+};
+
+export default function V2InvoicesPage() {
+  const { organization, member, loading: orgLoading } = useOrg();
+  const [invoices, setInvoices] = useState<Invoice[]>([]);
+  const [clients, setClients] = useState<Client[]>([]);
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const isSubmittingRef = useRef(false);
+  const toastTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const [toast, setToast] = useState<{
+    message: string;
+    type: "success" | "error";
+  } | null>(null);
+
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [selectedClientId, setSelectedClientId] = useState("");
+  const [selectedProjectId, setSelectedProjectId] = useState("");
+  const [invoiceNumber, setInvoiceNumber] = useState("");
+  const [invoiceTotal, setInvoiceTotal] = useState("");
+  const [invoiceTax, setInvoiceTax] = useState("");
+  const [invoiceDueDate, setInvoiceDueDate] = useState("");
+  const [invoiceIssueDate, setInvoiceIssueDate] = useState("");
+
+  const isAdmin = member?.role === "admin";
+
+  const showToast = useCallback(
+    (message: string, type: "success" | "error" = "success") => {
+      if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+      setToast({ message, type });
+      toastTimerRef.current = setTimeout(() => setToast(null), 3000);
+    },
+    []
+  );
+
+  const fetchData = useCallback(async () => {
+    if (!organization?.id) return;
+    
+    setLoading(true);
+    try {
+      const result = await fetchInvoicesDataV2(organization.id);
+      if (result.error) {
+        console.error("Fetch error:", result.error);
+        throw new Error(result.error);
+      }
+      setInvoices(result.invoices || []);
+      setClients(result.clients || []);
+      setProjects(result.projects || []);
+    } catch (error: any) {
+      console.error("Error loading invoices:", error);
+      showToast(error.message || "Failed to load invoices", "error");
+    } finally {
+      setLoading(false);
+    }
+  }, [organization?.id, showToast]);
+
+  useEffect(() => {
+    if (orgLoading) return;
+    if (!isAdmin) {
+      setLoading(false);
+      return;
+    }
+    void fetchData();
+  }, [orgLoading, isAdmin, fetchData]);
+
+  const filteredProjects = projects.filter(
+    (project) => !selectedClientId || project.client_id === selectedClientId
+  );
+
+  // Get selected project details for amount comparison
+  const selectedProject = selectedProjectId
+    ? projects.find((p) => p.id === selectedProjectId)
+    : null;
+  const projectBudget = selectedProject?.budget ? Number(selectedProject.budget) : 0;
+  const invoiceAmount = invoiceTotal ? Number(invoiceTotal) : 0;
+  const amountMatch =
+    projectBudget > 0 &&
+    invoiceAmount > 0 &&
+    Math.abs(projectBudget - invoiceAmount) < 0.01;
+  const amountDifference = Math.abs(projectBudget - invoiceAmount);
+
+  async function openSignedUrl(fileUrl: string, download?: boolean) {
+    const result = await getSignedInvoiceUrl(fileUrl);
+    if (result.error || !result.signedUrl) {
+      showToast(result.error || "Unable to generate signed URL", "error");
+      return;
+    }
+    if (download) {
+      const a = document.createElement("a");
+      a.href = result.signedUrl;
+      a.download = "invoice.pdf";
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      showToast("Download started", "success");
+    } else {
+      window.open(result.signedUrl, "_blank");
+      showToast("Opening invoice", "success");
+    }
+  }
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+
+    if (!organization?.id) {
+      showToast("Organization not found", "error");
+      return;
+    }
+
+    if (!isAdmin) {
+      alert("Access restricted to admins");
+      return;
+    }
+
+    if (isSubmittingRef.current) return;
+    if (!selectedFile) {
+      alert("Please select an invoice PDF to upload");
+      return;
+    }
+    if (!selectedClientId || !invoiceNumber.trim()) {
+      alert("Please fill in all required fields");
+      return;
+    }
+    if (
+      invoiceTotal &&
+      (isNaN(parseFloat(invoiceTotal)) || parseFloat(invoiceTotal) < 0)
+    ) {
+      alert("Please enter a valid total amount");
+      return;
+    }
+    if (!selectedFile.name.toLowerCase().endsWith(".pdf")) {
+      alert("Please upload a PDF file");
+      return;
+    }
+
+    isSubmittingRef.current = true;
+    setSubmitting(true);
+    const supabase = createClient();
+
+    try {
+      // Upload file via server action
+      const formData = new FormData();
+      formData.append("file", selectedFile);
+      formData.append("invoiceNumber", invoiceNumber);
+
+      const uploadResult = await uploadInvoiceFile(formData);
+      if (!uploadResult.success || uploadResult.error) {
+        throw new Error(uploadResult.error || "Upload failed");
+      }
+
+      const { publicUrl } = uploadResult;
+
+      const today = new Date().toISOString().split("T")[0];
+      const { data, error } = await supabase
+        .from("saas_invoices")
+        .insert({
+          org_id: organization.id,
+          client_id: selectedClientId,
+          project_id: selectedProjectId || null,
+          invoice_number: invoiceNumber,
+          invoice_file_url: publicUrl,
+          issue_date: invoiceIssueDate || today,
+          due_date: invoiceDueDate || today,
+          amount: invoiceTotal ? parseFloat(invoiceTotal) : null,
+          tax_type: invoiceTax || null,
+          status: "draft",
+        })
+        .select("*, saas_clients(company_name), saas_projects(name)")
+        .single();
+
+      if (error) {
+        console.error("DB insert error details:", error);
+        throw error;
+      }
+      if (data) setInvoices((prev) => [data, ...prev]);
+
+      showToast("Invoice uploaded", "success");
+
+      setIsDialogOpen(false);
+      setSelectedFile(null);
+      setSelectedClientId("");
+      setSelectedProjectId("");
+      setInvoiceNumber("");
+      setInvoiceTotal("");
+      setInvoiceTax("");
+      setInvoiceDueDate("");
+      setInvoiceIssueDate("");
+    } catch (error: any) {
+      console.error("Error uploading invoice:", error);
+      showToast(error.message || "Failed to upload invoice", "error");
+    } finally {
+      setSubmitting(false);
+      isSubmittingRef.current = false;
+    }
+  }
+
+  async function handleDelete(invoiceId: string, fileUrl: string) {
+    if (!organization?.id) return;
+    if (!confirm("Are you sure you want to delete this invoice?")) return;
+
+    try {
+      const result = await deleteInvoiceV2(organization.id, invoiceId);
+      if (result.error) {
+        throw new Error(result.error);
+      }
+      setInvoices((prev) => prev.filter((inv) => inv.id !== invoiceId));
+      showToast("Invoice deleted", "success");
+    } catch (error: any) {
+      console.error("Error deleting invoice:", error);
+      showToast(error.message || "Failed to delete invoice", "error");
+    }
+  }
+
+  if (orgLoading) {
+    return (
+      <div className="flex h-96 items-center justify-center">
+        <p className="text-muted-foreground">Loading...</p>
+      </div>
+    );
+  }
+
+  if (!isAdmin) {
+    return (
+      <div className="flex h-96 items-center justify-center">
+        <div className="max-w-md space-y-2 text-center">
+          <h2 className="text-xl font-semibold">Access restricted</h2>
+          <p className="text-sm text-muted-foreground">
+            Only admins can manage invoices here.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      {toast ? (
+        <div
+          className={`fixed bottom-4 right-4 z-50 rounded-md px-4 py-3 shadow-lg text-sm text-white ${
+            toast.type === "success" ? "bg-green-600" : "bg-red-600"
+          }`}
+          role="status"
+        >
+          {toast.message}
+        </div>
+      ) : null}
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-3xl font-bold tracking-tight">Invoices</h2>
+          <p className="text-muted-foreground">
+            Upload and manage client invoices
+          </p>
+        </div>
+        <Button onClick={() => setIsDialogOpen(true)}>
+          <Plus className="mr-2 h-4 w-4" />
+          Upload Invoice
+        </Button>
+      </div>
+
+      <div className="grid gap-4 md:grid-cols-3">
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">
+              Total Invoices
+            </CardTitle>
+            <FileText className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{invoices.length}</div>
+          </CardContent>
+        </Card>
+      </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>All Invoices</CardTitle>
+          <CardDescription>View and manage uploaded invoices</CardDescription>
+        </CardHeader>
+        <CardContent>
+          {loading ? (
+            <div className="flex items-center justify-center py-8">
+              <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+            </div>
+          ) : invoices.length === 0 ? (
+            <div className="py-12 text-center">
+              <FileText className="mx-auto mb-4 h-12 w-12 text-muted-foreground opacity-50" />
+              <p className="text-muted-foreground">No invoices uploaded yet</p>
+            </div>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Invoice #</TableHead>
+                  <TableHead>Client</TableHead>
+                  <TableHead>Project</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Shared with Client</TableHead>
+                  <TableHead>Uploaded</TableHead>
+                  <TableHead className="text-right">Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {invoices.map((invoice) => (
+                  <TableRow key={invoice.id}>
+                    <TableCell className="font-medium">
+                      {invoice.invoice_number}
+                    </TableCell>
+                    <TableCell>{invoice.saas_clients?.company_name}</TableCell>
+                    <TableCell>
+                      {invoice.saas_projects?.name || (
+                        <span className="text-muted-foreground">—</span>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      <Select
+                        value={invoice.status}
+                        onValueChange={(newStatus) =>
+                          updateInvoiceStatusV2(
+                            organization!.id,
+                            invoice.id,
+                            newStatus
+                          ).then((result) => {
+                            if (result.error) {
+                              showToast(result.error, "error");
+                            } else if (result.invoice) {
+                              setInvoices((prev) =>
+                                prev.map((inv) =>
+                                  inv.id === invoice.id
+                                    ? { ...inv, status: newStatus as any }
+                                    : inv
+                                )
+                              );
+                              showToast("Status updated", "success");
+                            }
+                          })
+                        }
+                      >
+                        <SelectTrigger className="w-auto border-0 bg-transparent">
+                          <Badge variant={statusConfig[invoice.status].variant}>
+                            {statusConfig[invoice.status].label}
+                          </Badge>
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="draft">Draft</SelectItem>
+                          <SelectItem value="sent">Sent</SelectItem>
+                          <SelectItem value="paid">Paid</SelectItem>
+                          <SelectItem value="overdue">Overdue</SelectItem>
+                          <SelectItem value="cancelled">Cancelled</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </TableCell>
+                    <TableCell>
+                      <input
+                        type="checkbox"
+                        checked={invoice.shared_with_client || false}
+                        onChange={(e) =>
+                          updateInvoiceSharedStatusV2(
+                            organization!.id,
+                            invoice.id,
+                            e.target.checked
+                          ).then((result) => {
+                            if (result.error) {
+                              showToast(result.error, "error");
+                            } else if (result.invoice) {
+                              setInvoices((prev) =>
+                                prev.map((inv) =>
+                                  inv.id === invoice.id
+                                    ? {
+                                        ...inv,
+                                        shared_with_client: e.target.checked,
+                                      }
+                                    : inv
+                                )
+                              );
+                              showToast("Sharing status updated", "success");
+                            }
+                          })
+                        }
+                        className="h-4 w-4 cursor-pointer rounded"
+                      />
+                    </TableCell>
+                    <TableCell>
+                      {new Date(invoice.created_at).toLocaleDateString()}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <div className="flex items-center justify-end gap-2">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() =>
+                            openSignedUrl(invoice.invoice_file_url)
+                          }
+                          title="View PDF"
+                        >
+                          <Eye className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() =>
+                            openSignedUrl(invoice.invoice_file_url, true)
+                          }
+                          title="Download PDF"
+                        >
+                          <Download className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() =>
+                            handleDelete(invoice.id, invoice.invoice_file_url)
+                          }
+                          title="Delete invoice"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
+
+      <Dialog
+        open={isDialogOpen}
+        onOpenChange={(open) => {
+          if (!open) {
+            setSelectedFile(null);
+            setSelectedClientId("");
+            setSelectedProjectId("");
+            setInvoiceNumber("");
+            setSubmitting(false);
+            isSubmittingRef.current = false;
+          }
+          setIsDialogOpen(open);
+        }}
+      >
+        <DialogContent className="max-w-md">
+          <form onSubmit={handleSubmit}>
+            <DialogHeader>
+              <DialogTitle>Upload Invoice</DialogTitle>
+              <DialogDescription>
+                Upload an invoice PDF and select the client and project
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="space-y-4 py-4">
+              <div>
+                <Label>Invoice PDF *</Label>
+                <Input
+                  type="file"
+                  accept=".pdf"
+                  onChange={(e) => setSelectedFile(e.target.files?.[0] || null)}
+                  className="mt-1"
+                  required
+                />
+                {selectedFile && (
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {selectedFile.name} ({(selectedFile.size / 1024).toFixed(2)}{" "}
+                    KB)
+                  </p>
+                )}
+              </div>
+
+              <div>
+                <Label>Invoice Number *</Label>
+                <Input
+                  value={invoiceNumber}
+                  onChange={(e) => setInvoiceNumber(e.target.value)}
+                  className="mt-1"
+                  placeholder="INV-2024-001"
+                  required
+                />
+              </div>
+
+              <div>
+                <Label>Amount (₹) *</Label>
+                <Input
+                  type="number"
+                  value={invoiceTotal}
+                  onChange={(e) => setInvoiceTotal(e.target.value)}
+                  className="mt-1"
+                  placeholder="50000"
+                  min="0"
+                  step="0.01"
+                  required
+                />
+              </div>
+
+              <div>
+                <Label>Tax (%)</Label>
+                <Input
+                  type="number"
+                  value={invoiceTax}
+                  onChange={(e) => setInvoiceTax(e.target.value)}
+                  className="mt-1"
+                  placeholder="18"
+                  min="0"
+                  step="0.01"
+                />
+              </div>
+
+              <div>
+                <Label>Issue Date</Label>
+                <Input
+                  type="date"
+                  value={invoiceIssueDate}
+                  onChange={(e) => setInvoiceIssueDate(e.target.value)}
+                  className="mt-1"
+                />
+              </div>
+
+              <div>
+                <Label>Due Date</Label>
+                <Input
+                  type="date"
+                  value={invoiceDueDate}
+                  onChange={(e) => setInvoiceDueDate(e.target.value)}
+                  className="mt-1"
+                />
+              </div>
+
+              <div>
+                <Label>Client *</Label>
+                <Select
+                  value={selectedClientId}
+                  onValueChange={(value) => {
+                    setSelectedClientId(value);
+                    setSelectedProjectId("");
+                  }}
+                  required
+                >
+                  <SelectTrigger className="mt-1">
+                    <SelectValue placeholder="Select client" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {clients.map((client) => (
+                      <SelectItem key={client.id} value={client.id}>
+                        {client.company_name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div>
+                <Label>Project (Optional)</Label>
+                <Select
+                  value={selectedProjectId}
+                  onValueChange={setSelectedProjectId}
+                  disabled={!selectedClientId}
+                >
+                  <SelectTrigger className="mt-1">
+                    <SelectValue
+                      placeholder={
+                        selectedClientId
+                          ? "Select project"
+                          : "Select client first"
+                      }
+                    />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {filteredProjects.map((project) => (
+                      <SelectItem key={project.id} value={project.id}>
+                        {project.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {selectedProject && projectBudget > 0 && invoiceAmount > 0 && (
+                <div
+                  className={`rounded-lg p-3 text-sm ${
+                    amountMatch
+                      ? "bg-green-50 border border-green-200 text-green-800"
+                      : "bg-orange-50 border border-orange-200 text-orange-800"
+                  }`}
+                >
+                  <div className="font-semibold">
+                    {amountMatch ? "✓ Amount Matches" : "⚠ Amount Mismatch"}
+                  </div>
+                  <div className="text-xs mt-1">
+                    Project Budget: ₹
+                    {projectBudget.toLocaleString("en-IN", {
+                      maximumFractionDigits: 2,
+                    })}
+                    <br />
+                    Invoice Amount: ₹
+                    {invoiceAmount.toLocaleString("en-IN", {
+                      maximumFractionDigits: 2,
+                    })}
+                    {!amountMatch && (
+                      <>
+                        <br />
+                        Difference: ₹
+                        {amountDifference.toLocaleString("en-IN", {
+                          maximumFractionDigits: 2,
+                        })}
+                      </>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setIsDialogOpen(false)}
+                disabled={submitting}
+              >
+                Cancel
+              </Button>
+              <Button type="submit" disabled={submitting || !selectedFile}>
+                {submitting && (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                )}
+                {submitting ? "Uploading..." : "Upload Invoice"}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
+

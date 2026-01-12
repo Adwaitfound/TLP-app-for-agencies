@@ -56,16 +56,33 @@ export default function AgencyLoginPage() {
           setLoading(false);
           return;
         }
-      }
 
-      // Redirect to dashboard
-      router.push("/dashboard");
-      router.refresh();
+        // Check if user is part of a SaaS organization
+        const { data: membership, error: membershipError } = await supabase
+          .from("saas_organization_members")
+          .select("org_id")
+          .eq("user_id", data.user.id)
+          .eq("status", "active")
+          .single();
+
+        console.log("Membership check:", { membership, membershipError });
+
+        if (membership?.org_id) {
+          // User is part of a multi-tenant organization
+          console.log("Redirecting to /v2/dashboard");
+          router.push("/v2/dashboard");
+        } else {
+          // User is a legacy agency admin
+          console.log("Redirecting to /dashboard");
+          router.push("/dashboard");
+        }
+        router.refresh();
+      }
     } catch (err: any) {
       setError(err.message || "Failed to sign in");
       setLoading(false);
     }
-  };
+  }
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 p-4">

@@ -1,161 +1,147 @@
-// Minimal process typing to avoid depending on @types/node for this proxy file
-declare const process: { env: Record<string, string | undefined> }
+import { NextResponse } from 'next/server';
+import type { NextRequest } from 'next/server';
+import { createServerClient } from '@supabase/ssr';
 
-import { createServerClient } from '@supabase/ssr'
-import { NextResponse, type NextRequest } from 'next/server'
+/**
+ * Traffic Controller Proxy
+ * Separates original agency owner from new SaaS users
+ */
 
-type SupabaseCookie = {
-    name: string
-    value: string
-    options?: {
-        domain?: string
-        maxAge?: number
-        expires?: Date
-        path?: string
-        sameSite?: 'lax' | 'strict' | 'none'
-        httpOnly?: boolean
-        secure?: boolean
-    }
-}
+// CONFIGURATION - Your original agency owner email (sees /dashboard with original data)
+const ORIGINAL_AGENCY_OWNER_EMAIL = 'adwait@thelostproject.in';
 
 export async function proxy(request: NextRequest) {
-    let supabaseResponse = NextResponse.next({
-        request,
-    })
+  let response = NextResponse.next({
+    request: {
+      headers: request.headers,
+    },
+  });
 
-    // Add performance headers early
-    if (request.nextUrl.pathname.startsWith('/_next/static')) {
-        const response = NextResponse.next()
-        response.headers.set('Cache-Control', 'public, max-age=31536000, immutable')
-        return response
-    }
-
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-    const supabaseAnon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-
-    const redirectToLogin = (reason: string) => {
-        if (request.nextUrl.pathname.startsWith('/login')) return NextResponse.next()
-        const url = new URL('/login', request.url)
-        url.searchParams.set('error', reason)
-        return NextResponse.redirect(url)
-    }
-
-    if (!supabaseUrl || !supabaseAnon) {
-        console.error('[proxy] Supabase env vars missing')
-        return redirectToLogin('supabase-config')
-    }
-
-    const supabase = createServerClient(supabaseUrl, supabaseAnon, {
-        cookies: {
-            get: (name: string) => request.cookies.get(name)?.value,
-            set: (name: string, value: string, options?: SupabaseCookie['options']) => {
-                supabaseResponse = NextResponse.next({ request })
-                supabaseResponse.cookies.set(name, value, options as any)
+  const supabase = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        get(name: string) {
+          return request.cookies.get(name)?.value;
+        },
+        set(name: string, value: string, options: any) {
+          request.cookies.set({ name, value, ...options });
+          response = NextResponse.next({
+            request: {
+              headers: request.headers,
             },
-            remove: (name: string, options?: SupabaseCookie['options']) => {
-                supabaseResponse = NextResponse.next({ request })
-                supabaseResponse.cookies.set(name, '', { ...(options as any), maxAge: 0 })
+          });
+          response.cookies.set({ name, value, ...options });
+        },
+        remove(name: string, options: any) {
+          request.cookies.set({ name, value: '', ...options });
+          response = NextResponse.next({
+            request: {
+              headers: request.headers,
             },
-        } as any,
-    })
-
-    let user: any = null
-
-    try {
-        const { data, error } = await supabase.auth.getUser()
-        if (error) {
-            // Only log errors for protected routes, not public pages
-            if (request.nextUrl.pathname.startsWith('/dashboard')) {
-                console.error('[proxy] Auth required for dashboard', error.message)
-                return redirectToLogin('auth')
-            }
-        } else {
-            user = data.user
-        }
-    } catch (err: any) {
-        // Only log unexpected errors for protected routes
-        if (request.nextUrl.pathname.startsWith('/dashboard')) {
-            console.error('[proxy] Unexpected getUser error', err?.message)
-            return redirectToLogin('auth')
-        }
+          });
+          response.cookies.set({ name, value: '', ...options });
+        },
+      },
     }
+  );
 
-    // Protect dashboard routes and enforce role-based access
-    if (request.nextUrl.pathname.startsWith('/dashboard')) {
-        if (!user) {
-            return NextResponse.redirect(new URL('/login', request.url))
-        }
+  // Get current user
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
 
-        try {
-            const { data: userData, error: roleError } = await supabase
-                .from('users')
-                .select('role')
-                .eq('id', user.id)
-                .single()
+  const pathname = request.nextUrl.pathname;
 
-            if (roleError) {
-                console.error('[proxy] Role fetch failed', roleError.message)
-                return redirectToLogin('role')
-            }
+  // Public routes - allow access
+  if (
+    pathname.startsWith('/_next') ||
+    pathname.startsWith('/api') ||
+    pathname.startsWith('/static') ||
+    pathname === '/' ||
+    pathname === '/agency/login' ||
+    pathname === '/agency-onboarding' ||
+    pathname.startsWith('/v2/setup') ||
+    pathname.startsWith('/v2/payment')
+  ) {
+    return response;
+  }
 
-            if (userData) {
-                const role = userData.role
-                const path = request.nextUrl.pathname
+  // If not authenticated, redirect to login
+  if (!user) {
+    const url = request.nextUrl.clone();
+    url.pathname = '/agency/login';
+    return NextResponse.redirect(url);
+  }
 
-                // Client role: restrict to client dashboard only
-                if (role === 'client' && !path.startsWith('/dashboard/client')) {
-                    return NextResponse.redirect(new URL('/dashboard/client', request.url))
-                }
+  // TRAFFIC CONTROLLER LOGIC
+  const isOriginalAgencyOwner = user.email === ORIGINAL_AGENCY_OWNER_EMAIL;
 
-                // Project manager role: restrict to employee dashboard only
-                if (role === 'project_manager' && !path.startsWith('/dashboard/employee')) {
-                    return NextResponse.redirect(new URL('/dashboard/employee', request.url))
-                }
+  // Check if user has SaaS organization membership
+  let hasSaaSOrg = false;
+  if (!isOriginalAgencyOwner) {
+    const { data: membership } = await supabase
+      .from('saas_organization_members')
+      .select('org_id')
+      .eq('user_id', user.id)
+      .eq('status', 'active')
+      .single();
 
-                // Admin (system admin) or agency_admin: allow access to all dashboard areas
-                if (
-                    (role === 'admin' || role === 'agency_admin') &&
-                    (path.startsWith('/dashboard/client/') || path.startsWith('/dashboard/employee/'))
-                ) {
-                    return NextResponse.redirect(new URL('/dashboard', request.url))
-                }
+    hasSaaSOrg = !!membership?.org_id;
+  }
 
-                // Default dashboard redirect based on role
-                if (path === '/dashboard') {
-                    if (role === 'client') {
-                        return NextResponse.redirect(new URL('/dashboard/client', request.url))
-                    } else if (role === 'project_manager') {
-                        return NextResponse.redirect(new URL('/dashboard/employee', request.url))
-                    }
-                    // admin and agency_admin stay at /dashboard
-                }
-            }
-        } catch (err: any) {
-            console.error('[proxy] Unexpected role guard error', err?.message)
-            return redirectToLogin('role')
-        }
-    }
+  // ROUTING RULES
+  
+  // Rule 1: Original agency owner trying to access /v2/* → Redirect to original dashboard
+  if (isOriginalAgencyOwner && pathname.startsWith('/v2/') && !pathname.startsWith('/v2/setup')) {
+    console.log('[MIDDLEWARE] Original owner blocked from /v2/dashboard, redirecting to /dashboard');
+    const url = request.nextUrl.clone();
+    url.pathname = '/dashboard';
+    return NextResponse.redirect(url);
+  }
 
-    // Allow auth pages to render unchanged
-    if (
-        request.nextUrl.pathname === '/login' ||
-        request.nextUrl.pathname === '/signup' ||
-        request.nextUrl.pathname === '/auth/select-role'
-    ) {
-        return supabaseResponse
-    }
+  // Rule 2: Original agency owner accessing /dashboard → Allow
+  if (isOriginalAgencyOwner && pathname.startsWith('/dashboard')) {
+    console.log('[MIDDLEWARE] Original owner accessing /dashboard - allowed');
+    return response;
+  }
 
-    // Add security and performance headers
-    supabaseResponse.headers.set('X-Content-Type-Options', 'nosniff')
-    supabaseResponse.headers.set('X-Frame-Options', 'DENY')
-    supabaseResponse.headers.set('X-XSS-Protection', '1; mode=block')
-    supabaseResponse.headers.set('Referrer-Policy', 'strict-origin-when-cross-origin')
+  // Rule 3: SaaS user trying to access original /dashboard → Block and redirect to /v2/dashboard
+  if (!isOriginalAgencyOwner && pathname.startsWith('/dashboard') && !pathname.startsWith('/dashboard/')) {
+    console.log('[MIDDLEWARE] SaaS user blocked from /dashboard, redirecting to /v2/dashboard');
+    const url = request.nextUrl.clone();
+    url.pathname = '/v2/dashboard';
+    return NextResponse.redirect(url);
+  }
 
-    return supabaseResponse
+  // Rule 4: SaaS user without organization → Redirect to onboarding
+  if (!isOriginalAgencyOwner && !hasSaaSOrg && pathname.startsWith('/v2/dashboard')) {
+    console.log('[MIDDLEWARE] User has no SaaS org, redirecting to onboarding');
+    const url = request.nextUrl.clone();
+    url.pathname = '/v2/onboarding';
+    return NextResponse.redirect(url);
+  }
+
+  // Rule 5: SaaS user with organization accessing /v2/* → Allow
+  if (!isOriginalAgencyOwner && hasSaaSOrg && pathname.startsWith('/v2/')) {
+    console.log('[MIDDLEWARE] SaaS user with org accessing /v2/ - allowed');
+    return response;
+  }
+
+  // Default: Allow the request
+  return response;
 }
 
 export const config = {
-    matcher: [
-        '/((?!api|_next/static|_next/image|_next/data|favicon.ico|sitemap.xml|robots.txt|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
-    ],
-}
+  matcher: [
+    /*
+     * Match all request paths except:
+     * - _next/static (static files)
+     * - _next/image (image optimization files)
+     * - favicon.ico (favicon file)
+     * - public files (public folder)
+     */
+    '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
+  ],
+};
