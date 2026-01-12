@@ -8,6 +8,7 @@ type ClientFormData = {
   email: string;
   phone: string;
   address: string;
+  orgId?: string;
 };
 
 type ClientResult = {
@@ -27,6 +28,11 @@ export async function createClientAccount(
       company_name: formData.company_name,
       email: formData.email,
     });
+
+    if (!formData.orgId) {
+      console.error("[SERVER] Missing orgId in formData");
+      return { success: false, error: "Organization is required" };
+    }
 
     // Validate environment variables
     const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -153,9 +159,31 @@ export async function createClientAccount(
       console.log("[SERVER] User record already exists");
     }
 
+    console.log("[SERVER] Inserting organization membership...");
+    const { error: memberError } = await supabaseAdmin
+      .from("saas_organization_members")
+      .upsert(
+        {
+          org_id: formData.orgId,
+          user_id: userId,
+          role: "client",
+          status: "active",
+        },
+        { onConflict: "org_id,user_id" },
+      );
+
+    if (memberError) {
+      console.error("[SERVER] Member insert error:", memberError);
+      return {
+        success: false,
+        error: `Member insert error: ${memberError.message}`,
+      };
+    }
+
     console.log("[SERVER] Inserting client record...");
-    const { error: clientError } = await supabaseAdmin.from("clients").insert([
+    const { error: clientError } = await supabaseAdmin.from("saas_clients").insert([
       {
+        org_id: formData.orgId,
         user_id: userId,
         company_name: formData.company_name,
         contact_person: formData.contact_person,

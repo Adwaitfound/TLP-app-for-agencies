@@ -67,16 +67,6 @@ const adminRoutes = [
     href: "/v2/invoices",
   },
   {
-    label: "Analytics",
-    icon: BarChart3,
-    href: "/v2/analytics",
-  },
-  {
-    label: "Advertisements",
-    icon: Megaphone,
-    href: "/v2/advertisements",
-  },
-  {
     label: "Billing",
     icon: Wallet,
     href: "/v2/billing",
@@ -148,12 +138,32 @@ export function V2Sidebar() {
   const pathname = usePathname();
   const { organization, member } = useOrg();
 
+  // Normalize plan to avoid casing mismatches from DB
+  const plan = organization?.plan?.toLowerCase() as
+    | "free"
+    | "standard"
+    | "premium"
+    | undefined;
+
   // Determine routes based on user role in organization
   let routes = adminRoutes;
   if (member?.role === "client") {
     routes = clientRoutes;
   } else if (member?.role === "member") {
     routes = memberRoutes;
+  }
+
+  // Filter routes based on organization plan for admins/members
+  // Free and standard should both be limited; premium keeps all.
+  if (plan === "free" || plan === "standard") {
+    const allowedPaths = new Set([
+      "/v2/dashboard",
+      "/v2/projects",
+      "/v2/clients",
+      "/v2/members",
+      "/v2/settings",
+    ]);
+    routes = routes.filter((route) => allowedPaths.has(route.href));
   }
 
   return (
@@ -188,6 +198,12 @@ export function V2Sidebar() {
                   ? "Member Portal"
                   : "Client Portal"}
             </span>
+            {organization?.plan && (
+              <span className="mt-0.5 inline-flex w-fit items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-[10px] font-semibold capitalize text-foreground">
+                <span className="h-1.5 w-1.5 rounded-full bg-primary" aria-hidden />
+                {organization.plan} plan
+              </span>
+            )}
           </div>
         </div>
       </div>

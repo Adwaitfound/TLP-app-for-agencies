@@ -62,6 +62,7 @@ import { updateClient } from "@/app/actions/update-client";
 import { resetClientPassword } from "@/app/actions/reset-client-password";
 import { Badge } from "@/components/ui/badge";
 import { debug } from "@/lib/debug";
+import { useOrg } from "@/lib/org-context";
 
 interface ClientWithDetails extends Client {
   projects?: Project[];
@@ -71,6 +72,7 @@ interface ClientWithDetails extends Client {
 }
 
 export default function ClientsPage() {
+  const { organization } = useOrg();
   const [clients, setClients] = useState<ClientWithDetails[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
@@ -116,21 +118,26 @@ export default function ClientsPage() {
 
   // Fetch clients
   useEffect(() => {
-    fetchClients();
-  }, []);
+    if (organization?.id) {
+      fetchClients();
+    }
+  }, [organization?.id]);
 
   async function fetchClients() {
+    if (!organization?.id) return;
+    
     const supabase = createClient();
     setLoading(true);
 
     try {
-      console.log("Fetching clients...");
+      console.log("Fetching clients for org:", organization.id);
       debug.log("CLIENTS", "Fetching clients...");
 
-      // Fetch all clients
+      // Fetch clients for this organization only
       const { data: clientsData, error: clientsError } = await supabase
-        .from("clients")
+        .from("saas_clients")
         .select("*")
+        .eq("org_id", organization.id)
         .order("created_at", { ascending: false });
 
       if (clientsError) {
@@ -147,19 +154,21 @@ export default function ClientsPage() {
         count: clientsData?.length,
       });
 
-      // Fetch projects
+      // Fetch projects for this organization
       const { data: projectsData, error: projectsError } = await supabase
-        .from("projects")
-        .select("*");
+        .from("saas_projects")
+        .select("*")
+        .eq("org_id", organization.id);
 
       if (projectsError) {
         console.error("Error fetching projects:", projectsError);
       }
 
-      // Fetch paid invoices
+      // Fetch paid invoices for this organization
       const { data: invoicesData, error: invoicesError } = await supabase
-        .from("invoices")
+        .from("saas_invoices")
         .select("*")
+        .eq("org_id", organization.id)
         .eq("status", "paid");
 
       if (invoicesError) {
@@ -218,6 +227,11 @@ export default function ClientsPage() {
     e.preventDefault();
     if (submitting) return;
 
+    if (!organization?.id) {
+      alert("Organization not loaded. Please refresh and try again.");
+      return;
+    }
+
     setSubmitting(true);
 
     try {
@@ -226,7 +240,7 @@ export default function ClientsPage() {
       // Call server action to create client account
       let result;
       try {
-        result = await createClientAccount(formData);
+        result = await createClientAccount({ ...formData, orgId: organization.id });
       } catch (callError: any) {
         debug.error("CLIENTS", "Server action call failed", {
           error: callError?.message,

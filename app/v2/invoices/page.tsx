@@ -37,7 +37,7 @@ import {
 } from "@/components/ui/table";
 import { Eye, FileText, Loader2, Plus, Trash2, Download } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
-import { useOrg } from "@/contexts/org-context";
+import { useOrg } from "@/lib/org-context";
 import { uploadInvoiceFile } from "@/app/actions/upload-invoice";
 import {
   fetchInvoicesDataV2,

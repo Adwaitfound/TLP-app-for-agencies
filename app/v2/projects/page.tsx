@@ -41,7 +41,7 @@ import {
   Eye,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
-import { useOrg } from "@/contexts/org-context";
+import { useOrg } from "@/lib/org-context";
 
 interface Project {
   id: string;
