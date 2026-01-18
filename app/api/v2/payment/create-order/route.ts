@@ -21,6 +21,8 @@ import { createServiceClient } from '@/lib/supabase/server';
 
 export async function POST(request: Request) {
   try {
+    console.log('[CREATE_ORDER_START] Processing payment request');
+    
     const body = await request.json();
     const { agencyName, adminEmail, plan, billingCycle } = body;
 
@@ -58,7 +60,13 @@ export async function POST(request: Request) {
 
     try {
       // Check if in development/test mode (test Razorpay credentials)
-      const isTestMode = process.env.RAZORPAY_KEY_ID?.startsWith('rzp_test');
+      const razorpayKeyId = process.env.RAZORPAY_KEY_ID;
+      const razorpaySecret = process.env.RAZORPAY_KEY_SECRET;
+      
+      console.log('[RAZORPAY_CHECK] KeyID exists:', !!razorpayKeyId);
+      console.log('[RAZORPAY_CHECK] Secret exists:', !!razorpaySecret);
+      
+      const isTestMode = razorpayKeyId?.startsWith('rzp_test');
       
       console.log('[PAYMENT] Razorpay Key:', process.env.RAZORPAY_KEY_ID?.substring(0, 15) + '...');
       console.log('[PAYMENT] Test Mode:', isTestMode);
