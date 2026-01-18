@@ -212,7 +212,6 @@ export default function AgencyOnboardingPage() {
       order_id: order.id,
       amount: order.amount,
       currency: order.currency,
-      name: agencyName,
       description: `${order.plan.charAt(0).toUpperCase() + order.plan.slice(1)} Plan - ${order.billingCycle}`,
       image: '/logo.png',
       handler: async (response: RazorpayResponse) => {
