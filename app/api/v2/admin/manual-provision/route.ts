@@ -110,9 +110,6 @@ export async function POST(request: Request) {
     // Construct login URL
     const loginUrl = `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/login`;
 
-    // Construct login URL
-    const loginUrl = `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/login`;
-
     // Send email
     let emailSent = false;
     try {
