@@ -86,7 +86,7 @@ const statusConfig: Record<
 };
 
 export default function V2InvoicesPage() {
-  const { organization, member, loading: orgLoading } = useOrg();
+  const { organization, member, isLoading: orgLoading } = useOrg();
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);

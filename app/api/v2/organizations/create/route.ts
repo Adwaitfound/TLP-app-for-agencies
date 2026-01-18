@@ -18,7 +18,7 @@ export async function POST(request: Request) {
     }
 
     // Create server-side Supabase client
-    const supabase = createClient();
+    const supabase = await createClient();
 
     // Get current user
     const {

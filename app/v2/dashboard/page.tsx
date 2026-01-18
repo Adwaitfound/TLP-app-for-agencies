@@ -62,7 +62,7 @@ function DashboardPage() {
     cyan: { from: 'rgb(240, 249, 250)', to: 'rgb(207, 250, 254)' },
   };
 
-  const gradientStyle = colorGradients[brandColor] || colorGradients.blue;
+  const gradientStyle = colorGradients[brandColor as keyof typeof colorGradients] || colorGradients.blue;
 
   return (
     <div className="space-y-8">

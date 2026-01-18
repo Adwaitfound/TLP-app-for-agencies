@@ -171,10 +171,10 @@ export function V2Sidebar() {
       <div className="flex h-14 items-center border-b px-4 lg:h-[60px] lg:px-6 flex-shrink-0">
         <div className="flex items-center gap-3">
           {/* Organization logo or fallback */}
-          {organization?.logo_url ? (
+          {organization?.settings?.logo_url ? (
             <div className="h-9 flex items-center">
               <img
-                src={organization.logo_url}
+                src={organization.settings.logo_url as string}
                 alt={organization.name}
                 className="h-8 w-auto"
                 loading="eager"

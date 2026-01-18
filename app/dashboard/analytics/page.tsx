@@ -62,6 +62,11 @@ export default function AnalyticsPage() {
   }, [user]);
 
   async function fetchAnalytics() {
+    if (!user) {
+      setLoading(false);
+      return;
+    }
+
     const supabase = createClient();
     setLoading(true);
 

@@ -35,7 +35,7 @@ function SettingsPage() {
       setSettings({
         brandColor: orgSettings.brand_color || 'blue',
         organizationName: organization.name || '',
-        website: organization.website || '',
+        website: orgSettings.website || '',
         timezone: orgSettings.timezone || 'UTC',
       });
     }

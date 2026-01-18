@@ -93,7 +93,7 @@ const SERVICE_TYPE_OPTIONS: { value: ServiceType; label: string; icon: string }[
 ];
 
 export default function V2ProjectsPage() {
-  const { organization, member, loading: orgLoading } = useOrg();
+  const { organization, member, isLoading: orgLoading } = useOrg();
   const supabase = useMemo(() => createClient(), []);
   
   const [projects, setProjects] = useState<Project[]>([]);

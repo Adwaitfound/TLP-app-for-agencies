@@ -20,7 +20,7 @@ interface V2ClientData {
 }
 
 export function useV2Clients() {
-  const { organization } = useOrg();
+  const { organization, user } = useOrg();
   const [clients, setClients] = useState<Client[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -49,7 +49,7 @@ export function useV2Clients() {
       // Transform v2 SaaS schema to match main app Client type
       const transformedClients: Client[] = (childOrgs || []).map((org: V2ClientData) => ({
         id: org.id,
-        user_id: null, // v2 doesn't have user_id per client
+        user_id: user?.id || organization?.id || '', // Use authenticated user's ID or org ID as fallback
         company_name: org.name,
         contact_person: org.settings?.contact_person || '',
         email: org.settings?.email || '',
