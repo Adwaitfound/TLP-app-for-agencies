@@ -22,7 +22,7 @@
 	],
 	"functions": {
 		"api/**": {
-			"excludeFiles": ["src-tauri/**", "android/**", "android.bak.*/**", "playwright-report/**"]
+			"excludeFiles": "{src-tauri/**,android/**,android.bak.*/**,playwright-report/**}"
 		}
 	}
 }
