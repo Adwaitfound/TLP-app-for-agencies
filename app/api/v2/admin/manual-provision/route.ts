@@ -94,21 +94,38 @@ export async function POST(request: Request) {
 
     console.log('[MANUAL_PROVISION] User created:', authData.user.id);
 
-    // Create user profile in users table
+    // Create user profile in users table (upsert to handle existing users)
     const { error: userProfileError } = await supabase
       .from('users')
-      .insert({
+      .upsert({
         id: authData.user.id,
         email,
         role: 'admin',
         status: 'active',
         full_name: email.split('@')[0],
         company_name: agencyName,
+      }, {
+        onConflict: 'id'
       });
 
     if (userProfileError) {
       console.error('[MANUAL_PROVISION_USER_PROFILE_ERROR]', userProfileError);
-      // Continue - login page has fallback to create this
+      // Try without company_name in case of column issues
+      const { error: retryError } = await supabase
+        .from('users')
+        .upsert({
+          id: authData.user.id,
+          email,
+          role: 'admin',
+          status: 'active',
+          full_name: email.split('@')[0],
+        }, {
+          onConflict: 'id'
+        });
+      
+      if (retryError) {
+        console.error('[MANUAL_PROVISION_USER_PROFILE_RETRY_ERROR]', retryError);
+      }
     }
 
     // Add user to organization members
