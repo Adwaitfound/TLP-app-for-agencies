@@ -68,35 +68,50 @@ export async function POST(request: Request) {
 
     console.log('[MANUAL_PROVISION] Organization created:', org.id);
 
-    // Create magic link
-    const token = crypto.randomBytes(32).toString('hex');
-    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
+    // Generate random password (16 characters)
+    const randomPassword = crypto.randomBytes(12).toString('base64').slice(0, 16);
 
-    const { error: magicLinkError } = await supabase
-      .from('saas_magic_links')
-      .insert({
-        type: 'signup',
-        email,
+    // Create user in Supabase Auth
+    const { data: authData, error: authError } = await supabase.auth.admin.createUser({
+      email,
+      password: randomPassword,
+      email_confirm: true,
+      user_metadata: {
         org_id: org.id,
-        token,
-        expires_at: expiresAt.toISOString(),
-        metadata: {
-          plan,
-          billing_cycle: billingCycle,
-          manual_provision: true,
-        },
-      });
+        org_name: agencyName,
+        role: 'owner',
+      },
+    });
 
-    if (magicLinkError) {
-      console.error('[MANUAL_PROVISION_MAGIC_LINK_ERROR]', magicLinkError);
+    if (authError || !authData.user) {
+      console.error('[MANUAL_PROVISION_AUTH_ERROR]', authError);
       return NextResponse.json(
-        { error: 'Failed to create setup link' },
+        { error: 'Failed to create user account' },
         { status: 500 }
       );
     }
 
-    // Construct setup URL
-    const setupUrl = `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/app/v2/setup?token=${token}`;
+    console.log('[MANUAL_PROVISION] User created:', authData.user.id);
+
+    // Add user to organization members
+    const { error: memberError } = await supabase
+      .from('saas_organization_members')
+      .insert({
+        org_id: org.id,
+        user_id: authData.user.id,
+        role: 'owner',
+      });
+
+    if (memberError) {
+      console.error('[MANUAL_PROVISION_MEMBER_ERROR]', memberError);
+      // Don't fail the whole request, just log it
+    }
+
+    // Construct login URL
+    const loginUrl = `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/login`;
+
+    // Construct login URL
+    const loginUrl = `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/login`;
 
     // Send email
     let emailSent = false;
@@ -113,13 +128,17 @@ export async function POST(request: Request) {
           body: JSON.stringify({
             from: process.env.RESEND_FROM_EMAIL || 'onboarding@example.com',
             to: email,
-            subject: `Welcome to ${agencyName}! Complete Your Setup`,
+            subject: `Welcome to ${agencyName}! Your Account is Ready`,
             html: `
               <h2>Welcome to your new workspace!</h2>
               <p>Hi there,</p>
-              <p>Your account has been provisioned! Click the link below to set up your password and get started:</p>
-              <p><a href="${setupUrl}" style="padding: 10px 20px; background: #0066cc; color: white; text-decoration: none; border-radius: 5px; display: inline-block;">Complete Setup</a></p>
-              <p style="color: #666; font-size: 12px;">This link expires in 7 days.</p>
+              <p>Your account has been created and is ready to use! Here are your login credentials:</p>
+              <div style="background: #f5f5f5; padding: 20px; border-radius: 5px; margin: 20px 0;">
+                <p style="margin: 5px 0;"><strong>Email:</strong> ${email}</p>
+                <p style="margin: 5px 0;"><strong>Password:</strong> <code style="background: white; padding: 5px 10px; border-radius: 3px;">${randomPassword}</code></p>
+              </div>
+              <p><a href="${loginUrl}" style="padding: 10px 20px; background: #0066cc; color: white; text-decoration: none; border-radius: 5px; display: inline-block;">Login Now</a></p>
+              <p style="color: #ff6600; font-weight: bold;">⚠️ Important: Please change your password after logging in for the first time.</p>
               <p><strong>Your Organization Details:</strong></p>
               <ul>
                 <li>Name: ${agencyName}</li>
@@ -127,7 +146,7 @@ export async function POST(request: Request) {
                 <li>Billing: ${billingCycle}</li>
               </ul>
               <p>If the button doesn't work, copy and paste this link into your browser:</p>
-              <p style="color: #666; font-size: 12px; word-break: break-all;">${setupUrl}</p>
+              <p style="color: #666; font-size: 12px; word-break: break-all;">${loginUrl}</p>
               <p>If you have any questions, reply to this email.</p>
             `,
           }),
@@ -148,15 +167,19 @@ export async function POST(request: Request) {
 
     return NextResponse.json({
       success: true,
-      message: 'Organization created and setup email sent',
+      message: 'Organization created and login credentials sent',
       organization: {
         id: org.id,
         name: agencyName,
         slug: finalSlug,
         plan,
       },
+      user: {
+        id: authData.user.id,
+        email,
+      },
       email_sent: emailSent,
-      setup_url: setupUrl,
+      login_url: loginUrl,
     });
   } catch (error: any) {
     console.error('[MANUAL_PROVISION_ERROR]', error);
