@@ -79,7 +79,8 @@ export async function POST(request: Request) {
       user_metadata: {
         org_id: org.id,
         org_name: agencyName,
-        role: 'owner',
+        role: 'admin', // Set to 'admin' for proper redirect
+        full_name: email.split('@')[0],
       },
     });
 
@@ -92,6 +93,23 @@ export async function POST(request: Request) {
     }
 
     console.log('[MANUAL_PROVISION] User created:', authData.user.id);
+
+    // Create user profile in users table
+    const { error: userProfileError } = await supabase
+      .from('users')
+      .insert({
+        id: authData.user.id,
+        email,
+        role: 'admin',
+        status: 'active',
+        full_name: email.split('@')[0],
+        company_name: agencyName,
+      });
+
+    if (userProfileError) {
+      console.error('[MANUAL_PROVISION_USER_PROFILE_ERROR]', userProfileError);
+      // Continue - login page has fallback to create this
+    }
 
     // Add user to organization members
     const { error: memberError } = await supabase
