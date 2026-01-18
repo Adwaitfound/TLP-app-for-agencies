@@ -55,7 +55,7 @@ export async function POST(request: Request) {
         id: authUser.id,
         email,
         role: 'admin',
-        status: 'active',
+        status: 'approved',
         full_name: authUser.user_metadata?.full_name || email.split('@')[0],
       }, {
         onConflict: 'id'

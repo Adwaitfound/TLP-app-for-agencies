@@ -101,7 +101,7 @@ export async function POST(request: Request) {
         id: authData.user.id,
         email,
         role: 'admin',
-        status: 'active',
+        status: 'approved',
         full_name: email.split('@')[0],
         company_name: agencyName,
       }, {
@@ -117,7 +117,7 @@ export async function POST(request: Request) {
           id: authData.user.id,
           email,
           role: 'admin',
-          status: 'active',
+          status: 'approved',
           full_name: email.split('@')[0],
         }, {
           onConflict: 'id'
