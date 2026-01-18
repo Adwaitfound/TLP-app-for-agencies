@@ -280,7 +280,7 @@ CREATE POLICY "Allow employees to view their own tasks" ON employee_tasks
     FOR SELECT
     USING (
         user_id = auth.uid()
-        OR (SELECT role FROM users WHERE id = auth.uid()) IN ('admin', 'project_manager', 'super_admin')
+        OR (SELECT role FROM users WHERE id = auth.uid()) IN ('admin', 'project_manager')
     );
 
 DROP POLICY IF EXISTS "employee_tasks_insert" ON employee_tasks;
@@ -288,7 +288,7 @@ CREATE POLICY "Allow employees to create tasks" ON employee_tasks
     FOR INSERT
     WITH CHECK (
         user_id = auth.uid()
-        OR (SELECT role FROM users WHERE id = auth.uid()) IN ('admin', 'project_manager', 'super_admin')
+        OR (SELECT role FROM users WHERE id = auth.uid()) IN ('admin', 'project_manager')
     );
 
 DROP POLICY IF EXISTS "employee_tasks_update" ON employee_tasks;
@@ -296,7 +296,7 @@ CREATE POLICY "Allow employees to update their own tasks" ON employee_tasks
     FOR UPDATE
     USING (
         user_id = auth.uid()
-        OR (SELECT role FROM users WHERE id = auth.uid()) IN ('admin', 'project_manager', 'super_admin')
+        OR (SELECT role FROM users WHERE id = auth.uid()) IN ('admin', 'project_manager')
     );
 
 DROP POLICY IF EXISTS "employee_tasks_delete" ON employee_tasks;
@@ -304,7 +304,7 @@ CREATE POLICY "Allow employees to delete their own tasks" ON employee_tasks
     FOR DELETE
     USING (
         user_id = auth.uid()
-        OR (SELECT role FROM users WHERE id = auth.uid()) IN ('admin', 'project_manager', 'super_admin')
+        OR (SELECT role FROM users WHERE id = auth.uid()) IN ('admin', 'project_manager')
     );
 
 -- ===== SUMMARY =====

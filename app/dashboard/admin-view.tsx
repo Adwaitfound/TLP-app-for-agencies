@@ -129,7 +129,7 @@ export default function AdminDashboard() {
       const supabase = createClient();
 
       try {
-        // Fetch all data in parallel for faster loading
+        // Fetch all data in parallel for faster loading - FILTERED BY USER
         const [
           { data: projectsData, error: projectsError },
           { data: invoicesData, error: invoicesError },
@@ -139,11 +139,13 @@ export default function AdminDashboard() {
           supabase
             .from("projects")
             .select("id, name, status, budget, created_at, updated_at, client_id, progress_percentage, service_type")
+            .eq("user_id", userId)
             .order("created_at", { ascending: false })
             .limit(20), // Reduced from 100 to 20
           supabase
             .from("invoices")
             .select("id, status, total, due_date, created_at, invoice_number, client_id, issue_date")
+            .eq("user_id", userId)
             .order("created_at", { ascending: false })
             .limit(20), // Reduced from 100 to 20
           supabase
@@ -151,6 +153,7 @@ export default function AdminDashboard() {
             .select(
               "id, user_id, company_name, contact_person, email, phone, address, total_projects, total_revenue, status, created_at",
             )
+            .eq("user_id", userId)
             .order("created_at", { ascending: false })
             .limit(50), // Reduced from 100 to 50
           supabase

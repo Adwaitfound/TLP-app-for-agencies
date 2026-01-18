@@ -14,6 +14,17 @@ export function ServiceWorkerRegister() {
 
     const register = async () => {
       try {
+        // Attempt to fetch the service worker file directly to check if it's accessible
+        const swCheckResponse = await fetch("/sw.js", { 
+          method: "HEAD",
+          cache: "no-cache"
+        }).catch(() => null);
+        
+        if (!swCheckResponse || !swCheckResponse.ok) {
+          console.warn("🔄 SW Register: sw.js file not accessible (HTTP " + (swCheckResponse?.status || "unknown") + ")");
+          return;
+        }
+
         const registration = await navigator.serviceWorker.register("/sw.js", { scope: "/" });
         if (!cancelled) {
           // Trigger an update check on load so stale tabs see the banner quickly.

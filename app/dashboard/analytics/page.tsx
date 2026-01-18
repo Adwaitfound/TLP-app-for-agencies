@@ -66,11 +66,11 @@ export default function AnalyticsPage() {
     setLoading(true);
 
     try {
-      // Fetch all projects, invoices, and clients
+      // Fetch all projects, invoices, and clients - FILTERED BY USER
       const [projectsRes, invoicesRes, clientsRes] = await Promise.all([
-        supabase.from("projects").select("*"),
-        supabase.from("invoices").select("*"),
-        supabase.from("clients").select("*"),
+        supabase.from("projects").select("*").eq("user_id", user.id),
+        supabase.from("invoices").select("*").eq("user_id", user.id),
+        supabase.from("clients").select("*").eq("user_id", user.id),
       ]);
 
       const projectsData = projectsRes.data || [];

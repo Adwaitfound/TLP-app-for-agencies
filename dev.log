@@ -1,17 +1,33 @@
 
-> video-production-app@0.1.78 dev
+> video-production-app@0.1.91 dev
 > next dev --webpack
 
- ⚠ Port 3000 is in use by process 98565, using available port 3001 instead.
    ▲ Next.js 16.0.10 (webpack)
-   - Local:         http://localhost:3001
-   - Network:       http://192.168.1.36:3001
+   - Local:         http://localhost:3000
+   - Network:       http://192.168.1.34:3000
    - Environments: .env.local
    - Experiments (use with caution):
      · optimizePackageImports
      ✓ webpackBuildWorker
 
  ✓ Starting...
- ⨯ Unable to acquire lock at /Users/adwaitparchure/TLP-app for agnecies/.next/dev/lock, is another instance of next dev running?
-   Suggestion: If you intended to restart next dev, terminate the other process, and then try again.
+ ✓ Ready in 962ms
+ ○ Compiling /[...slug] ...
+Request timed out after 3000ms
+
+Retrying 1/3...
+Request timed out after 3000ms
+
+Retrying 1/3...
+Request timed out after 3000ms
+
+Retrying 1/3...
+(node:78622) ExperimentalWarning: Type Stripping is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+ HEAD /sw.js 200 in 1994ms (compile: 1987ms, render: 7ms)
+[Supabase] URL: https://jzuevrgikjskvmrowhqg.supabase.co ANON key: eyJhbGci…
+[Supabase] URL: https://jzuevrgikjskvmrowhqg.supabase.co ANON key: eyJhbGci…
+ GET /api/facebook-ads?datePreset=last_7d&debug=1&clientId=9e927793-50f4-457b-9090-e6cb87e4f321 200 in 8.6s (compile: 8.4s, proxy.ts: 80ms, render: 113ms)
+[Supabase] URL: https://jzuevrgikjskvmrowhqg.supabase.co ANON key: eyJhbGci…
+ GET /api/facebook-ads?datePreset=last_7d&debug=1&clientId=9e927793-50f4-457b-9090-e6cb87e4f321 200 in 23ms (compile: 4ms, proxy.ts: 5ms, render: 14ms)
 [?25h

@@ -55,25 +55,29 @@ CREATE POLICY "Project comments insert" ON public.project_comments
         ))
   );
 
--- Optimized comment_replies SELECT policy
-DROP POLICY IF EXISTS "View comment replies - team and clients" ON public.comment_replies;
-CREATE POLICY "View comment replies - team and clients" ON public.comment_replies
-  FOR SELECT
-  USING (
-    public.user_role() IN ('admin','project_manager','agency_admin','super_admin')
-    OR (public.user_role() = 'employee'
-        AND EXISTS (
-          SELECT 1 FROM public.project_team pt
-          JOIN public.project_comments pc ON pc.project_id = pt.project_id
-          WHERE pc.id = comment_replies.comment_id
-          AND pt.user_id = auth.uid()
-        ))
-    OR (public.user_role() = 'client'
-        AND EXISTS (
-          SELECT 1 FROM public.clients c
-          JOIN public.projects p ON p.client_id = c.id
-          JOIN public.project_comments pc ON pc.project_id = p.id
-          WHERE pc.id = comment_replies.comment_id
-          AND c.user_id = auth.uid()
-        ))
-  );
+DO $$
+BEGIN
+  IF to_regclass('public.comment_replies') IS NOT NULL THEN
+    DROP POLICY IF EXISTS "View comment replies - team and clients" ON public.comment_replies;
+    CREATE POLICY "View comment replies - team and clients" ON public.comment_replies
+      FOR SELECT
+      USING (
+        public.user_role() IN ('admin','project_manager','agency_admin','super_admin')
+        OR (public.user_role() = 'employee'
+            AND EXISTS (
+              SELECT 1 FROM public.project_team pt
+              JOIN public.project_comments pc ON pc.project_id = pt.project_id
+              WHERE pc.id = comment_replies.comment_id
+              AND pt.user_id = auth.uid()
+            ))
+        OR (public.user_role() = 'client'
+            AND EXISTS (
+              SELECT 1 FROM public.clients c
+              JOIN public.projects p ON p.client_id = c.id
+              JOIN public.project_comments pc ON pc.project_id = p.id
+              WHERE pc.id = comment_replies.comment_id
+              AND c.user_id = auth.uid()
+            ))
+      );
+  END IF;
+END $$;

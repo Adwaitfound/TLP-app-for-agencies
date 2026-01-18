@@ -151,7 +151,57 @@ export default function AgencyOnboardingPage() {
     }
   };
 
+  const handleTestModePayment = async (order: any) => {
+    try {
+      setStep('processing');
+      setLoading(true);
+
+      // Simulate a small delay for realism
+      await new Promise(resolve => setTimeout(resolve, 1500));
+
+      // In test mode, we skip payment verification and go straight to org creation
+      const res = await fetch('/api/v2/onboarding/complete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          agencyName: agencyName.trim(),
+          slug: agencyName.toLowerCase().replace(/[^a-z0-9]+/g, '-'),
+          adminEmail: adminEmail.trim(),
+          adminName: adminName.trim(),
+          plan: selectedPlan,
+          billingCycle,
+          orderId: order.id,
+          testMode: true,
+        }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.error || 'Failed to complete setup');
+      }
+
+      setStep('success');
+      setLoading(false);
+    } catch (err: any) {
+      setError(err.message || 'Setup failed');
+      setStep('plan-select');
+      setLoading(false);
+    }
+  };
+
   const handlePayment = (order: any) => {
+    // Check if we're in test mode based on explicit flag from backend
+    const isTestMode = order.testMode === true;
+    
+    if (isTestMode) {
+      // Test mode: Skip Razorpay and simulate successful payment
+      console.log('[TEST MODE] Skipping Razorpay checkout, simulating payment success');
+      handleTestModePayment(order);
+      return;
+    }
+
+    // Production mode: Use real Razorpay checkout
     if (!window.Razorpay) {
       setError('Payment gateway not loaded');
       return;

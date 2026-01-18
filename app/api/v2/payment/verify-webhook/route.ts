@@ -204,13 +204,16 @@ export async function POST(request: Request) {
     }
 
     // Construct setup URL
-    const setupUrl = `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3001'}/app/v2/setup?token=${token}`;
+    const setupUrl = `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/app/v2/setup?token=${token}`;
 
-    // Send magic link email (implement based on your email service)
+    // Send magic link email
+    let emailSent = false;
     try {
-      // Example: Using Resend or another email service
-      if (process.env.RESEND_API_KEY) {
-        await fetch('https://api.resend.com/emails', {
+      if (!process.env.RESEND_API_KEY) {
+        console.warn('[WEBHOOK_EMAIL_SKIPPED] No RESEND_API_KEY configured');
+        console.log(`[WEBHOOK_SETUP_URL] ${setupUrl}`);
+      } else {
+        const emailResponse = await fetch('https://api.resend.com/emails', {
           method: 'POST',
           headers: {
             'Authorization': `Bearer ${process.env.RESEND_API_KEY}`,
@@ -230,6 +233,15 @@ export async function POST(request: Request) {
             `,
           }),
         });
+
+        if (emailResponse.ok) {
+          const emailData = await emailResponse.json();
+          console.log('[WEBHOOK_EMAIL_SENT]', { email_id: emailData.id, to: adminEmail });
+          emailSent = true;
+        } else {
+          const errorText = await emailResponse.text();
+          console.error('[WEBHOOK_EMAIL_FAILED]', { status: emailResponse.status, error: errorText });
+        }
       }
     } catch (emailError) {
       console.error('[WEBHOOK_EMAIL_ERROR]', emailError);
@@ -240,12 +252,15 @@ export async function POST(request: Request) {
       org_id: org.id,
       admin_email: adminEmail,
       plan: existingPayment.plan_type,
+      email_sent: emailSent,
+      setup_url: emailSent ? '(sent via email)' : setupUrl,
     });
 
     return NextResponse.json({
       acknowledged: true,
       org_id: org.id,
-      setup_link_sent: true,
+      setup_link_sent: emailSent,
+      setup_url: emailSent ? undefined : setupUrl, // Include URL if email wasn't sent
     });
   } catch (error: any) {
     console.error('[WEBHOOK_ERROR]', error);

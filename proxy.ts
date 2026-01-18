@@ -108,7 +108,7 @@ export async function proxy(request: NextRequest) {
   }
 
   // Rule 3: SaaS user trying to access original /dashboard → Block and redirect to /v2/dashboard
-  if (!isOriginalAgencyOwner && pathname.startsWith('/dashboard') && !pathname.startsWith('/dashboard/')) {
+  if (!isOriginalAgencyOwner && pathname.startsWith('/dashboard')) {
     console.log('[MIDDLEWARE] SaaS user blocked from /dashboard, redirecting to /v2/dashboard');
     const url = request.nextUrl.clone();
     url.pathname = '/v2/dashboard';
@@ -140,8 +140,10 @@ export const config = {
      * - _next/static (static files)
      * - _next/image (image optimization files)
      * - favicon.ico (favicon file)
+     * - service worker (sw.js)
+     * - manifest.json (PWA manifest)
      * - public files (public folder)
      */
-    '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
+    '/((?!_next/static|_next/image|favicon.ico|sw\\.js|manifest\\.json|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
   ],
 };

@@ -4,9 +4,12 @@
 -- Clients see comments on their own projects
 -- Note: super_admin is added in follow-up migration 20260106_update_policies_include_super_admin
 
--- Update comment_replies SELECT policy
-DROP POLICY IF EXISTS "View comment replies - owner and team" ON public.comment_replies;
-CREATE POLICY "View comment replies - team and clients" ON public.comment_replies
+DO $$
+BEGIN
+    IF to_regclass('public.comment_replies') IS NOT NULL THEN
+        -- Update comment_replies SELECT policy
+        DROP POLICY IF EXISTS "View comment replies - owner and team" ON public.comment_replies;
+        CREATE POLICY "View comment replies - team and clients" ON public.comment_replies
     FOR SELECT
     USING (
         -- Admin, PM, agency_admin can view all
@@ -101,8 +104,8 @@ CREATE POLICY "Project comments insert" ON public.project_comments
     );
 
 -- Allow inserting replies
-DROP POLICY IF EXISTS "Comment replies insert" ON public.comment_replies;
-CREATE POLICY "Comment replies insert" ON public.comment_replies
+    DROP POLICY IF EXISTS "Comment replies insert" ON public.comment_replies;
+    CREATE POLICY "Comment replies insert" ON public.comment_replies
     FOR INSERT
     WITH CHECK (
         -- Admin, PM, agency_admin can reply anywhere
@@ -137,8 +140,8 @@ CREATE POLICY "Comment replies insert" ON public.comment_replies
     );
 
 -- Allow updating replies
-DROP POLICY IF EXISTS "Comment replies update" ON public.comment_replies;
-CREATE POLICY "Comment replies update" ON public.comment_replies
+    DROP POLICY IF EXISTS "Comment replies update" ON public.comment_replies;
+    CREATE POLICY "Comment replies update" ON public.comment_replies
     FOR UPDATE
     USING (
         -- Admin, PM, agency_admin can update any reply
@@ -204,8 +207,8 @@ CREATE POLICY "Comment replies update" ON public.comment_replies
     );
 
 -- Allow deleting replies
-DROP POLICY IF EXISTS "Comment replies delete" ON public.comment_replies;
-CREATE POLICY "Comment replies delete" ON public.comment_replies
+    DROP POLICY IF EXISTS "Comment replies delete" ON public.comment_replies;
+    CREATE POLICY "Comment replies delete" ON public.comment_replies
     FOR DELETE
     USING (
         -- Admin, PM, agency_admin can delete any reply
@@ -214,7 +217,7 @@ CREATE POLICY "Comment replies delete" ON public.comment_replies
         -- Employees can delete replies they authored on assigned projects
         (
             (SELECT role FROM public.users WHERE id = auth.uid()) = 'employee'
-            AND comment_replies.user_id = auth.uid()
+                        AND comment_replies.user_id = auth.uid()
             AND auth.uid() IN (
                 SELECT user_id FROM public.project_team pt
                 WHERE pt.project_id IN (
@@ -240,6 +243,9 @@ CREATE POLICY "Comment replies delete" ON public.comment_replies
             )
         )
     );
+
+    END IF;
+END $$;
 
 -- Allow updating comments
 DROP POLICY IF EXISTS "Project comments update" ON public.project_comments;

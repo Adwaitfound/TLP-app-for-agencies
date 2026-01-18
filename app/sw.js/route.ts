@@ -1,4 +1,8 @@
-// Minimal service worker to avoid parse errors and stale caches.
+export const dynamic = 'force-static';
+export const revalidate = 0;
+
+export async function GET() {
+  const swContent = `// Minimal service worker to avoid parse errors and stale caches.
 // No caching; installs, waits for user approval when updating, and claims clients.
 
 self.addEventListener('install', () => {
@@ -24,3 +28,13 @@ self.addEventListener('notificationclick', (event) => {
   event.notification?.close?.();
 });
 self.addEventListener('notificationclose', () => {});
+`;
+
+  return new Response(swContent, {
+    headers: {
+      'Content-Type': 'application/javascript',
+      'Cache-Control': 'public, max-age=0, must-revalidate',
+      'Service-Worker-Allowed': '/',
+    },
+  });
+}
