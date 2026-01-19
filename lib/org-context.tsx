@@ -32,10 +32,18 @@ interface Organization {
   };
 }
 
+interface UserProfile {
+  id: string;
+  email: string;
+  full_name: string;
+  avatar_url?: string;
+}
+
 interface OrgContextType {
   organization: Organization | null;
   member: OrganizationMember | null;
   user: User | null;
+  userProfile: UserProfile | null;
   isAdmin: boolean;
   isLoading: boolean;
   error: string | null;
@@ -52,6 +60,7 @@ export function OrgProvider({ children }: { children: ReactNode }) {
   const [organization, setOrganization] = useState<Organization | null>(null);
   const [member, setMember] = useState<OrganizationMember | null>(null);
   const [user, setUser] = useState<User | null>(null);
+  const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -81,6 +90,17 @@ export function OrgProvider({ children }: { children: ReactNode }) {
         }
 
         setUser(authUser);
+
+        // Fetch user profile from users table
+        const { data: profileData } = await supabase
+          .from('users')
+          .select('id, email, full_name, avatar_url')
+          .eq('id', authUser.id)
+          .single();
+
+        if (profileData) {
+          setUserProfile(profileData);
+        }
 
         // Get organization membership
         const { data: memberData, error: memberError } = await supabase
@@ -147,6 +167,7 @@ export function OrgProvider({ children }: { children: ReactNode }) {
     organization,
     member,
     user,
+    userProfile,
     isAdmin: member?.role === 'admin',
     isLoading,
     error,

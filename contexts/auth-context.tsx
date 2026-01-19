@@ -22,6 +22,8 @@ interface User {
     address?: string
     tax_id?: string
     company_size?: string
+    organization_name?: string
+    organization_id?: string
 }
 
 interface AuthContextType {
@@ -98,6 +100,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 }
             }
             
+            // Fetch organization info for SaaS users
+            const { data: orgMember } = await supabase
+                .from('saas_organization_members')
+                .select(`
+                    org_id,
+                    role,
+                    saas_organizations (
+                        id,
+                        name
+                    )
+                `)
+                .eq('user_id', userData.id)
+                .eq('status', 'active')
+                .maybeSingle()
+            
+            if (orgMember?.saas_organizations) {
+                userData.organization_name = (orgMember.saas_organizations as any).name
+                userData.organization_id = (orgMember.saas_organizations as any).id
+            }
+            
             setProfileCache(prev => new Map(prev).set(sessionUser.id, userData))
             try {
                 localStorage.setItem('tlp_auth_profile', JSON.stringify(userData))
@@ -153,6 +175,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 if (clientData?.company_name) {
                     profile.company_name = clientData.company_name
                 }
+            }
+            
+            // Fetch organization info for SaaS users
+            const { data: orgMember } = await supabase
+                .from('saas_organization_members')
+                .select(`
+                    org_id,
+                    role,
+                    saas_organizations (
+                        id,
+                        name
+                    )
+                `)
+                .eq('user_id', profile.id)
+                .eq('status', 'active')
+                .maybeSingle()
+            
+            if (orgMember?.saas_organizations) {
+                profile.organization_name = (orgMember.saas_organizations as any).name
+                profile.organization_id = (orgMember.saas_organizations as any).id
             }
             
             setProfileCache(prev => new Map(prev).set(sessionUser.id, profile))

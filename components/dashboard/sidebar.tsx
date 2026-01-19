@@ -180,13 +180,15 @@ export function Sidebar() {
               The Lost Project
             </span>
             <span className="text-xs text-muted-foreground">
-              {isSystemAdmin
-                ? "System Admin"
-                : user?.role === "admin"
-                  ? "Admin"
-                  : user?.role === "project_manager"
-                    ? "Employee Portal"
-                    : "Client Portal"}
+              {user?.organization_name || (
+                isSystemAdmin
+                  ? "System Admin"
+                  : user?.role === "admin"
+                    ? "Admin"
+                    : user?.role === "project_manager"
+                      ? "Employee Portal"
+                      : "Client Portal"
+              )}
             </span>
           </div>
         </div>
@@ -207,6 +209,20 @@ export function Sidebar() {
             </Link>
           ))}
         </nav>
+      </div>
+      <div className="border-t px-2 py-4 lg:px-4">
+        <div className="rounded-lg bg-muted/50 p-3 space-y-2">
+          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Logged in as</p>
+          <div className="space-y-1">
+            <p className="text-sm font-semibold text-foreground">{user?.full_name || "User"}</p>
+            <p className="text-xs text-muted-foreground">
+              {user?.role ? user.role.charAt(0).toUpperCase() + user.role.slice(1).replace('_', ' ') : 'Unknown'}
+            </p>
+            {user?.organization_name && (
+              <p className="text-xs font-medium text-primary">{user.organization_name}</p>
+            )}
+          </div>
+        </div>
       </div>
     </div>
   );

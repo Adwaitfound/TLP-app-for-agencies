@@ -67,15 +67,9 @@ export default function AgencyLoginPage() {
 
         console.log("Membership check:", { membership, membershipError });
 
-        if (membership?.org_id) {
-          // User is part of a multi-tenant organization
-          console.log("Redirecting to /v2/dashboard");
-          router.push("/v2/dashboard");
-        } else {
-          // User is a legacy agency admin
-          console.log("Redirecting to /dashboard");
-          router.push("/dashboard");
-        }
+        // Always redirect to main dashboard
+        console.log("Redirecting to /dashboard");
+        router.push("/dashboard");
         router.refresh();
       }
     } catch (err: any) {

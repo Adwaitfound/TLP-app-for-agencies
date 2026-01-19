@@ -40,7 +40,7 @@ const menuItems = [
 ];
 
 function DashboardPage() {
-  const { organization, member, user } = useOrg();
+  const { organization, member, user, userProfile } = useOrg();
   const features = usePlanFeatures();
 
   if (!organization || !member) {
@@ -73,9 +73,9 @@ function DashboardPage() {
             background: `linear-gradient(to right, ${gradientStyle.from}, ${gradientStyle.to})`
           }}
         >
-          <h1 className="text-3xl font-bold mb-2">Welcome back! 👋</h1>
-          <p className="text-muted-foreground">
-            {user?.user_metadata?.full_name || user?.email}
+          <h1 className="text-3xl font-bold mb-2 text-foreground">Welcome back! 👋</h1>
+          <p className="text-foreground/80 font-medium">
+            {userProfile?.full_name || user?.email}
           </p>
         </div>
 

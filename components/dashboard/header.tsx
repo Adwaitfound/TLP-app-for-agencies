@@ -1,5 +1,6 @@
 "use client";
 
+import React from "react";
 import { useRouter } from "next/navigation";
 import { Search, Moon, Sun, User, LogOut, Menu } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -31,8 +32,22 @@ export function Header() {
   const router = useRouter();
   const { user, logout } = useAuth();
 
+  // Debug log user data
+  React.useEffect(() => {
+    if (user) {
+      console.log('[Header] User data:', {
+        name: user.full_name,
+        role: user.role,
+        organization_name: user.organization_name,
+        organization_id: user.organization_id
+      });
+    }
+  }, [user]);
+
   const handleLogout = async () => {
-    debug.log("HEADER", "Logout clicked", { user: user?.email });
+    // Clear all localStorage to force fresh auth on next login
+    localStorage.clear();
+    debug.log("HEADER", "Logout clicked and localStorage cleared", { user: user?.email });
     await logout();
   };
 
@@ -98,8 +113,13 @@ export function Header() {
                 {user?.full_name || "User"}
               </p>
               <p className="text-xs leading-none text-muted-foreground">
-                {user?.email || "Loading..."}
+                {user?.role ? user.role.charAt(0).toUpperCase() + user.role.slice(1).replace('_', ' ') : ''}
               </p>
+              {user?.organization_name && (
+                <p className="text-xs leading-none text-muted-foreground font-semibold pt-1">
+                  {user.organization_name}
+                </p>
+              )}
             </div>
           </DropdownMenuLabel>
           <DropdownMenuSeparator />

@@ -1314,13 +1314,8 @@ function ProjectsPageContent() {
   };
 
   function openProjectDetails(project: Project) {
-    setSelectedProject(project);
-    setIsDetailModalOpen(true);
-    // Fetch in parallel for faster loading
-    Promise.all([
-      fetchSubProjects(project.id),
-      fetchProjectComments(project.id)
-    ]);
+    // Navigate to project detail page instead of opening modal
+    window.location.href = `/dashboard/projects/${project.id}`;
   }
 
   function openEditDialog(project: Project) {

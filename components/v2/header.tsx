@@ -28,10 +28,11 @@ import { createClient } from "@/lib/supabase/client";
 export function V2Header() {
   const { setTheme, theme } = useTheme();
   const router = useRouter();
-  const { member, user } = useOrg();
+  const { member, user, organization, userProfile } = useOrg();
   const supabase = createClient();
 
   const handleLogout = async () => {
+    localStorage.clear();
     await supabase.auth.signOut();
     router.push("/");
   };
@@ -82,11 +83,11 @@ export function V2Header() {
           <Button variant="ghost" className="relative h-8 w-8 rounded-full">
             <Avatar className="h-8 w-8">
               <AvatarImage
-                src={user?.user_metadata?.avatar_url}
-                alt={user?.user_metadata?.full_name || "User"}
+                src={userProfile?.avatar_url}
+                alt={userProfile?.full_name || "User"}
               />
               <AvatarFallback>
-                {user?.user_metadata?.full_name?.charAt(0)?.toUpperCase() || "U"}
+                {userProfile?.full_name?.charAt(0)?.toUpperCase() || "U"}
               </AvatarFallback>
             </Avatar>
           </Button>
@@ -95,11 +96,16 @@ export function V2Header() {
           <DropdownMenuLabel className="font-normal">
             <div className="flex flex-col space-y-1">
               <p className="text-sm font-medium leading-none">
-                {user?.user_metadata?.full_name || "User"}
+                {userProfile?.full_name || "User"}
               </p>
               <p className="text-xs leading-none text-muted-foreground">
-                {user?.email || "Loading..."}
+                {member?.role ? member.role.charAt(0).toUpperCase() + member.role.slice(1).replace('_', ' ') : ''}
               </p>
+              {organization?.name && (
+                <p className="text-xs leading-none text-muted-foreground font-semibold pt-1">
+                  {organization.name}
+                </p>
+              )}
             </div>
           </DropdownMenuLabel>
           <DropdownMenuSeparator />

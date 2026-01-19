@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useMemo, useDeferredValue, useCallback } from "react";
+import { useRouter } from "next/navigation";
 import {
   Card,
   CardContent,
@@ -94,6 +95,7 @@ const SERVICE_TYPE_OPTIONS: { value: ServiceType; label: string; icon: string }[
 
 export default function V2ProjectsPage() {
   const { organization, member, isLoading: orgLoading } = useOrg();
+  const router = useRouter();
   const supabase = useMemo(() => createClient(), []);
   
   const [projects, setProjects] = useState<Project[]>([]);
