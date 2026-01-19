@@ -128,18 +128,23 @@ export async function POST(request: Request) {
       }
     }
 
-    // Add user to organization members
+    // Add user to organization members (admin, active)
     const { error: memberError } = await supabase
       .from('saas_organization_members')
       .insert({
         org_id: org.id,
         user_id: authData.user.id,
-        role: 'owner',
+        role: 'admin',
+        status: 'active',
+        accepted_at: new Date().toISOString(),
       });
 
     if (memberError) {
       console.error('[MANUAL_PROVISION_MEMBER_ERROR]', memberError);
-      // Don't fail the whole request, just log it
+      return NextResponse.json(
+        { error: 'Failed to add user to organization' },
+        { status: 500 }
+      );
     }
 
     // Construct login URL
